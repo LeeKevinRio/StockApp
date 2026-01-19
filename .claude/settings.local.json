@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Task"
+    ],
+    "defaultMode": "bypassPermissions",
+    "additionalDirectories": [
+      "d:\\AIProject\\StockApp",
+      "d:\\AIProject\\StockApp\\taiwan_stock_app\\frontend\\lib\\screens",
+      "d:\\AIProject\\StockApp\\taiwan_stock_app\\frontend\\lib",
+      "d:\\AIProject\\StockApp\\taiwan_stock_app\\frontend",
+      "d:\\AIProject\\StockApp\\taiwan_stock_app"
+    ]
+  }
+}

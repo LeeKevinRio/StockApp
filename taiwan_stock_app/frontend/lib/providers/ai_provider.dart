@@ -1,0 +1,79 @@
+import 'package:flutter/foundation.dart';
+import '../models/ai_suggestion.dart';
+import '../services/api_service.dart';
+
+class ChatMessage {
+  final String role;
+  final String content;
+  final List<String>? sources;
+
+  ChatMessage({
+    required this.role,
+    required this.content,
+    this.sources,
+  });
+}
+
+class AIProvider with ChangeNotifier {
+  final ApiService _apiService;
+  List<AISuggestion> _suggestions = [];
+  List<ChatMessage> _messages = [];
+  bool _isLoading = false;
+  String? _error;
+
+  AIProvider(this._apiService);
+
+  List<AISuggestion> get suggestions => _suggestions;
+  List<ChatMessage> get messages => _messages;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+
+  Future<void> loadSuggestions() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      _suggestions = await _apiService.getAISuggestions();
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadChatHistory({String? stockId}) async {
+    // For now, just clear messages
+    // In a real app, you would fetch history from API
+    _messages.clear();
+    notifyListeners();
+  }
+
+  Future<void> sendMessage(String message, {String? stockId}) async {
+    // Add user message
+    _messages.add(ChatMessage(role: 'user', content: message));
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final response = await _apiService.chat(message, stockId: stockId);
+
+      // Add assistant message
+      _messages.add(ChatMessage(
+        role: 'assistant',
+        content: response['response'],
+        sources: List<String>.from(response['sources'] ?? []),
+      ));
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+}
