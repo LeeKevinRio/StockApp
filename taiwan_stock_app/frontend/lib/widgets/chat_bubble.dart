@@ -38,6 +38,7 @@ class ChatBubble extends StatelessWidget {
                 children: [
                   SelectableText(
                     message,
+                    maxLines: null,
                     style: TextStyle(
                       color: isUser ? Colors.white : Colors.black87,
                       height: 1.5,
@@ -133,6 +134,7 @@ class _TypewriterTextState extends State<TypewriterText> {
   Widget build(BuildContext context) {
     return SelectableText(
       _displayedText,
+      maxLines: null,
       style: widget.style,
     );
   }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import 'watchlist_screen.dart';
 import 'ai_chat_screen.dart';
+import 'ai_suggestions_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,6 +17,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Widget> _screens = [
     const WatchlistScreen(),
+    const AISuggestionsScreen(),
     const AIChatScreen(),
   ];
 
@@ -34,6 +36,10 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.star),
             label: '自選股',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.lightbulb),
+            label: 'AI 建議',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.chat),

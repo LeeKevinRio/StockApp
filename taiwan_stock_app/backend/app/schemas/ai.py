@@ -13,6 +13,13 @@ class KeyFactor(BaseModel):
     impact: str  # 'positive', 'negative', 'neutral'
 
 
+class TakeProfitTarget(BaseModel):
+    """停利目標"""
+    price: float
+    probability: float  # 0.0 ~ 1.0
+    description: str  # 保守/中性/積極
+
+
 class AISuggestion(BaseModel):
     stock_id: str
     name: str
@@ -24,8 +31,19 @@ class AISuggestion(BaseModel):
     key_factors: List[dict]
     report_date: date
 
+    # 高風險型經紀人新增欄位
+    entry_price_min: Optional[Decimal] = None
+    entry_price_max: Optional[Decimal] = None
+    take_profit_targets: Optional[List[dict]] = None
+    risk_level: Optional[str] = None  # HIGH, MEDIUM, LOW
+    time_horizon: Optional[str] = None  # 短線/中線/長線
+    predicted_change_percent: Optional[Decimal] = None
+
     class Config:
         from_attributes = True
+        json_encoders = {
+            Decimal: lambda v: float(v) if v is not None else None
+        }
 
 
 class AIChatRequest(BaseModel):

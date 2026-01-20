@@ -26,6 +26,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
         title: const Text('自選股'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () => Navigator.pushNamed(context, '/search'),
+          ),
+          IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => _showAddStockDialog(context),
           ),
@@ -79,7 +83,13 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                 final stock = provider.items[index];
                 return StockCard(
                   stock: stock,
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      '/stock-detail',
+                      arguments: stock.stockId,
+                    );
+                  },
                   onDelete: () => _confirmDelete(context, stock.stockId),
                 );
               },

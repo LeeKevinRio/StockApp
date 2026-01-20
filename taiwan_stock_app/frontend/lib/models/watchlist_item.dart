@@ -17,10 +17,18 @@ class WatchlistItem {
 
   factory WatchlistItem.fromJson(Map<String, dynamic> json) {
     return WatchlistItem(
-      stockId: json['stock_id'],
-      name: json['name'],
-      currentPrice: (json['current_price'] as num).toDouble(),
-      changePercent: (json['change_percent'] as num).toDouble(),
+      stockId: json['stock_id'] ?? '',
+      name: json['name'] ?? '',
+      currentPrice: (json['current_price'] != null)
+          ? (json['current_price'] is String
+              ? double.tryParse(json['current_price']) ?? 0.0
+              : (json['current_price'] as num).toDouble())
+          : 0.0,
+      changePercent: (json['change_percent'] != null)
+          ? (json['change_percent'] is String
+              ? double.tryParse(json['change_percent']) ?? 0.0
+              : (json['change_percent'] as num).toDouble())
+          : 0.0,
       addedAt: DateTime.parse(json['added_at']),
       notes: json['notes'],
     );

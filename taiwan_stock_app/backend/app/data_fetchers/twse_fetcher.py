@@ -29,8 +29,60 @@ class TWSEFetcher:
             time.sleep(self.request_interval - elapsed)
         self.last_request_time = time.time()
 
+    def get_realtime_quote(self, stock_id: str) -> Dict:
+        """取得單一股票即時報價"""
+        self._rate_limit()
+
+        # 格式: tse_2330.tw (上市) 或 otc_6165.tw (上櫃)
+        # 先嘗試上市
+        ex_ch = f"tse_{stock_id}.tw"
+
+        response = requests.get(
+            self.REALTIME_URL,
+            params={"ex_ch": ex_ch, "json": "1", "_": int(time.time() * 1000)},
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        msg_array = data.get("msgArray", [])
+
+        # 如果上市沒有數據，嘗試上櫃
+        if not msg_array or len(msg_array) == 0:
+            ex_ch = f"otc_{stock_id}.tw"
+            response = requests.get(
+                self.REALTIME_URL,
+                params={"ex_ch": ex_ch, "json": "1", "_": int(time.time() * 1000)},
+            )
+            response.raise_for_status()
+            data = response.json()
+            msg_array = data.get("msgArray", [])
+
+        if not msg_array or len(msg_array) == 0:
+            raise Exception(f"找不到股票 {stock_id} 的即時報價數據")
+
+        item = msg_array[0]
+        current_price = float(item.get("z", 0) or 0)
+        yesterday_close = float(item.get("y", 0) or 0)
+
+        # 計算漲跌
+        change = current_price - yesterday_close if current_price and yesterday_close else 0
+        change_percent = (change / yesterday_close * 100) if yesterday_close > 0 else 0
+
+        return {
+            "stock_id": stock_id,
+            "name": item.get("n", ""),
+            "price": current_price,
+            "change": change,
+            "change_percent": change_percent,
+            "open": float(item.get("o", 0) or 0),
+            "high": float(item.get("h", 0) or 0),
+            "low": float(item.get("l", 0) or 0),
+            "volume": int(item.get("v", 0) or 0),
+            "updated_at": item.get("t", ""),  # 時間戳
+        }
+
     def get_realtime_price(self, stock_ids: List[str]) -> List[Dict]:
-        """取得即時報價（證交所 MIS API）"""
+        """取得即時報價（證交所 MIS API）- 批量查詢"""
         self._rate_limit()
 
         # 格式: tse_2330.tw|tse_2317.tw

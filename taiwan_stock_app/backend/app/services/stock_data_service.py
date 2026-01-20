@@ -7,7 +7,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.models import Stock, StockPrice
-from app.data_fetchers import FinMindFetcher, FugleFetcher
+from app.data_fetchers import FinMindFetcher, FugleFetcher, TWSEFetcher
 from app.config import settings
 
 
@@ -17,6 +17,7 @@ class StockDataService:
     def __init__(self):
         self.finmind = FinMindFetcher(settings.FINMIND_TOKEN)
         self.fugle = FugleFetcher(settings.FUGLE_API_KEY) if settings.FUGLE_API_KEY else None
+        self.twse = TWSEFetcher()
 
     def search_stocks(self, db: Session, query: str) -> List[Stock]:
         """搜尋股票"""
@@ -35,7 +36,27 @@ class StockDataService:
         return db.query(Stock).filter(Stock.stock_id == stock_id).first()
 
     def get_realtime_price(self, stock_id: str) -> dict:
-        """取得即時報價"""
+        """取得即時報價（優先順序：TWSE → Fugle → FinMind）"""
+
+        # 1. 優先使用 TWSE（免費即時）
+        try:
+            quote = self.twse.get_realtime_quote(stock_id)
+            return {
+                "stock_id": stock_id,
+                "name": quote.get("name", ""),
+                "current_price": Decimal(str(quote.get("price", 0))),
+                "change": Decimal(str(quote.get("change", 0))),
+                "change_percent": Decimal(str(quote.get("change_percent", 0))),
+                "open": Decimal(str(quote.get("open", 0))),
+                "high": Decimal(str(quote.get("high", 0))),
+                "low": Decimal(str(quote.get("low", 0))),
+                "volume": quote.get("volume", 0),
+                "updated_at": datetime.now(),
+            }
+        except Exception as e:
+            print(f"TWSE API 失敗: {e}")
+
+        # 2. 回退到 Fugle（如果有配置）
         if self.fugle:
             try:
                 quote = self.fugle.get_realtime_quote(stock_id)
@@ -52,10 +73,9 @@ class StockDataService:
                     "updated_at": datetime.now(),
                 }
             except Exception as e:
-                # Fallback to FinMind
-                pass
+                print(f"Fugle API 失敗: {e}")
 
-        # Use FinMind as fallback
+        # 3. 最後使用 FinMind（延遲數據）
         end_date = date.today()
         start_date = end_date - timedelta(days=1)
         prices = self.finmind.get_stock_price(
@@ -103,12 +123,12 @@ class StockDataService:
         if prices:
             return [
                 {
-                    "date": p.date,
-                    "open": p.open,
-                    "high": p.high,
-                    "low": p.low,
-                    "close": p.close,
-                    "volume": p.volume,
+                    "date": p.date.isoformat(),  # 確保日期為 ISO 格式字符串
+                    "open": float(p.open),        # 轉換為 float
+                    "high": float(p.high),
+                    "low": float(p.low),
+                    "close": float(p.close),
+                    "volume": int(p.volume),
                 }
                 for p in prices
             ]
@@ -117,4 +137,28 @@ class StockDataService:
         df = self.finmind.get_stock_price(
             stock_id, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
         )
-        return df.to_dict("records") if len(df) > 0 else []
+
+        if len(df) == 0:
+            return []
+
+        # ✨ 關鍵修復：標準化欄位名稱（FinMind 使用 max/min 而非 high/low）
+        if 'max' in df.columns:
+            df['high'] = df['max']
+        if 'min' in df.columns:
+            df['low'] = df['min']
+        if 'Trading_Volume' in df.columns:
+            df['volume'] = df['Trading_Volume']
+
+        # 選擇需要的欄位並確保格式正確
+        result = []
+        for _, row in df.iterrows():
+            result.append({
+                "date": str(row['date']),  # 確保為字符串
+                "open": float(row['open']),
+                "high": float(row['high']),
+                "low": float(row['low']),
+                "close": float(row['close']),
+                "volume": int(row['volume']),
+            })
+
+        return result

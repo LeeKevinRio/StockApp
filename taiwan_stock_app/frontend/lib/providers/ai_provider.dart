@@ -19,29 +19,37 @@ class AIProvider with ChangeNotifier {
   List<AISuggestion> _suggestions = [];
   List<ChatMessage> _messages = [];
   bool _isLoading = false;
+  bool _isLoadingSuggestions = false;
   String? _error;
+  String? _suggestionsError;
 
   AIProvider(this._apiService);
 
   List<AISuggestion> get suggestions => _suggestions;
   List<ChatMessage> get messages => _messages;
   bool get isLoading => _isLoading;
+  bool get isLoadingSuggestions => _isLoadingSuggestions;
   String? get error => _error;
+  String? get suggestionsError => _suggestionsError;
 
   Future<void> loadSuggestions() async {
-    _isLoading = true;
-    _error = null;
+    _isLoadingSuggestions = true;
+    _suggestionsError = null;
     notifyListeners();
 
     try {
       _suggestions = await _apiService.getAISuggestions();
-      _isLoading = false;
+      _isLoadingSuggestions = false;
       notifyListeners();
     } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
+      _suggestionsError = e.toString();
+      _isLoadingSuggestions = false;
       notifyListeners();
     }
+  }
+
+  Future<void> refreshSuggestions() async {
+    await loadSuggestions();
   }
 
   Future<void> loadChatHistory({String? stockId}) async {

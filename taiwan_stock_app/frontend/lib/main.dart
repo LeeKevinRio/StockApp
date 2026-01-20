@@ -7,6 +7,8 @@ import 'providers/watchlist_provider.dart';
 import 'providers/ai_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/stock_search_screen.dart';
+import 'screens/stock_detail_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -22,6 +24,7 @@ class MyApp extends StatelessWidget {
 
     return MultiProvider(
       providers: [
+        Provider.value(value: apiService),
         ChangeNotifierProvider(
           create: (_) => AuthProvider(authService),
         ),
@@ -42,6 +45,16 @@ class MyApp extends StatelessWidget {
         routes: {
           '/login': (context) => const LoginScreen(),
           '/home': (context) => const HomeScreen(),
+          '/search': (context) => const StockSearchScreen(),
+        },
+        onGenerateRoute: (settings) {
+          if (settings.name == '/stock-detail') {
+            final stockId = settings.arguments as String;
+            return MaterialPageRoute(
+              builder: (context) => StockDetailScreen(stockId: stockId),
+            );
+          }
+          return null;
         },
       ),
     );

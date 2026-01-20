@@ -4,6 +4,7 @@ import '../config/app_config.dart';
 import '../models/stock.dart';
 import '../models/watchlist_item.dart';
 import '../models/ai_suggestion.dart';
+import '../models/stock_history.dart';
 
 class ApiService {
   final String baseUrl;
@@ -61,6 +62,16 @@ class ApiService {
     );
     _checkResponse(response);
     return StockPrice.fromJson(jsonDecode(response.body));
+  }
+
+  Future<List<StockHistory>> getStockHistory(String stockId, {int days = 60}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/stocks/$stockId/history?days=$days'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((e) => StockHistory.fromJson(e)).toList();
   }
 
   // ==================== 自選股相關 ====================

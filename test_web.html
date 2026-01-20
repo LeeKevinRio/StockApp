@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台股 API 測試頁面</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', '微軟正黑體', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 16px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 8px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 16px;
+            margin-top: 16px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .success {
+            color: #28a745;
+        }
+
+        .error {
+            color: #dc3545;
+        }
+
+        .stock-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .info-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .positive {
+            color: #dc3545;
+        }
+
+        .negative {
+            color: #28a745;
+        }
+
+        #chartContainer {
+            height: 400px;
+            margin-top: 16px;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status.online {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.offline {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 台股 AI 投資建議 APP - API 測試</h1>
+
+        <!-- 後端狀態 -->
+        <div class="card">
+            <h2>🌐 後端服務狀態</h2>
+            <p>後端 API: <span id="backendStatus" class="status">檢查中...</span></p>
+            <p style="margin-top: 8px; color: #666; font-size: 14px;">
+                API 地址: <code>http://localhost:8000</code>
+            </p>
+        </div>
+
+        <!-- 登入區塊 -->
+        <div class="card">
+            <h2>🔐 用戶登入</h2>
+            <div class="form-group">
+                <label>Email:</label>
+                <input type="email" id="email" value="test@example.com" placeholder="test@example.com">
+            </div>
+            <div class="form-group">
+                <label>密碼:</label>
+                <input type="password" id="password" value="test123456" placeholder="test123456">
+            </div>
+            <button onclick="login()">登入</button>
+            <div id="loginResult" class="result" style="display: none;"></div>
+        </div>
+
+        <!-- 即時報價 -->
+        <div class="card">
+            <h2>📊 即時報價測試</h2>
+            <div class="form-group">
+                <label>股票代碼:</label>
+                <input type="text" id="stockId" value="2330" placeholder="輸入股票代碼 (例如: 2330)">
+            </div>
+            <button onclick="getRealtimePrice()">查詢即時報價</button>
+            <div id="priceResult"></div>
+        </div>
+
+        <!-- K線圖數據 -->
+        <div class="card">
+            <h2>📈 K線圖數據測試</h2>
+            <div class="form-group">
+                <label>股票代碼:</label>
+                <input type="text" id="klineStockId" value="2330" placeholder="輸入股票代碼 (例如: 2330)">
+            </div>
+            <div class="form-group">
+                <label>天數:</label>
+                <input type="number" id="klineDays" value="60" placeholder="60">
+            </div>
+            <button onclick="getKLineData()">查詢K線數據</button>
+            <div id="klineResult"></div>
+        </div>
+    </div>
+
+    <script>
+        let authToken = null;
+
+        // 檢查後端狀態
+        async function checkBackend() {
+            const statusEl = document.getElementById('backendStatus');
+            try {
+                const response = await fetch('http://localhost:8000/docs');
+                if (response.ok) {
+                    statusEl.textContent = '✅ 在線';
+                    statusEl.className = 'status online';
+                } else {
+                    statusEl.textContent = '❌ 離線';
+                    statusEl.className = 'status offline';
+                }
+            } catch (error) {
+                statusEl.textContent = '❌ 無法連接';
+                statusEl.className = 'status offline';
+            }
+        }
+
+        // 登入
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const resultEl = document.getElementById('loginResult');
+
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = '登入中...';
+
+            try {
+                const response = await fetch('http://localhost:8000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    authToken = data.access_token;
+                    resultEl.innerHTML = `<span class="success">✅ 登入成功！</span><br><br>` +
+                        `用戶: ${data.user.email}<br>` +
+                        `顯示名稱: ${data.user.display_name}<br>` +
+                        `Token: ${authToken.substring(0, 30)}...`;
+                } else {
+                    resultEl.innerHTML = `<span class="error">❌ 登入失敗：${data.detail}</span>`;
+                }
+            } catch (error) {
+                resultEl.innerHTML = `<span class="error">❌ 錯誤：${error.message}</span>`;
+            }
+        }
+
+        // 查詢即時報價
+        async function getRealtimePrice() {
+            if (!authToken) {
+                alert('請先登入！');
+                return;
+            }
+
+            const stockId = document.getElementById('stockId').value;
+            const resultEl = document.getElementById('priceResult');
+
+            resultEl.innerHTML = '<div class="result">查詢中...</div>';
+
+            try {
+                const response = await fetch(`http://localhost:8000/api/stocks/${stockId}/price`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    const changeClass = data.change >= 0 ? 'positive' : 'negative';
+                    const changeSymbol = data.change >= 0 ? '+' : '';
+
+                    resultEl.innerHTML = `
+                        <div class="stock-info">
+                            <div class="info-item">
+                                <div class="info-label">股票名稱</div>
+                                <div class="info-value">${data.name || stockId}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">當前價格</div>
+                                <div class="info-value ${changeClass}">${data.current_price}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">漲跌</div>
+                                <div class="info-value ${changeClass}">${changeSymbol}${data.change}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">漲跌幅</div>
+                                <div class="info-value ${changeClass}">${changeSymbol}${data.change_percent.toFixed(2)}%</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">開盤</div>
+                                <div class="info-value">${data.open}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">最高</div>
+                                <div class="info-value">${data.high}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">最低</div>
+                                <div class="info-value">${data.low}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">成交量</div>
+                                <div class="info-value">${data.volume.toLocaleString()}</div>
+                            </div>
+                        </div>
+                        <div class="result" style="margin-top: 16px;">
+                            <span class="success">✅ 即時報價查詢成功！</span><br><br>
+                            更新時間: ${data.updated_at}
+                        </div>
+                    `;
+                } else {
+                    resultEl.innerHTML = `<div class="result"><span class="error">❌ 查詢失敗：${data.detail}</span></div>`;
+                }
+            } catch (error) {
+                resultEl.innerHTML = `<div class="result"><span class="error">❌ 錯誤：${error.message}</span></div>`;
+            }
+        }
+
+        // 查詢K線數據
+        async function getKLineData() {
+            if (!authToken) {
+                alert('請先登入！');
+                return;
+            }
+
+            const stockId = document.getElementById('klineStockId').value;
+            const days = document.getElementById('klineDays').value;
+            const resultEl = document.getElementById('klineResult');
+
+            resultEl.innerHTML = '<div class="result">查詢中...</div>';
+
+            try {
+                const response = await fetch(`http://localhost:8000/api/stocks/${stockId}/history?days=${days}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok && Array.isArray(data)) {
+                    let html = `<div class="result"><span class="success">✅ K線數據查詢成功！</span><br><br>`;
+                    html += `獲取 ${data.length} 筆歷史數據<br><br>`;
+
+                    if (data.length > 0) {
+                        const latest = data[data.length - 1];
+                        html += `<strong>最新數據 (${latest.date}):</strong><br>`;
+                        html += `開盤: ${latest.open}<br>`;
+                        html += `<strong>最高: ${latest.high}</strong> ✅<br>`;
+                        html += `<strong>最低: ${latest.low}</strong> ✅<br>`;
+                        html += `收盤: ${latest.close}<br>`;
+                        html += `<strong>成交量: ${latest.volume.toLocaleString()}</strong> ✅<br><br>`;
+
+                        // 檢查欄位
+                        const requiredFields = ['date', 'open', 'high', 'low', 'close', 'volume'];
+                        const missingFields = requiredFields.filter(f => !(f in latest));
+
+                        if (missingFields.length === 0) {
+                            html += `<span class="success">✅ 所有必要欄位都存在！</span><br>`;
+                            html += `欄位名稱正確: high, low, volume<br>`;
+                        } else {
+                            html += `<span class="error">❌ 缺少欄位: ${missingFields.join(', ')}</span>`;
+                        }
+
+                        // 顯示前5筆數據
+                        html += `<br><br><strong>最近5筆數據:</strong><br>`;
+                        html += `<table style="width: 100%; border-collapse: collapse; margin-top: 8px;">`;
+                        html += `<tr style="background: #667eea; color: white;">`;
+                        html += `<th style="padding: 8px; text-align: left;">日期</th>`;
+                        html += `<th style="padding: 8px; text-align: right;">開</th>`;
+                        html += `<th style="padding: 8px; text-align: right;">高</th>`;
+                        html += `<th style="padding: 8px; text-align: right;">低</th>`;
+                        html += `<th style="padding: 8px; text-align: right;">收</th>`;
+                        html += `</tr>`;
+
+                        data.slice(-5).forEach((item, i) => {
+                            const bgColor = i % 2 === 0 ? '#f8f9fa' : 'white';
+                            html += `<tr style="background: ${bgColor};">`;
+                            html += `<td style="padding: 8px;">${item.date}</td>`;
+                            html += `<td style="padding: 8px; text-align: right;">${item.open}</td>`;
+                            html += `<td style="padding: 8px; text-align: right;">${item.high}</td>`;
+                            html += `<td style="padding: 8px; text-align: right;">${item.low}</td>`;
+                            html += `<td style="padding: 8px; text-align: right;">${item.close}</td>`;
+                            html += `</tr>`;
+                        });
+
+                        html += `</table>`;
+                    }
+
+                    html += `</div>`;
+                    resultEl.innerHTML = html;
+                } else {
+                    resultEl.innerHTML = `<div class="result"><span class="error">❌ 查詢失敗：${data.detail || '未知錯誤'}</span></div>`;
+                }
+            } catch (error) {
+                resultEl.innerHTML = `<div class="result"><span class="error">❌ 錯誤：${error.message}</span></div>`;
+            }
+        }
+
+        // 頁面載入時檢查後端
+        window.onload = function() {
+            checkBackend();
+            // 每30秒檢查一次
+            setInterval(checkBackend, 30000);
+        };
+    </script>
+</body>
+</html>

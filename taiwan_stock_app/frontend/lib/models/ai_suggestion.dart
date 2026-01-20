@@ -1,5 +1,25 @@
 import 'package:flutter/material.dart';
 
+class TakeProfitTarget {
+  final double price;
+  final double probability;
+  final String description;
+
+  TakeProfitTarget({
+    required this.price,
+    required this.probability,
+    required this.description,
+  });
+
+  factory TakeProfitTarget.fromJson(Map<String, dynamic> json) {
+    return TakeProfitTarget(
+      price: (json['price'] as num).toDouble(),
+      probability: (json['probability'] as num).toDouble(),
+      description: json['description'],
+    );
+  }
+}
+
 class AISuggestion {
   final String stockId;
   final String name;
@@ -11,6 +31,14 @@ class AISuggestion {
   final List<KeyFactor> keyFactors;
   final DateTime reportDate;
 
+  // 高風險型經紀人新增欄位
+  final double? entryPriceMin;
+  final double? entryPriceMax;
+  final List<TakeProfitTarget>? takeProfitTargets;
+  final String? riskLevel;
+  final String? timeHorizon;
+  final double? predictedChangePercent;
+
   AISuggestion({
     required this.stockId,
     required this.name,
@@ -21,6 +49,12 @@ class AISuggestion {
     required this.reasoning,
     required this.keyFactors,
     required this.reportDate,
+    this.entryPriceMin,
+    this.entryPriceMax,
+    this.takeProfitTargets,
+    this.riskLevel,
+    this.timeHorizon,
+    this.predictedChangePercent,
   });
 
   factory AISuggestion.fromJson(Map<String, dynamic> json) {
@@ -40,6 +74,22 @@ class AISuggestion {
           .map((e) => KeyFactor.fromJson(e))
           .toList(),
       reportDate: DateTime.parse(json['report_date']),
+      entryPriceMin: json['entry_price_min'] != null
+          ? (json['entry_price_min'] as num).toDouble()
+          : null,
+      entryPriceMax: json['entry_price_max'] != null
+          ? (json['entry_price_max'] as num).toDouble()
+          : null,
+      takeProfitTargets: json['take_profit_targets'] != null
+          ? (json['take_profit_targets'] as List)
+              .map((e) => TakeProfitTarget.fromJson(e))
+              .toList()
+          : null,
+      riskLevel: json['risk_level'],
+      timeHorizon: json['time_horizon'],
+      predictedChangePercent: json['predicted_change_percent'] != null
+          ? (json['predicted_change_percent'] as num).toDouble()
+          : null,
     );
   }
 

@@ -21,6 +21,15 @@ class AIReport(Base):
     stop_loss_price = Column(Numeric(10, 2))
     reasoning = Column(Text, nullable=False)
     key_factors = Column(JSONB)
+
+    # 高風險型經紀人新增欄位
+    entry_price_min = Column(Numeric(10, 2))  # 建議進場價（最低）
+    entry_price_max = Column(Numeric(10, 2))  # 建議進場價（最高）
+    take_profit_targets = Column(JSONB)  # 多個停利目標 [{price: 100, probability: 0.7}, ...]
+    risk_level = Column(String(20))  # HIGH, MEDIUM, LOW
+    time_horizon = Column(String(50))  # 操作週期（短線/中線/長線）
+    predicted_change_percent = Column(Numeric(5, 2))  # 預期漲跌幅 %
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

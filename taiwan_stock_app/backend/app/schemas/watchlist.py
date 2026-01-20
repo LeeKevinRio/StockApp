@@ -15,8 +15,8 @@ class WatchlistAdd(BaseModel):
 class WatchlistItem(BaseModel):
     stock_id: str
     name: str
-    current_price: Decimal
-    change_percent: Decimal
+    current_price: float
+    change_percent: float
     added_at: datetime
     notes: Optional[str] = None
 
