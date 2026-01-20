@@ -42,7 +42,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
           Expanded(
             child: Consumer<AIProvider>(
               builder: (context, provider, child) {
-                if (provider.messages.isEmpty) {
+                if (provider.messages.isEmpty && !provider.isLoading) {
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -62,11 +62,22 @@ class _AIChatScreenState extends State<AIChatScreen> {
                   );
                 }
 
+                final itemCount = provider.messages.length + (provider.isLoading ? 1 : 0);
+
                 return ListView.builder(
                   controller: _scrollController,
                   padding: const EdgeInsets.all(16),
-                  itemCount: provider.messages.length,
+                  itemCount: itemCount,
                   itemBuilder: (context, index) {
+                    // 如果是最後一個且正在 loading，顯示 loading 氣泡
+                    if (provider.isLoading && index == itemCount - 1) {
+                      return const ChatBubble(
+                        message: '',
+                        isUser: false,
+                        isLoading: true,
+                      );
+                    }
+
                     final message = provider.messages[index];
                     return ChatBubble(
                       message: message.content,
