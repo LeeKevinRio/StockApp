@@ -1,7 +1,7 @@
 """
 Stock schemas
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 from typing import Optional
 from datetime import date, datetime
 from decimal import Decimal
@@ -34,6 +34,10 @@ class StockPrice(BaseModel):
     volume: int
     updated_at: datetime
 
+    @field_serializer('current_price', 'change', 'change_percent', 'open', 'high', 'low')
+    def serialize_decimal(self, v: Decimal) -> float:
+        return float(v) if v is not None else 0.0
+
 
 class StockHistory(BaseModel):
     date: date
@@ -45,3 +49,7 @@ class StockHistory(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_serializer('open', 'high', 'low', 'close')
+    def serialize_decimal(self, v: Decimal) -> float:
+        return float(v) if v is not None else 0.0
