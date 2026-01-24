@@ -68,7 +68,7 @@ class AIChatService:
             full_message,
             generation_config=genai.types.GenerationConfig(
                 temperature=0.7,
-                max_output_tokens=1000,
+                max_output_tokens=4096,  # 增加到 4096 以避免回答被截斷
             )
         )
 
