@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+
+# Database
+*.db
+
+# OS
+nul
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Flutter
+build/
+.dart_tool/
