@@ -4,13 +4,13 @@ import '../models/watchlist_item.dart';
 class StockCard extends StatelessWidget {
   final WatchlistItem stock;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
 
   const StockCard({
     super.key,
     required this.stock,
     required this.onTap,
-    required this.onDelete,
+    this.onDelete,
   });
 
   @override
@@ -49,49 +49,60 @@ class StockCard extends StatelessWidget {
                         fontSize: 14,
                       ),
                     ),
+                    if (stock.industry != null)
+                      Text(
+                        stock.industry!,
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 12,
+                        ),
+                      ),
                   ],
                 ),
               ),
               // 股價
-              Expanded(
-                flex: 2,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      stock.currentPrice.toStringAsFixed(2),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        color: priceColor,
-                      ),
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Icon(
-                          stock.isUp
-                              ? Icons.arrow_drop_up
-                              : stock.isDown
-                                  ? Icons.arrow_drop_down
-                                  : Icons.remove,
+              if (stock.currentPrice != null)
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        stock.currentPrice!.toStringAsFixed(2),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
                           color: priceColor,
-                          size: 20,
                         ),
-                        Text(
-                          '${stock.changePercent.toStringAsFixed(2)}%',
-                          style: TextStyle(color: priceColor),
+                      ),
+                      if (stock.changePercent != null)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Icon(
+                              stock.isUp
+                                  ? Icons.arrow_drop_up
+                                  : stock.isDown
+                                      ? Icons.arrow_drop_down
+                                      : Icons.remove,
+                              color: priceColor,
+                              size: 20,
+                            ),
+                            Text(
+                              '${stock.changePercent! >= 0 ? '+' : ''}${stock.changePercent!.toStringAsFixed(2)}%',
+                              style: TextStyle(color: priceColor),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
               // 刪除按鈕
-              IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                onPressed: onDelete,
-              ),
+              if (onDelete != null)
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.grey),
+                  onPressed: onDelete,
+                ),
             ],
           ),
         ),

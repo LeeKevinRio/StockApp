@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/ai_provider.dart';
+import '../providers/market_provider.dart';
 import '../models/ai_suggestion.dart';
+import '../widgets/market_switcher.dart';
 
 class AISuggestionsScreen extends StatefulWidget {
   const AISuggestionsScreen({super.key});
@@ -10,26 +12,49 @@ class AISuggestionsScreen extends StatefulWidget {
   State<AISuggestionsScreen> createState() => _AISuggestionsScreenState();
 }
 
-class _AISuggestionsScreenState extends State<AISuggestionsScreen> {
+class _AISuggestionsScreenState extends State<AISuggestionsScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AIProvider>().loadSuggestions();
     });
   }
 
   @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI 每日建議'),
+        title: const Text('AI Daily Suggestions'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => context.read<AIProvider>().refreshSuggestions(),
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(
+              icon: Icon(Icons.flag),
+              text: 'Taiwan Stocks',
+            ),
+            Tab(
+              icon: Icon(Icons.public),
+              text: 'US Stocks',
+            ),
+          ],
+        ),
       ),
       body: Consumer<AIProvider>(
         builder: (context, provider, child) {
@@ -41,17 +66,17 @@ class _AISuggestionsScreenState extends State<AISuggestionsScreen> {
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
                   Text(
-                    'AI 正在分析您的自選股...',
+                    'AI is analyzing your watchlist...',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                   SizedBox(height: 8),
                   Text(
-                    '首次生成需要 30-60 秒',
+                    'First generation takes 30-60 seconds',
                     style: TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                   SizedBox(height: 4),
                   Text(
-                    '請耐心等候，不要關閉頁面',
+                    'Please wait, do not close this page',
                     style: TextStyle(fontSize: 12, color: Colors.orange),
                   ),
                 ],
@@ -66,55 +91,100 @@ class _AISuggestionsScreenState extends State<AISuggestionsScreen> {
                 children: [
                   const Icon(Icons.error_outline, size: 64, color: Colors.red),
                   const SizedBox(height: 16),
-                  Text('錯誤：${provider.suggestionsError}'),
+                  Text('Error: ${provider.suggestionsError}'),
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () => provider.loadSuggestions(),
-                    child: const Text('重試'),
+                    child: const Text('Retry'),
                   ),
                 ],
               ),
             );
           }
 
-          if (provider.suggestions.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.lightbulb_outline,
-                      size: 64, color: Colors.grey),
-                  const SizedBox(height: 16),
-                  const Text(
-                    '尚無 AI 建議',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '請先新增自選股，然後點擊重新整理按鈕',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () => provider.loadSuggestions(),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('立即生成 AI 建議'),
-                  ),
-                ],
-              ),
-            );
-          }
+          // Separate suggestions by market
+          final twSuggestions = provider.suggestions
+              .where((s) => _isTaiwanStock(s.stockId))
+              .toList();
+          final usSuggestions = provider.suggestions
+              .where((s) => !_isTaiwanStock(s.stockId))
+              .toList();
 
-          return RefreshIndicator(
-            onRefresh: () => provider.refreshSuggestions(),
-            child: ListView.builder(
-              padding: const EdgeInsets.all(8),
-              itemCount: provider.suggestions.length,
-              itemBuilder: (context, index) {
-                final suggestion = provider.suggestions[index];
-                return SuggestionCard(suggestion: suggestion);
-              },
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              // Taiwan Stocks Tab
+              _buildSuggestionsList(
+                twSuggestions,
+                provider,
+                isTaiwan: true,
+              ),
+              // US Stocks Tab
+              _buildSuggestionsList(
+                usSuggestions,
+                provider,
+                isTaiwan: false,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  bool _isTaiwanStock(String stockId) {
+    // Taiwan stocks are typically 4-digit numbers
+    return RegExp(r'^\d{4,6}$').hasMatch(stockId);
+  }
+
+  Widget _buildSuggestionsList(
+    List<AISuggestion> suggestions,
+    AIProvider provider, {
+    required bool isTaiwan,
+  }) {
+    if (suggestions.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isTaiwan ? Icons.flag : Icons.public,
+              size: 64,
+              color: Colors.grey,
             ),
+            const SizedBox(height: 16),
+            Text(
+              isTaiwan ? 'No Taiwan Stock Suggestions' : 'No US Stock Suggestions',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isTaiwan
+                  ? 'Add Taiwan stocks to watchlist first'
+                  : 'Add US stocks to watchlist first',
+              style: const TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => provider.loadSuggestions(),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Generate AI Suggestions'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => provider.refreshSuggestions(),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(8),
+        itemCount: suggestions.length,
+        itemBuilder: (context, index) {
+          final suggestion = suggestions[index];
+          return SuggestionCard(
+            suggestion: suggestion,
+            isTaiwan: isTaiwan,
           );
         },
       ),
@@ -124,13 +194,19 @@ class _AISuggestionsScreenState extends State<AISuggestionsScreen> {
 
 class SuggestionCard extends StatelessWidget {
   final AISuggestion suggestion;
+  final bool isTaiwan;
 
-  const SuggestionCard({super.key, required this.suggestion});
+  const SuggestionCard({
+    super.key,
+    required this.suggestion,
+    this.isTaiwan = true,
+  });
 
   @override
   Widget build(BuildContext context) {
     final suggestionColor = _getSuggestionColor(suggestion.suggestion);
     final suggestionIcon = _getSuggestionIcon(suggestion.suggestion);
+    final currencySymbol = isTaiwan ? 'NT\$' : '\$';
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -139,9 +215,26 @@ class SuggestionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 標頭：股票資訊
+            // Header with stock info and market badge
             Row(
               children: [
+                // Market badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isTaiwan ? Colors.red.shade50 : Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    isTaiwan ? 'TW' : 'US',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: isTaiwan ? Colors.red.shade700 : Colors.blue.shade700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -163,7 +256,7 @@ class SuggestionCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                // 建議標籤
+                // Suggestion badge
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -180,7 +273,7 @@ class SuggestionCard extends StatelessWidget {
                       Icon(suggestionIcon, color: suggestionColor, size: 20),
                       const SizedBox(width: 4),
                       Text(
-                        _getSuggestionText(suggestion.suggestion),
+                        _getSuggestionText(suggestion.suggestion, isTaiwan),
                         style: TextStyle(
                           color: suggestionColor,
                           fontWeight: FontWeight.bold,
@@ -192,23 +285,34 @@ class SuggestionCard extends StatelessWidget {
               ],
             ),
             const Divider(height: 24),
-            // 信心度
+            // Bullish Probability (看漲機率) - 更直覺的指標
             Row(
               children: [
-                const Text('信心度：'),
+                Text(isTaiwan ? '看漲機率：' : 'Bullish: '),
                 Expanded(
                   child: LinearProgressIndicator(
-                    value: suggestion.confidence,
+                    value: suggestion.bullishProbability ??
+                        (suggestion.suggestion == 'BUY'
+                            ? suggestion.confidence
+                            : 1 - suggestion.confidence),
                     backgroundColor: Colors.grey[300],
-                    valueColor: AlwaysStoppedAnimation<Color>(suggestionColor),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      _getBullishColor(suggestion.bullishProbability ??
+                          (suggestion.suggestion == 'BUY'
+                              ? suggestion.confidence
+                              : 1 - suggestion.confidence)),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${(suggestion.confidence * 100).toStringAsFixed(0)}%',
+                  '${((suggestion.bullishProbability ?? (suggestion.suggestion == 'BUY' ? suggestion.confidence : 1 - suggestion.confidence)) * 100).toStringAsFixed(0)}%',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: suggestionColor,
+                    color: _getBullishColor(suggestion.bullishProbability ??
+                        (suggestion.suggestion == 'BUY'
+                            ? suggestion.confidence
+                            : 1 - suggestion.confidence)),
                   ),
                 ),
               ],
@@ -221,9 +325,10 @@ class SuggestionCard extends StatelessWidget {
                   if (suggestion.targetPrice != null)
                     Expanded(
                       child: _buildPriceInfo(
-                        '目標價',
+                        isTaiwan ? '目標價' : 'Target',
                         suggestion.targetPrice!,
                         Colors.green,
+                        currencySymbol,
                       ),
                     ),
                   if (suggestion.targetPrice != null &&
@@ -232,19 +337,20 @@ class SuggestionCard extends StatelessWidget {
                   if (suggestion.stopLossPrice != null)
                     Expanded(
                       child: _buildPriceInfo(
-                        '停損價',
+                        isTaiwan ? '停損價' : 'Stop Loss',
                         suggestion.stopLossPrice!,
                         Colors.red,
+                        currencySymbol,
                       ),
                     ),
                 ],
               ),
             ],
             const SizedBox(height: 12),
-            // 分析理由
-            const Text(
-              '分析理由',
-              style: TextStyle(
+            // Reasoning
+            Text(
+              isTaiwan ? '分析理由' : 'Analysis',
+              style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
               ),
@@ -259,9 +365,9 @@ class SuggestionCard extends StatelessWidget {
             ),
             if (suggestion.keyFactors.isNotEmpty) ...[
               const SizedBox(height: 12),
-              const Text(
-                '關鍵因素',
-                style: TextStyle(
+              Text(
+                isTaiwan ? '關鍵因素' : 'Key Factors',
+                style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                 ),
@@ -312,7 +418,7 @@ class SuggestionCard extends StatelessWidget {
     );
   }
 
-  Widget _buildPriceInfo(String label, double price, Color color) {
+  Widget _buildPriceInfo(String label, double price, Color color, String currency) {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -329,7 +435,7 @@ class SuggestionCard extends StatelessWidget {
             ),
           ),
           Text(
-            price.toStringAsFixed(2),
+            '$currency${price.toStringAsFixed(2)}',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -352,6 +458,17 @@ class SuggestionCard extends StatelessWidget {
     }
   }
 
+  Color _getBullishColor(double probability) {
+    // 看漲機率高 = 紅色(台股看多), 看漲機率低 = 綠色(看空)
+    if (probability >= 0.6) {
+      return Colors.red;
+    } else if (probability <= 0.4) {
+      return Colors.green;
+    } else {
+      return Colors.orange;
+    }
+  }
+
   IconData _getSuggestionIcon(String suggestion) {
     switch (suggestion.toUpperCase()) {
       case 'BUY':
@@ -363,14 +480,14 @@ class SuggestionCard extends StatelessWidget {
     }
   }
 
-  String _getSuggestionText(String suggestion) {
+  String _getSuggestionText(String suggestion, bool isTaiwan) {
     switch (suggestion.toUpperCase()) {
       case 'BUY':
-        return '買進';
+        return isTaiwan ? '買進' : 'BUY';
       case 'SELL':
-        return '賣出';
+        return isTaiwan ? '賣出' : 'SELL';
       default:
-        return '持有';
+        return isTaiwan ? '持有' : 'HOLD';
     }
   }
 

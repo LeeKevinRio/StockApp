@@ -1,9 +1,9 @@
 """
-Stocks router
+Stocks router - 支援台股(TW)與美股(US)
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import pandas as pd
 
 from app.database import get_db
@@ -22,64 +22,173 @@ router = APIRouter(prefix="/api/stocks", tags=["stocks"])
 stock_service = StockDataService()
 
 
-@router.get("/search", response_model=List[StockDetail])
+@router.get("/search")
 def search_stocks(
     q: str,
+    market: str = Query("TW", description="Market region: TW or US"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """搜尋股票"""
-    stocks = stock_service.search_stocks(db, q)
-    return stocks
+    """
+    搜尋股票
+
+    Args:
+        q: 搜尋關鍵字
+        market: 市場 - "TW"(台股) 或 "US"(美股)
+    """
+    stocks = stock_service.search_stocks(db, q, market=market)
+
+    # For US stocks, return the dict list directly
+    if market == "US":
+        return stocks
+
+    # For TW stocks, convert to response format
+    return [
+        {
+            "stock_id": s.stock_id,
+            "name": s.name,
+            "english_name": s.english_name,
+            "industry": s.industry,
+            "market": s.market,
+            "market_region": getattr(s, 'market_region', 'TW'),
+        }
+        for s in stocks
+    ]
 
 
-@router.get("/{stock_id}", response_model=StockDetail)
+@router.get("/debug/us-test")
+def debug_us_stock_test():
+    """
+    Debug endpoint to test US stock fetcher (no auth required)
+    """
+    from app.data_fetchers.us_stock_fetcher import USStockFetcher
+    fetcher = USStockFetcher()
+
+    result = {
+        "yfinance_available": False,
+        "search_result": None,
+        "quote_result": None,
+        "error": None
+    }
+
+    try:
+        import yfinance as yf
+        result["yfinance_available"] = True
+        result["yfinance_version"] = yf.__version__
+    except ImportError as e:
+        result["error"] = f"yfinance import error: {str(e)}"
+        return result
+
+    try:
+        # Test search
+        search_results = fetcher.search_stocks("AAPL")
+        result["search_result"] = search_results[:3] if search_results else []
+    except Exception as e:
+        result["search_error"] = str(e)
+
+    try:
+        # Test quote
+        quote = fetcher.get_realtime_quote("AAPL")
+        result["quote_result"] = quote
+    except Exception as e:
+        result["quote_error"] = str(e)
+
+    return result
+
+
+@router.get("/{stock_id}")
 def get_stock_detail(
     stock_id: str,
+    market: str = Query("TW", description="Market region: TW or US"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """取得股票詳情"""
-    stock = stock_service.get_stock(db, stock_id)
+    """
+    取得股票詳情
+
+    Args:
+        stock_id: 股票代碼
+        market: 市場 - "TW"(台股) 或 "US"(美股)
+    """
+    stock = stock_service.get_stock(db, stock_id, market=market)
     if not stock:
         raise HTTPException(status_code=404, detail="Stock not found")
     return stock
 
 
-@router.get("/{stock_id}/price", response_model=StockPrice)
+@router.get("/{stock_id}/price")
 def get_stock_price(
     stock_id: str,
+    market: str = Query("TW", description="Market region: TW or US"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """取得即時報價"""
-    price_data = stock_service.get_realtime_price(stock_id)
+    """
+    取得即時報價
+
+    Args:
+        stock_id: 股票代碼
+        market: 市場 - "TW"(台股) 或 "US"(美股)
+    """
+    price_data = stock_service.get_realtime_price(stock_id, market=market)
     if not price_data:
         raise HTTPException(status_code=404, detail="Price data not available")
 
-    # Get stock name
-    stock = stock_service.get_stock(db, stock_id)
-    if stock:
-        price_data["name"] = stock.name
+    # Get stock name if not present
+    if not price_data.get("name"):
+        stock = stock_service.get_stock(db, stock_id, market=market)
+        if stock:
+            price_data["name"] = stock.get("name", "") if isinstance(stock, dict) else stock.name
 
     return price_data
 
 
-@router.get("/{stock_id}/history", response_model=List[StockHistory])
+@router.get("/{stock_id}/history")
 def get_stock_history(
     stock_id: str,
     days: int = 60,
+    period: str = "day",
+    market: str = Query("TW", description="Market region: TW or US"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """取得歷史K線"""
-    history = stock_service.get_history(db, stock_id, days)
+    """
+    取得歷史K線
+
+    Args:
+        stock_id: 股票代碼
+        days: 返回筆數
+        period: 週期 - "day"(日K), "week"(週K), "month"(月K)
+        market: 市場 - "TW"(台股) 或 "US"(美股)
+    """
+    if period not in ["day", "week", "month"]:
+        period = "day"
+    history = stock_service.get_history(db, stock_id, days, period=period, market=market)
     return history
 
 
-def _get_history_dataframe(stock_id: str, db: Session, days: int = 120) -> pd.DataFrame:
+@router.get("/{stock_id}/news")
+def get_stock_news(
+    stock_id: str,
+    market: str = Query("TW", description="Market region: TW or US"),
+    limit: int = Query(10, description="Number of news items"),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    取得股票新聞
+
+    Args:
+        stock_id: 股票代碼
+        market: 市場 - "TW"(台股) 或 "US"(美股)
+        limit: 新聞數量
+    """
+    news = stock_service.get_news(stock_id, market=market, limit=limit)
+    return news
+
+
+def _get_history_dataframe(stock_id: str, db: Session, days: int = 120, market: str = "TW") -> pd.DataFrame:
     """取得歷史數據並轉換為 DataFrame"""
-    history = stock_service.get_history(db, stock_id, days)
+    history = stock_service.get_history(db, stock_id, days, market=market)
     if not history:
         return pd.DataFrame()
 
@@ -101,11 +210,12 @@ def get_rsi(
     stock_id: str,
     period: int = 14,
     days: int = 60,
+    market: str = Query("TW", description="Market region: TW or US"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """取得 RSI 指標數據"""
-    df = _get_history_dataframe(stock_id, db, days + 30)
+    df = _get_history_dataframe(stock_id, db, days + 30, market=market)
     if df.empty:
         raise HTTPException(status_code=404, detail="No history data")
 
@@ -117,7 +227,8 @@ def get_rsi(
             val = rsi.iloc[i]
             data.append(IndicatorDataPoint(
                 date=df['date'].iloc[i],
-                value=float(val) if pd.notna(val) else None
+                value=float(val) if pd.notna(val) else None,
+                close=float(df['close'].iloc[i])
             ))
 
     return RSIResponse(stock_id=stock_id, period=period, data=data)
@@ -130,11 +241,12 @@ def get_macd(
     slow: int = 26,
     signal_period: int = 9,
     days: int = 60,
+    market: str = Query("TW", description="Market region: TW or US"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """取得 MACD 指標數據"""
-    df = _get_history_dataframe(stock_id, db, days + 50)
+    df = _get_history_dataframe(stock_id, db, days + 50, market=market)
     if df.empty:
         raise HTTPException(status_code=404, detail="No history data")
 
@@ -148,6 +260,7 @@ def get_macd(
                 macd=float(macd_data['macd'].iloc[i]) if pd.notna(macd_data['macd'].iloc[i]) else None,
                 signal=float(macd_data['signal'].iloc[i]) if pd.notna(macd_data['signal'].iloc[i]) else None,
                 histogram=float(macd_data['histogram'].iloc[i]) if pd.notna(macd_data['histogram'].iloc[i]) else None,
+                close=float(df['close'].iloc[i])
             ))
 
     return MACDResponse(
@@ -165,11 +278,12 @@ def get_bollinger(
     period: int = 20,
     std_dev: float = 2.0,
     days: int = 60,
+    market: str = Query("TW", description="Market region: TW or US"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """取得布林通道數據"""
-    df = _get_history_dataframe(stock_id, db, days + 30)
+    df = _get_history_dataframe(stock_id, db, days + 30, market=market)
     if df.empty:
         raise HTTPException(status_code=404, detail="No history data")
 
@@ -199,11 +313,12 @@ def get_kd(
     stock_id: str,
     period: int = 9,
     days: int = 60,
+    market: str = Query("TW", description="Market region: TW or US"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """取得 KD 指標數據"""
-    df = _get_history_dataframe(stock_id, db, days + 30)
+    df = _get_history_dataframe(stock_id, db, days + 30, market=market)
     if df.empty:
         raise HTTPException(status_code=404, detail="No history data")
 
@@ -216,6 +331,7 @@ def get_kd(
                 date=df['date'].iloc[i],
                 k=float(kd_data['k'].iloc[i]) if pd.notna(kd_data['k'].iloc[i]) else None,
                 d=float(kd_data['d'].iloc[i]) if pd.notna(kd_data['d'].iloc[i]) else None,
+                close=float(df['close'].iloc[i])
             ))
 
     return KDResponse(stock_id=stock_id, period=period, data=data)
@@ -225,11 +341,12 @@ def get_kd(
 def get_all_indicators(
     stock_id: str,
     days: int = 60,
+    market: str = Query("TW", description="Market region: TW or US"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """取得所有技術指標數據"""
-    df = _get_history_dataframe(stock_id, db, days + 50)
+    df = _get_history_dataframe(stock_id, db, days + 50, market=market)
     if df.empty:
         raise HTTPException(status_code=404, detail="No history data")
 
@@ -248,10 +365,12 @@ def get_all_indicators(
     for i in range(len(df)):
         if i >= len(df) - days:
             d = df['date'].iloc[i]
+            close_price = float(df['close'].iloc[i])
 
             rsi_list.append(IndicatorDataPoint(
                 date=d,
-                value=float(rsi.iloc[i]) if pd.notna(rsi.iloc[i]) else None
+                value=float(rsi.iloc[i]) if pd.notna(rsi.iloc[i]) else None,
+                close=close_price
             ))
 
             macd_list.append(MACDDataPoint(
@@ -259,6 +378,7 @@ def get_all_indicators(
                 macd=float(macd_data['macd'].iloc[i]) if pd.notna(macd_data['macd'].iloc[i]) else None,
                 signal=float(macd_data['signal'].iloc[i]) if pd.notna(macd_data['signal'].iloc[i]) else None,
                 histogram=float(macd_data['histogram'].iloc[i]) if pd.notna(macd_data['histogram'].iloc[i]) else None,
+                close=close_price
             ))
 
             bb_list.append(BollingerDataPoint(
@@ -266,13 +386,14 @@ def get_all_indicators(
                 upper=float(bb_data['upper'].iloc[i]) if pd.notna(bb_data['upper'].iloc[i]) else None,
                 middle=float(bb_data['middle'].iloc[i]) if pd.notna(bb_data['middle'].iloc[i]) else None,
                 lower=float(bb_data['lower'].iloc[i]) if pd.notna(bb_data['lower'].iloc[i]) else None,
-                close=float(df['close'].iloc[i]),
+                close=close_price,
             ))
 
             kd_list.append(KDDataPoint(
                 date=d,
                 k=float(kd_data['k'].iloc[i]) if pd.notna(kd_data['k'].iloc[i]) else None,
                 d=float(kd_data['d'].iloc[i]) if pd.notna(kd_data['d'].iloc[i]) else None,
+                close=close_price
             ))
 
     # 取得最新指標值

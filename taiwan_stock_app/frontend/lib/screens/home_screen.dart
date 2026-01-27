@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/market_provider.dart';
+import '../providers/watchlist_provider.dart';
+import '../widgets/market_switcher.dart';
 import 'watchlist_screen.dart';
 import 'ai_chat_screen.dart';
 import 'ai_suggestions_screen.dart';
+import 'alerts_screen.dart';
+import 'trading_screen.dart';
+import 'news_screen.dart';
+import 'social_screen.dart';
+import 'screener_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,57 +27,176 @@ class _HomeScreenState extends State<HomeScreen> {
     const WatchlistScreen(),
     const AISuggestionsScreen(),
     const AIChatScreen(),
+    const AlertsScreen(),
   ];
+
+  void _onMarketChanged() {
+    // Refresh watchlist when market changes
+    final marketProvider = context.read<MarketProvider>();
+    context.read<WatchlistProvider>().setMarketFilter(marketProvider.marketCode);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_selectedIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.star),
-            label: '自選股',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.lightbulb),
-            label: 'AI 建議',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat),
-            label: 'AI 問答',
+      appBar: AppBar(
+        title: Consumer<MarketProvider>(
+          builder: (context, marketProvider, child) {
+            return Text('${marketProvider.marketDisplayName} AI 投資建議');
+          },
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: CompactMarketSwitcher(
+              onMarketChanged: _onMarketChanged,
+            ),
           ),
         ],
+      ),
+      body: _screens[_selectedIndex],
+      bottomNavigationBar: Consumer<MarketProvider>(
+        builder: (context, marketProvider, child) {
+          final isUS = marketProvider.isUSMarket;
+          return BottomNavigationBar(
+            type: BottomNavigationBarType.fixed,
+            currentIndex: _selectedIndex,
+            selectedItemColor: isUS ? Colors.indigo : Colors.blue,
+            unselectedItemColor: Colors.grey,
+            onTap: (index) {
+              setState(() {
+                _selectedIndex = index;
+              });
+            },
+            items: [
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.star),
+                label: isUS ? 'Watchlist' : '自選股',
+              ),
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.lightbulb),
+                label: isUS ? 'AI Tips' : 'AI 建議',
+              ),
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.chat),
+                label: isUS ? 'AI Chat' : 'AI 問答',
+              ),
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.notifications),
+                label: isUS ? 'Alerts' : '警示',
+              ),
+            ],
+          );
+        },
       ),
       drawer: Drawer(
         child: ListView(
           children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(
-                color: Colors.blue,
-              ),
-              child: Text(
-                '台股 AI 投資建議',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                ),
-              ),
+            Consumer<MarketProvider>(
+              builder: (context, marketProvider, child) {
+                return DrawerHeader(
+                  decoration: BoxDecoration(
+                    color: marketProvider.isUSMarket ? Colors.indigo : Colors.blue,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${marketProvider.marketDisplayName} AI 投資建議',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      MarketSwitcher(
+                        onMarketChanged: _onMarketChanged,
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('登出'),
-              onTap: () async {
-                await context.read<AuthProvider>().logout();
-                if (context.mounted) {
-                  Navigator.of(context).pushReplacementNamed('/login');
-                }
+            Consumer<MarketProvider>(
+              builder: (context, marketProvider, child) {
+                final isUS = marketProvider.isUSMarket;
+                return Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.swap_horiz),
+                      title: Text(isUS ? 'Paper Trading' : '模擬交易'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const TradingScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.pie_chart),
+                      title: Text(isUS ? 'Portfolio' : '投資組合'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/portfolio');
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.filter_list),
+                      title: Text(isUS ? 'Stock Screener' : '股票篩選'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ScreenerScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(Icons.newspaper),
+                      title: Text(isUS ? 'Financial News' : '財經新聞'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const NewsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.forum),
+                      title: Text(isUS ? 'Social Sentiment' : '社群情緒'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SocialScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(Icons.logout),
+                      title: Text(isUS ? 'Logout' : '登出'),
+                      onTap: () async {
+                        await context.read<AuthProvider>().logout();
+                        if (context.mounted) {
+                          Navigator.of(context).pushReplacementNamed('/login');
+                        }
+                      },
+                    ),
+                  ],
+                );
               },
             ),
           ],

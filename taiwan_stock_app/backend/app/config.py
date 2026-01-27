@@ -2,7 +2,12 @@
 Application configuration
 """
 import os
-from typing import Optional
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env file
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(env_path)
 
 
 class Settings:

@@ -1,5 +1,5 @@
 """
-Stock schemas
+Stock schemas - 支援台股(TW)與美股(US)
 """
 from pydantic import BaseModel, field_serializer
 from typing import Optional
@@ -10,13 +10,16 @@ from decimal import Decimal
 class StockBase(BaseModel):
     stock_id: str
     name: str
-    market: str  # 'TWSE' or 'TPEx'
+    market: Optional[str] = None  # 'TWSE', 'TPEx', 'NYSE', 'NASDAQ', etc.
+    market_region: Optional[str] = "TW"  # 'TW' or 'US'
 
 
 class StockDetail(StockBase):
     english_name: Optional[str] = None
     industry: Optional[str] = None
+    sector: Optional[str] = None  # For US stocks
     listed_date: Optional[date] = None
+    exchange: Optional[str] = None  # Exchange name for US stocks
 
     class Config:
         from_attributes = True
@@ -33,6 +36,8 @@ class StockPrice(BaseModel):
     low: Decimal
     volume: int
     updated_at: datetime
+    market_region: Optional[str] = "TW"
+    currency: Optional[str] = "TWD"
 
     @field_serializer('current_price', 'change', 'change_percent', 'open', 'high', 'low')
     def serialize_decimal(self, v: Decimal) -> float:

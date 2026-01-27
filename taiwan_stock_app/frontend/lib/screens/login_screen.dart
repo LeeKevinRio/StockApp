@@ -62,9 +62,19 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                const Icon(
+                  Icons.trending_up,
+                  size: 64,
+                  color: Colors.blue,
+                ),
+                const SizedBox(height: 16),
                 const Text(
-                  '台股 AI 投資建議',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                  'StockAI',
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                ),
+                const Text(
+                  'Smart Investment Assistant',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
                 ),
                 const SizedBox(height: 48),
                 TextFormField(

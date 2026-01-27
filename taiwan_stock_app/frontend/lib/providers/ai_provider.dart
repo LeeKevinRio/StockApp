@@ -3,15 +3,36 @@ import '../models/ai_suggestion.dart';
 import '../services/api_service.dart';
 
 class ChatMessage {
+  final String id;
   final String role;
   final String content;
   final List<String>? sources;
+  final DateTime timestamp;
 
   ChatMessage({
+    String? id,
     required this.role,
     required this.content,
     this.sources,
-  });
+    DateTime? timestamp,
+  })  : id = id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        timestamp = timestamp ?? DateTime.now();
+
+  ChatMessage copyWith({
+    String? id,
+    String? role,
+    String? content,
+    List<String>? sources,
+    DateTime? timestamp,
+  }) {
+    return ChatMessage(
+      id: id ?? this.id,
+      role: role ?? this.role,
+      content: content ?? this.content,
+      sources: sources ?? this.sources,
+      timestamp: timestamp ?? this.timestamp,
+    );
+  }
 }
 
 class AIProvider with ChangeNotifier {

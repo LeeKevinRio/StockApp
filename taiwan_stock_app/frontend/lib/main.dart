@@ -5,12 +5,21 @@ import 'services/auth_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/watchlist_provider.dart';
 import 'providers/ai_provider.dart';
+import 'providers/alert_provider.dart';
+import 'providers/app_state_provider.dart';
+import 'providers/theme_provider.dart';
+import 'providers/market_provider.dart';
+import 'config/app_theme.dart';
+import 'utils/page_transitions.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/stock_search_screen.dart';
 import 'screens/stock_detail_screen.dart';
+import 'screens/alerts_screen.dart';
+import 'screens/portfolio_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
@@ -29,32 +38,61 @@ class MyApp extends StatelessWidget {
           create: (_) => AuthProvider(authService),
         ),
         ChangeNotifierProvider(
+          create: (_) => MarketProvider(),
+        ),
+        ChangeNotifierProvider(
           create: (_) => WatchlistProvider(apiService),
         ),
         ChangeNotifierProvider(
           create: (_) => AIProvider(apiService),
         ),
-      ],
-      child: MaterialApp(
-        title: '台股 AI 投資建議',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          useMaterial3: true,
+        ChangeNotifierProvider(
+          create: (_) => AlertProvider(apiService),
         ),
-        initialRoute: '/login',
-        routes: {
-          '/login': (context) => const LoginScreen(),
-          '/home': (context) => const HomeScreen(),
-          '/search': (context) => const StockSearchScreen(),
-        },
-        onGenerateRoute: (settings) {
-          if (settings.name == '/stock-detail') {
-            final stockId = settings.arguments as String;
-            return MaterialPageRoute(
-              builder: (context) => StockDetailScreen(stockId: stockId),
-            );
-          }
-          return null;
+        ChangeNotifierProvider(
+          create: (_) => AppStateProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ThemeProvider(),
+        ),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: 'AI 投資建議',
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeProvider.themeMode,
+            debugShowCheckedModeBanner: false,
+            initialRoute: '/login',
+            routes: {
+              '/login': (context) => const LoginScreen(),
+              '/home': (context) => const HomeScreen(),
+              '/search': (context) => const StockSearchScreen(),
+              '/alerts': (context) => const AlertsScreen(),
+              '/portfolio': (context) => const PortfolioScreen(),
+            },
+            onGenerateRoute: (settings) {
+              if (settings.name == '/stock-detail') {
+                final args = settings.arguments;
+                String stockId;
+                String market = 'TW';
+
+                if (args is Map<String, dynamic>) {
+                  stockId = args['stockId'] as String;
+                  market = args['market'] as String? ?? 'TW';
+                } else {
+                  stockId = args as String;
+                }
+
+                return AppPageRoute.slide(
+                  StockDetailScreen(stockId: stockId, market: market),
+                  settings: settings,
+                );
+              }
+              return null;
+            },
+          );
         },
       ),
     );

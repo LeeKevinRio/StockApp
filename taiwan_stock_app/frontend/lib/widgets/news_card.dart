@@ -191,8 +191,9 @@ class NewsCard extends StatelessWidget {
 
 class NewsListView extends StatefulWidget {
   final String stockId;
+  final String market;
 
-  const NewsListView({super.key, required this.stockId});
+  const NewsListView({super.key, required this.stockId, this.market = 'TW'});
 
   @override
   State<NewsListView> createState() => _NewsListViewState();
@@ -216,11 +217,18 @@ class _NewsListViewState extends State<NewsListView> {
     });
 
     try {
-      // 從 API 獲取真實新聞
       final apiService = context.read<ApiService>();
-      final response = await apiService.getStockNews(widget.stockId, limit: 15);
-      final newsResponse = NewsListResponse.fromJson(response);
-      _newsList = newsResponse.news;
+
+      // Use unified getStockNews with market parameter
+      final response = await apiService.getStockNews(
+        widget.stockId,
+        limit: 15,
+        market: widget.market,
+      );
+
+      // Parse news from response
+      final List<dynamic> newsData = response['news'] ?? [];
+      _newsList = newsData.map<StockNews>((item) => StockNews.fromJson(item)).toList();
 
       setState(() {
         _isLoading = false;
