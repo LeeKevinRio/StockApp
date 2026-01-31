@@ -11,8 +11,9 @@ from fastapi.security.http import HTTPAuthorizationCredentials
 
 from app.database import get_db
 from app.models import User
-from app.schemas import UserCreate, UserLogin, Token, UserResponse
+from app.schemas import UserCreate, UserLogin, Token, UserResponse, GoogleAuthRequest
 from app.config import settings
+from app.services.oauth_service import oauth_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -60,6 +61,16 @@ def get_current_user(
     return user
 
 
+def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    """Get current user and verify admin privileges"""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required"
+        )
+    return current_user
+
+
 @router.post("/register", response_model=Token)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
     """Register new user"""
@@ -73,6 +84,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
         email=user_data.email,
         password_hash=hash_password(user_data.password),
         display_name=user_data.display_name,
+        auth_provider='local',
     )
     db.add(user)
     db.commit()
@@ -88,6 +100,10 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
             email=user.email,
             display_name=user.display_name,
             created_at=user.created_at,
+            auth_provider=user.auth_provider,
+            avatar_url=user.avatar_url,
+            subscription_tier=user.subscription_tier,
+            is_admin=user.is_admin,
         ),
     )
 
@@ -96,7 +112,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
 def login(user_data: UserLogin, db: Session = Depends(get_db)):
     """Login user"""
     user = db.query(User).filter(User.email == user_data.email).first()
-    if not user or not verify_password(user_data.password, user.password_hash):
+    if not user or not user.password_hash or not verify_password(user_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
 
     # Create access token
@@ -109,6 +125,65 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
             email=user.email,
             display_name=user.display_name,
             created_at=user.created_at,
+            auth_provider=user.auth_provider,
+            avatar_url=user.avatar_url,
+            subscription_tier=user.subscription_tier,
+            is_admin=user.is_admin,
+        ),
+    )
+
+
+@router.post("/google", response_model=Token)
+def google_auth(request: GoogleAuthRequest, db: Session = Depends(get_db)):
+    """Google OAuth 登入"""
+    # Verify Google token
+    google_user = oauth_service.verify_google_token(request.id_token)
+    if not google_user:
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+
+    # Check if user exists by google_id
+    user = db.query(User).filter(User.google_id == google_user['google_id']).first()
+
+    if not user:
+        # Check if user exists by email (might have registered with email/password before)
+        user = db.query(User).filter(User.email == google_user['email']).first()
+
+        if user:
+            # Link Google account to existing user
+            user.google_id = google_user['google_id']
+            user.auth_provider = 'google'
+            if not user.avatar_url and google_user.get('picture'):
+                user.avatar_url = google_user['picture']
+            if not user.display_name and google_user.get('name'):
+                user.display_name = google_user['name']
+        else:
+            # Create new user
+            user = User(
+                email=google_user['email'],
+                google_id=google_user['google_id'],
+                display_name=google_user.get('name', ''),
+                avatar_url=google_user.get('picture', ''),
+                auth_provider='google',
+            )
+            db.add(user)
+
+        db.commit()
+        db.refresh(user)
+
+    # Create access token
+    access_token = create_access_token(user.id)
+
+    return Token(
+        access_token=access_token,
+        user=UserResponse(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            created_at=user.created_at,
+            auth_provider=user.auth_provider,
+            avatar_url=user.avatar_url,
+            subscription_tier=user.subscription_tier,
+            is_admin=user.is_admin,
         ),
     )
 
@@ -121,4 +196,8 @@ def get_me(current_user: User = Depends(get_current_user)):
         email=current_user.email,
         display_name=current_user.display_name,
         created_at=current_user.created_at,
+        auth_provider=current_user.auth_provider,
+        avatar_url=current_user.avatar_url,
+        subscription_tier=current_user.subscription_tier,
+        is_admin=current_user.is_admin,
     )

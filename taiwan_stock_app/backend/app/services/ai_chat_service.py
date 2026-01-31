@@ -27,11 +27,32 @@ class AIChatService:
 
 當用戶詢問特定股票時，你會收到該股票的最新數據，請根據數據提供分析。"""
 
-    def __init__(self):
+    def __init__(self, subscription_tier: str = 'free'):
         self.finmind = FinMindFetcher(settings.FINMIND_TOKEN)
         genai.configure(api_key=settings.GOOGLE_API_KEY)
-        self.llm = genai.GenerativeModel(settings.AI_MODEL)
-        self.model = settings.AI_MODEL
+
+        # Select model based on subscription tier
+        if subscription_tier == 'pro':
+            self.model = settings.AI_MODEL_PRO
+        else:
+            self.model = settings.AI_MODEL_FREE
+
+        self.llm = genai.GenerativeModel(self.model)
+        self.subscription_tier = subscription_tier
+
+    @classmethod
+    def for_user(cls, user) -> 'AIChatService':
+        """
+        工廠方法：根據用戶訂閱級別創建服務實例
+
+        Args:
+            user: User model instance with subscription_tier attribute
+
+        Returns:
+            AIChatService instance configured for user's tier
+        """
+        tier = getattr(user, 'subscription_tier', 'free') or 'free'
+        return cls(subscription_tier=tier)
 
     def chat(
         self,

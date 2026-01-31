@@ -49,6 +49,25 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
+  Future<Map<String, dynamic>> googleAuth(String idToken) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/auth/google'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'id_token': idToken}),
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> getCurrentUser() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/auth/me'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
   // ==================== 股票相關 ====================
 
   Future<List<Stock>> searchStocks(String query, {String market = 'TW'}) async {
@@ -629,6 +648,47 @@ class ApiService {
     final response = await http.get(
       Uri.parse('$baseUrl/api/screener/top/$metric?market=$market&ascending=$ascending&limit=$limit'),
       headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  // ==================== 管理員相關 ====================
+
+  Future<List<Map<String, dynamic>>> getAdminUsers({int skip = 0, int limit = 50}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/admin/users?skip=$skip&limit=$limit'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> getAdminStats() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/admin/stats'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> updateUserSubscription(int userId, String tier) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/api/admin/users/$userId/subscription'),
+      headers: _headers,
+      body: jsonEncode({'subscription_tier': tier}),
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> updateUserAdmin(int userId, bool isAdmin) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/api/admin/users/$userId/admin'),
+      headers: _headers,
+      body: jsonEncode({'is_admin': isAdmin}),
     );
     _checkResponse(response);
     return jsonDecode(response.body);

@@ -18,6 +18,7 @@ from app.routers import (
     portfolio_router,
     fundamental_router,
     screener_router,
+    admin_router,
 )
 
 # Create FastAPI app
@@ -48,6 +49,7 @@ app.include_router(trading_router)
 app.include_router(portfolio_router)
 app.include_router(fundamental_router)
 app.include_router(screener_router)
+app.include_router(admin_router)
 
 
 @app.on_event("startup")

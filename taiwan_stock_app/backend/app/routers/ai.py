@@ -13,8 +13,6 @@ from app.services import AISuggestionService, AIChatService, StockDataService
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
-suggestion_service = AISuggestionService()
-chat_service = AIChatService()
 stock_service = StockDataService()
 
 
@@ -73,6 +71,8 @@ def get_ai_suggestions(
         else:
             # Generate new suggestion with correct market parameter
             try:
+                # Create service instance based on user's subscription tier
+                suggestion_service = AISuggestionService.for_user(current_user)
                 suggestion_data = suggestion_service.generate_suggestion(
                     stock.stock_id, stock.name, market=market
                 )
@@ -191,6 +191,8 @@ def get_stock_suggestion(
             )
 
         # Generate new suggestion with market parameter
+        # Create service instance based on user's subscription tier
+        suggestion_service = AISuggestionService.for_user(current_user)
         suggestion_data = suggestion_service.generate_suggestion(stock_id, stock_name, market=market)
 
         # Save to database with error handling
@@ -261,6 +263,9 @@ def ai_chat(
     history.reverse()
 
     chat_history = [{"role": msg.role, "content": msg.content} for msg in history]
+
+    # Create chat service based on user's subscription tier
+    chat_service = AIChatService.for_user(current_user)
 
     # Get AI response
     response_data = chat_service.chat(request.message, request.stock_id, chat_history)

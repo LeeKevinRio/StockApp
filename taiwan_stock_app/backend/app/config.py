@@ -24,13 +24,21 @@ class Settings:
     FUGLE_API_KEY: str = os.getenv("FUGLE_API_KEY", "")
     GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
 
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+
     # JWT
     JWT_SECRET: str = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
-    # AI Model (Google Gemini)
+    # AI Model (Google Gemini) - Default model (backward compatibility)
     AI_MODEL: str = os.getenv("AI_MODEL", "gemini-1.5-flash")
+
+    # AI Models by subscription tier
+    AI_MODEL_FREE: str = os.getenv("AI_MODEL_FREE", "gemini-1.5-flash")
+    AI_MODEL_PRO: str = os.getenv("AI_MODEL_PRO", "gemini-2.5-pro")
 
     # CORS
     CORS_ORIGINS: list = ["http://localhost:3000", "http://localhost:8080"]

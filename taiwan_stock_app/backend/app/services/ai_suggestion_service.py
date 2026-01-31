@@ -19,13 +19,34 @@ from app.services.technical_indicators import TechnicalIndicators
 class AISuggestionService:
     """AI 每日建議服務 - 多面向分析（支援台股與美股）"""
 
-    def __init__(self):
+    def __init__(self, subscription_tier: str = 'free'):
         self.finmind = FinMindFetcher(settings.FINMIND_TOKEN)
         self.us_fetcher = USStockFetcher()
         self.news_fetcher = NewsFetcher()
         genai.configure(api_key=settings.GOOGLE_API_KEY)
-        self.llm = genai.GenerativeModel(settings.AI_MODEL)
-        self.model = settings.AI_MODEL
+
+        # Select model based on subscription tier
+        if subscription_tier == 'pro':
+            self.model = settings.AI_MODEL_PRO
+        else:
+            self.model = settings.AI_MODEL_FREE
+
+        self.llm = genai.GenerativeModel(self.model)
+        self.subscription_tier = subscription_tier
+
+    @classmethod
+    def for_user(cls, user) -> 'AISuggestionService':
+        """
+        工廠方法：根據用戶訂閱級別創建服務實例
+
+        Args:
+            user: User model instance with subscription_tier attribute
+
+        Returns:
+            AISuggestionService instance configured for user's tier
+        """
+        tier = getattr(user, 'subscription_tier', 'free') or 'free'
+        return cls(subscription_tier=tier)
 
     def collect_stock_data(self, stock_id: str, days: int = 60, market: str = "TW") -> Dict:
         """

@@ -1,7 +1,16 @@
 """
 Pydantic schemas for request/response validation
 """
-from .user import UserCreate, UserLogin, UserResponse, Token
+from .user import (
+    UserCreate,
+    UserLogin,
+    UserResponse,
+    Token,
+    GoogleAuthRequest,
+    AdminUserResponse,
+    UserSubscriptionUpdate,
+    UserAdminUpdate,
+)
 from .stock import StockBase, StockDetail, StockPrice, StockHistory
 from .watchlist import WatchlistItem, WatchlistAdd
 from .ai import AISuggestion, AIChatRequest, AIChatResponse, ChatMessage
@@ -33,6 +42,10 @@ __all__ = [
     "UserLogin",
     "UserResponse",
     "Token",
+    "GoogleAuthRequest",
+    "AdminUserResponse",
+    "UserSubscriptionUpdate",
+    "UserAdminUpdate",
     "StockBase",
     "StockDetail",
     "StockPrice",

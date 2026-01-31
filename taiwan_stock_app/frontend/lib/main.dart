@@ -17,6 +17,7 @@ import 'screens/stock_search_screen.dart';
 import 'screens/stock_detail_screen.dart';
 import 'screens/alerts_screen.dart';
 import 'screens/portfolio_screen.dart';
+import 'screens/admin_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -71,6 +72,7 @@ class MyApp extends StatelessWidget {
               '/search': (context) => const StockSearchScreen(),
               '/alerts': (context) => const AlertsScreen(),
               '/portfolio': (context) => const PortfolioScreen(),
+              '/admin': (context) => const AdminScreen(),
             },
             onGenerateRoute: (settings) {
               if (settings.name == '/stock-detail') {
