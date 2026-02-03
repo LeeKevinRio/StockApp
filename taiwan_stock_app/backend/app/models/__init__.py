@@ -9,7 +9,7 @@ from .alert import PriceAlert
 from .news import StockNews
 from .social import SocialPost, StockSentiment
 from .trading import VirtualAccount, VirtualPosition, VirtualOrder
-from .portfolio import Portfolio, PortfolioHolding, PortfolioSnapshot
+from .portfolio import Portfolio, Position, Transaction, TransactionType
 from .fundamental import (
     StockFundamental,
     StockDividend,
@@ -34,8 +34,9 @@ __all__ = [
     "VirtualPosition",
     "VirtualOrder",
     "Portfolio",
-    "PortfolioHolding",
-    "PortfolioSnapshot",
+    "Position",
+    "Transaction",
+    "TransactionType",
     "StockFundamental",
     "StockDividend",
     "InstitutionalTrading",
