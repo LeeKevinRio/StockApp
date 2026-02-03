@@ -1,8 +1,7 @@
 """
 AI Report and Chat History models
 """
-from sqlalchemy import Column, Integer, String, Text, Date, DateTime, Numeric, ForeignKey, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, Integer, String, Text, Date, DateTime, Numeric, ForeignKey, UniqueConstraint, JSON
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -20,12 +19,12 @@ class AIReport(Base):
     target_price = Column(Numeric(10, 2))
     stop_loss_price = Column(Numeric(10, 2))
     reasoning = Column(Text, nullable=False)
-    key_factors = Column(JSONB)
+    key_factors = Column(JSON)
 
     # 高風險型經紀人新增欄位
     entry_price_min = Column(Numeric(10, 2))  # 建議進場價（最低）
     entry_price_max = Column(Numeric(10, 2))  # 建議進場價（最高）
-    take_profit_targets = Column(JSONB)  # 多個停利目標 [{price: 100, probability: 0.7}, ...]
+    take_profit_targets = Column(JSON)  # 多個停利目標 [{price: 100, probability: 0.7}, ...]
     risk_level = Column(String(20))  # HIGH, MEDIUM, LOW
     time_horizon = Column(String(50))  # 操作週期（短線/中線/長線）
     predicted_change_percent = Column(Numeric(5, 2))  # 預期漲跌幅 %

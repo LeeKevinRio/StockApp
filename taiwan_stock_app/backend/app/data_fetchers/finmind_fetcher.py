@@ -58,6 +58,42 @@ class FinMindFetcher:
             params["end_date"] = end_date
         return self._request("TaiwanStockMonthRevenue", params)
 
+    def get_financial_statements(
+        self, stock_id: str, start_date: str, end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """取得財務報表（季報）- 含 EPS、毛利率、營業利益率等"""
+        params = {"data_id": stock_id, "start_date": start_date}
+        if end_date:
+            params["end_date"] = end_date
+        try:
+            return self._request("TaiwanStockFinancialStatements", params)
+        except:
+            return pd.DataFrame()
+
+    def get_per_pbr(
+        self, stock_id: str, start_date: str, end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """取得本益比、股價淨值比"""
+        params = {"data_id": stock_id, "start_date": start_date}
+        if end_date:
+            params["end_date"] = end_date
+        try:
+            return self._request("TaiwanStockPER", params)
+        except:
+            return pd.DataFrame()
+
+    def get_dividend(
+        self, stock_id: str, start_date: str, end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """取得股利資料"""
+        params = {"data_id": stock_id, "start_date": start_date}
+        if end_date:
+            params["end_date"] = end_date
+        try:
+            return self._request("TaiwanStockDividend", params)
+        except:
+            return pd.DataFrame()
+
     def get_stock_list(self) -> pd.DataFrame:
         """取得所有上市櫃股票清單"""
         return self._request("TaiwanStockInfo", {})

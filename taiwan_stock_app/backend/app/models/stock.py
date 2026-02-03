@@ -13,7 +13,9 @@ class Stock(Base):
     name = Column(String(100), nullable=False)
     english_name = Column(String(200))
     industry = Column(String(100))
-    market = Column(String(10), nullable=False)  # 'TWSE' or 'TPEx'
+    market = Column(String(10), nullable=False)  # 'TWSE', 'TPEx', 'NYSE', 'NASDAQ', etc.
+    market_region = Column(String(5), nullable=False, default='TW', index=True)  # 'TW' or 'US'
+    sector = Column(String(100))  # Sector for US stocks
     listed_date = Column(Date)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

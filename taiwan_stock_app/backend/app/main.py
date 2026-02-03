@@ -6,7 +6,20 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import create_tables
-from app.routers import auth_router, stocks_router, watchlist_router, ai_router
+from app.routers import (
+    auth_router,
+    stocks_router,
+    watchlist_router,
+    ai_router,
+    alerts_router,
+    news_router,
+    social_router,
+    trading_router,
+    portfolio_router,
+    fundamental_router,
+    screener_router,
+    admin_router,
+)
 
 # Create FastAPI app
 app = FastAPI(
@@ -29,6 +42,14 @@ app.include_router(auth_router)
 app.include_router(stocks_router)
 app.include_router(watchlist_router)
 app.include_router(ai_router)
+app.include_router(alerts_router)
+app.include_router(news_router)
+app.include_router(social_router)
+app.include_router(trading_router)
+app.include_router(portfolio_router)
+app.include_router(fundamental_router)
+app.include_router(screener_router)
+app.include_router(admin_router)
 
 
 @app.on_event("startup")

@@ -1,30 +1,49 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Basic Flutter widget test for Taiwan Stock App
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:taiwan_stock_app/main.dart';
+import 'package:taiwan_stock_app/models/stock.dart';
+import 'package:taiwan_stock_app/models/stock_history.dart';
+import 'package:taiwan_stock_app/models/watchlist_item.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('App smoke tests', () {
+    test('Stock model can be created', () {
+      final stock = Stock(
+        stockId: '2330',
+        name: '台積電',
+        market: 'TSE',
+        industry: '半導體業',
+      );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      expect(stock.stockId, '2330');
+      expect(stock.name, '台積電');
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    test('StockHistory model can be created', () {
+      final history = StockHistory(
+        date: DateTime(2024, 1, 15),
+        open: 100.0,
+        high: 105.0,
+        low: 98.0,
+        close: 103.0,
+        volume: 10000,
+      );
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+      expect(history.open, 100.0);
+      expect(history.close, 103.0);
+      expect(history.isRising, true);
+    });
+
+    test('WatchlistItem model can be created', () {
+      final item = WatchlistItem(
+        stockId: '2330',
+        name: '台積電',
+        currentPrice: 580.0,
+        changePercent: 2.5,
+      );
+
+      expect(item.stockId, '2330');
+      expect(item.isUp, true);
+    });
   });
 }

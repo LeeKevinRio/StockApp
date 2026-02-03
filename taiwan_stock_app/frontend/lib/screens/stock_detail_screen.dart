@@ -4,13 +4,22 @@ import '../services/api_service.dart';
 import '../models/stock.dart';
 import '../models/stock_history.dart';
 import '../widgets/candlestick_chart.dart';
+import '../widgets/indicator_charts/indicators_tab_view.dart';
+import '../widgets/news_card.dart';
+import '../widgets/sentiment_view.dart';
+import '../widgets/fundamental_card.dart';
+import '../widgets/dividend_history.dart';
+import '../widgets/institutional_chart.dart';
+import '../widgets/margin_chart.dart';
 
 class StockDetailScreen extends StatefulWidget {
   final String stockId;
+  final String market;  // 'TW' or 'US'
 
   const StockDetailScreen({
     super.key,
     required this.stockId,
+    this.market = 'TW',
   });
 
   @override
@@ -24,10 +33,14 @@ class _StockDetailScreenState extends State<StockDetailScreen>
   bool _isLoading = true;
   String? _error;
 
+  bool get isUSStock => widget.market.toUpperCase() == 'US';
+  String get currencySymbol => isUSStock ? '\$' : 'NT\$';
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    // 8 tabs for TW stocks (with 籌碼), 7 tabs for US stocks (without 籌碼)
+    _tabController = TabController(length: isUSStock ? 7 : 8, vsync: this);
     _loadStockData();
   }
 
@@ -45,20 +58,21 @@ class _StockDetailScreenState extends State<StockDetailScreen>
       });
 
       final apiService = Provider.of<ApiService>(context, listen: false);
-      // 暫時使用搜尋API獲取股票資訊
-      final response = await apiService.searchStocks(widget.stockId);
+      // Use stock detail API with market parameter
+      final response = await apiService.getStockDetail(widget.stockId, market: widget.market);
 
-      if (response.isNotEmpty) {
-        setState(() {
-          _stock = response.first;
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _error = '找不到股票資訊';
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _stock = Stock(
+          stockId: response['stock_id'] ?? response['symbol'] ?? widget.stockId,
+          name: response['name'] ?? widget.stockId,
+          market: response['market'] ?? response['exchange'],
+          industry: response['industry'],
+          marketRegion: response['market_region'] ?? widget.market,
+          sector: response['sector'],
+          exchange: response['exchange'],
+        );
+        _isLoading = false;
+      });
     } catch (e) {
       setState(() {
         _error = '加載失敗：$e';
@@ -75,13 +89,15 @@ class _StockDetailScreenState extends State<StockDetailScreen>
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
-          tabs: const [
-            Tab(text: '概覽'),
-            Tab(text: 'K線'),
-            Tab(text: '技術分析'),
-            Tab(text: 'AI建議'),
-            Tab(text: '新聞'),
-            Tab(text: '社群'),
+          tabs: [
+            const Tab(text: '概覽'),
+            const Tab(text: 'K線'),
+            const Tab(text: '技術分析'),
+            const Tab(text: '基本面'),
+            if (!isUSStock) const Tab(text: '籌碼'),
+            const Tab(text: 'AI建議'),
+            const Tab(text: '新聞'),
+            const Tab(text: '社群'),
           ],
         ),
       ),
@@ -110,6 +126,8 @@ class _StockDetailScreenState extends State<StockDetailScreen>
                     _buildOverviewTab(),
                     _buildKLineTab(),
                     _buildTechnicalAnalysisTab(),
+                    _buildFundamentalTab(),
+                    if (!isUSStock) _buildChipAnalysisTab(),
                     _buildAISuggestionTab(),
                     _buildNewsTab(),
                     _buildSocialTab(),
@@ -131,7 +149,7 @@ class _StockDetailScreenState extends State<StockDetailScreen>
             [
               _buildInfoRow('股票代碼', _stock!.stockId),
               _buildInfoRow('公司名稱', _stock!.name),
-              _buildInfoRow('市場類別', _stock!.market),
+              _buildInfoRow('市場類別', _stock!.market ?? '-'),
               if (_stock!.industry != null)
                 _buildInfoRow('產業類別', _stock!.industry!),
             ],
@@ -248,215 +266,540 @@ class _StockDetailScreenState extends State<StockDetailScreen>
   }
 
   Widget _buildKLineTab() {
-    return FutureBuilder<List<StockHistory>>(
-      future: Provider.of<ApiService>(context, listen: false)
-          .getStockHistory(widget.stockId, days: 60),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    return _KLineTabContent(stockId: widget.stockId, market: widget.market);
+  }
 
-        if (snapshot.hasError) {
-          // 改進錯誤訊息顯示
-          String errorMsg = '載入K線數據失敗';
-          String errorDetail = '';
+  Widget _buildTechnicalAnalysisTab() {
+    return IndicatorsTabView(stockId: widget.stockId, market: widget.market);
+  }
 
-          if (snapshot.error is ApiException) {
-            final apiError = snapshot.error as ApiException;
-            errorMsg = '載入失敗 (${apiError.statusCode})';
-            errorDetail = apiError.message;
-          } else {
-            errorDetail = snapshot.error.toString();
-          }
+  Widget _buildAISuggestionTab() {
+    return _StockAISuggestionView(stockId: widget.stockId, market: widget.market);
+  }
 
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text(
-                    errorMsg,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    errorDetail,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    '可能原因：',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '• 網路連線不穩定\n'
-                    '• 後端服務暫時無法使用\n'
-                    '• 股票代碼不存在或無歷史數據',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () => setState(() {}),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('重新載入'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
+  Widget _buildNewsTab() {
+    return NewsListView(stockId: widget.stockId, market: widget.market);
+  }
 
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.show_chart, size: 64, color: Colors.grey),
-                SizedBox(height: 16),
-                Text('暫無K線數據'),
-              ],
-            ),
-          );
-        }
+  Widget _buildSocialTab() {
+    return SentimentView(stockId: widget.stockId, market: widget.market);
+  }
 
-        return Column(
-          children: [
-            // 圖例說明
-            Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.grey.shade100,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildLegendItem('MA5', Colors.blue),
-                  const SizedBox(width: 16),
-                  _buildLegendItem('MA10', Colors.orange),
-                  const SizedBox(width: 16),
-                  _buildLegendItem('MA20', Colors.purple),
-                ],
-              ),
-            ),
-            // K線圖
-            Expanded(
-              child: CandlestickChart(
-                data: snapshot.data!,
-                showVolume: true,
-              ),
-            ),
-          ],
-        );
-      },
+  Widget _buildFundamentalTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          FundamentalCard(stockId: widget.stockId, market: widget.market),
+          const SizedBox(height: 16),
+          DividendHistory(stockId: widget.stockId, market: widget.market),
+        ],
+      ),
     );
   }
 
-  Widget _buildLegendItem(String label, Color color) {
-    return Row(
+  Widget _buildChipAnalysisTab() {
+    // 籌碼分析 - 僅限台股
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          InstitutionalChart(stockId: widget.stockId),
+          const SizedBox(height: 16),
+          MarginChart(stockId: widget.stockId),
+        ],
+      ),
+    );
+  }
+}
+
+/// Stateful widget for K-line tab with period selection
+class _KLineTabContent extends StatefulWidget {
+  final String stockId;
+  final String market;
+
+  const _KLineTabContent({required this.stockId, this.market = 'TW'});
+
+  @override
+  State<_KLineTabContent> createState() => _KLineTabContentState();
+}
+
+class _KLineTabContentState extends State<_KLineTabContent> {
+  String _selectedPeriod = 'day';
+  int _days = 60;
+  Future<List<StockHistory>>? _dataFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  void _loadData() {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    _dataFuture = apiService.getStockHistory(
+      widget.stockId,
+      days: _days,
+      period: _selectedPeriod,
+      market: widget.market,
+    );
+  }
+
+  void _onPeriodChanged(String period) {
+    setState(() {
+      _selectedPeriod = period;
+      // Adjust days based on period
+      switch (period) {
+        case 'day':
+          _days = 60;
+          break;
+        case 'week':
+          _days = 52; // ~1 year
+          break;
+        case 'month':
+          _days = 24; // 2 years
+          break;
+      }
+      _loadData();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
       children: [
-        Container(
-          width: 24,
-          height: 2,
-          color: color,
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        // Period selector
+        _buildPeriodSelector(context),
+        // Chart content
+        Expanded(
+          child: FutureBuilder<List<StockHistory>>(
+            future: _dataFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (snapshot.hasError) {
+                String errorMsg = '載入K線數據失敗';
+                String errorDetail = '';
+
+                if (snapshot.error is ApiException) {
+                  final apiError = snapshot.error as ApiException;
+                  errorMsg = '載入失敗 (${apiError.statusCode})';
+                  errorDetail = apiError.message;
+                } else {
+                  errorDetail = snapshot.error.toString();
+                }
+
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          errorMsg,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          errorDetail,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Theme.of(context).textTheme.bodySmall?.color,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: () => setState(() => _loadData()),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('重新載入'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.show_chart,
+                        size: 64,
+                        color: Theme.of(context).disabledColor,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('暫無K線數據'),
+                    ],
+                  ),
+                );
+              }
+
+              return CandlestickChart(
+                data: snapshot.data!,
+                showVolume: true,
+                enableZoom: true,
+                enableCrosshair: true,
+              );
+            },
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildTechnicalAnalysisTab() {
-    return const Center(
-      child: Column(
+  Widget _buildPeriodSelector(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).dividerColor,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.analytics, size: 64, color: Colors.grey),
-          SizedBox(height: 16),
-          Text('技術分析功能開發中...'),
-          SizedBox(height: 8),
-          Text(
-            '即將提供 MACD、布林通道、RSI 等技術指標',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
+          _buildPeriodButton(context, 'day', '日K'),
+          const SizedBox(width: 8),
+          _buildPeriodButton(context, 'week', '週K'),
+          const SizedBox(width: 8),
+          _buildPeriodButton(context, 'month', '月K'),
         ],
       ),
     );
   }
 
-  Widget _buildAISuggestionTab() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.lightbulb_outline, size: 64, color: Colors.grey),
-          SizedBox(height: 16),
-          Text('個股AI建議功能開發中...'),
-          SizedBox(height: 8),
-          Text(
-            '即將提供高風險型經紀人的專業分析',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
+  Widget _buildPeriodButton(BuildContext context, String period, String label) {
+    final isSelected = _selectedPeriod == period;
+    return GestureDetector(
+      onTap: () => _onPeriodChanged(period),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Theme.of(context).primaryColor
+              : Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).primaryColor
+                : Theme.of(context).dividerColor,
           ),
-        ],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected
+                ? Colors.white
+                : Theme.of(context).textTheme.bodyMedium?.color,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Widget for displaying AI suggestion for a specific stock
+class _StockAISuggestionView extends StatefulWidget {
+  final String stockId;
+  final String market;
+
+  const _StockAISuggestionView({required this.stockId, this.market = 'TW'});
+
+  @override
+  State<_StockAISuggestionView> createState() => _StockAISuggestionViewState();
+}
+
+class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
+  Map<String, dynamic>? _suggestion;
+  bool _isLoading = true;
+  String? _error;
+
+  bool get isUSStock => widget.market.toUpperCase() == 'US';
+  String get currencySymbol => isUSStock ? '\$' : 'NT\$';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSuggestion();
+  }
+
+  Future<void> _loadSuggestion() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final apiService = Provider.of<ApiService>(context, listen: false);
+      final suggestion = await apiService.getStockSuggestion(widget.stockId, market: widget.market);
+
+      setState(() {
+        _suggestion = {
+          'stock_id': suggestion.stockId,
+          'name': suggestion.name,
+          'suggestion': suggestion.suggestion,
+          'confidence': suggestion.confidence,
+          'reasoning': suggestion.reasoning,
+          'target_price': suggestion.targetPrice,
+          'stop_loss_price': suggestion.stopLossPrice,
+          'key_factors': suggestion.keyFactors,
+          'report_date': suggestion.reportDate,
+        };
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('AI 正在分析這支股票...'),
+          ],
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text('無法獲取AI建議', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _loadSuggestion,
+                icon: const Icon(Icons.refresh),
+                label: const Text('重試'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_suggestion == null) {
+      return const Center(child: Text('暫無AI建議'));
+    }
+
+    final suggestion = _suggestion!['suggestion'] as String? ?? 'HOLD';
+    final confidence = (_suggestion!['confidence'] as num? ?? 0).toDouble();
+    final reasoning = _suggestion!['reasoning'] as String? ?? '';
+    final targetPrice = _suggestion!['target_price'] as num?;
+    final stopLossPrice = _suggestion!['stop_loss_price'] as num?;
+
+    final suggestionColor = _getSuggestionColor(suggestion);
+    final suggestionIcon = _getSuggestionIcon(suggestion);
+
+    return RefreshIndicator(
+      onRefresh: _loadSuggestion,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // AI 建議卡片
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    Icon(suggestionIcon, size: 64, color: suggestionColor),
+                    const SizedBox(height: 12),
+                    Text(
+                      _getSuggestionText(suggestion),
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: suggestionColor,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Text('信心度：'),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: confidence,
+                              backgroundColor: Colors.grey[300],
+                              valueColor: AlwaysStoppedAnimation<Color>(suggestionColor),
+                              minHeight: 8,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${(confidence * 100).toStringAsFixed(0)}%',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: suggestionColor),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // 價格目標
+            if (targetPrice != null || stopLossPrice != null)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      if (targetPrice != null)
+                        Expanded(
+                          child: Column(
+                            children: [
+                              const Text('目標價', style: TextStyle(color: Colors.grey)),
+                              const SizedBox(height: 4),
+                              Text(
+                                '$currencySymbol${targetPrice.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (stopLossPrice != null)
+                        Expanded(
+                          child: Column(
+                            children: [
+                              const Text('停損價', style: TextStyle(color: Colors.grey)),
+                              const SizedBox(height: 4),
+                              Text(
+                                '$currencySymbol${stopLossPrice.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 16),
+            // 分析理由
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'AI 分析理由',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      reasoning,
+                      style: TextStyle(color: Colors.grey[700], height: 1.6),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // 風險警告
+            Card(
+              color: Colors.orange.withAlpha(26),
+              child: const Padding(
+                padding: EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber, color: Colors.orange),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '以上為 AI 分析結果，僅供參考，不構成投資建議。投資有風險，請自行評估。',
+                        style: TextStyle(fontSize: 12, color: Colors.orange),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildNewsTab() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.newspaper, size: 64, color: Colors.grey),
-          SizedBox(height: 16),
-          Text('新聞資訊功能開發中...'),
-          SizedBox(height: 8),
-          Text(
-            '即將整合全球財經新聞及情感分析',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
-        ],
-      ),
-    );
+  Color _getSuggestionColor(String suggestion) {
+    switch (suggestion.toUpperCase()) {
+      case 'BUY':
+        return Colors.red;
+      case 'SELL':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
   }
 
-  Widget _buildSocialTab() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.forum, size: 64, color: Colors.grey),
-          SizedBox(height: 16),
-          Text('社群討論功能開發中...'),
-          SizedBox(height: 8),
-          Text(
-            '即將整合 PTT、Dcard 等社群平台',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
-        ],
-      ),
-    );
+  IconData _getSuggestionIcon(String suggestion) {
+    switch (suggestion.toUpperCase()) {
+      case 'BUY':
+        return Icons.trending_up;
+      case 'SELL':
+        return Icons.trending_down;
+      default:
+        return Icons.trending_flat;
+    }
+  }
+
+  String _getSuggestionText(String suggestion) {
+    switch (suggestion.toUpperCase()) {
+      case 'BUY':
+        return '建議買進';
+      case 'SELL':
+        return '建議賣出';
+      default:
+        return '建議持有';
+    }
   }
 }

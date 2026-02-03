@@ -24,7 +24,8 @@ class AISuggestion(BaseModel):
     stock_id: str
     name: str
     suggestion: str  # 'BUY', 'SELL', 'HOLD'
-    confidence: float  # 0.0 ~ 1.0
+    confidence: float  # 0.0 ~ 1.0 (對建議的信心度)
+    bullish_probability: Optional[float] = None  # 0.0 ~ 1.0 (看漲機率，更直覺的指標)
     target_price: Optional[Decimal] = None
     stop_loss_price: Optional[Decimal] = None
     reasoning: str

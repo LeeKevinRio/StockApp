@@ -162,3 +162,15 @@ class TWSEFetcher:
                 }
             )
         return results
+
+
+# 建立全域實例
+twse_fetcher = TWSEFetcher()
+
+
+def get_stock_realtime_price(stock_id: str) -> Dict:
+    """取得單一股票即時報價的便捷函數"""
+    try:
+        return twse_fetcher.get_realtime_quote(stock_id)
+    except Exception:
+        return None
