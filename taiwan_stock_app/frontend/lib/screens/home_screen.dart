@@ -3,7 +3,10 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/market_provider.dart';
 import '../providers/watchlist_provider.dart';
+import '../providers/notification_provider.dart';
 import '../widgets/market_switcher.dart';
+import '../widgets/notification/notification_badge.dart';
+import 'dashboard_screen.dart';
 import 'watchlist_screen.dart';
 import 'ai_chat_screen.dart';
 import 'ai_suggestions_screen.dart';
@@ -23,12 +26,25 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
-  final List<Widget> _screens = [
-    const WatchlistScreen(),
-    const AISuggestionsScreen(),
-    const AIChatScreen(),
-    const AlertsScreen(),
-  ];
+  late final List<Widget> _screens;
+
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      DashboardScreen(onTabChange: () => _switchToTab(1)),
+      const WatchlistScreen(),
+      const AISuggestionsScreen(),
+      const AIChatScreen(),
+      const AlertsScreen(),
+    ];
+  }
+
+  void _switchToTab(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
 
   void _onMarketChanged() {
     // Refresh watchlist when market changes
@@ -46,6 +62,11 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
         actions: [
+          NotificationIconButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/notifications');
+            },
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: CompactMarketSwitcher(
@@ -69,6 +90,10 @@ class _HomeScreenState extends State<HomeScreen> {
               });
             },
             items: [
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.dashboard),
+                label: isUS ? 'Home' : '首頁',
+              ),
               BottomNavigationBarItem(
                 icon: const Icon(Icons.star),
                 label: isUS ? 'Watchlist' : '自選股',
@@ -108,12 +133,19 @@ class _HomeScreenState extends State<HomeScreen> {
                           CircleAvatar(
                             radius: 24,
                             backgroundColor: Colors.white24,
-                            backgroundImage: user?.avatarUrl != null
-                                ? NetworkImage(user!.avatarUrl!)
-                                : null,
-                            child: user?.avatarUrl == null
-                                ? const Icon(Icons.person, color: Colors.white)
-                                : null,
+                            child: user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty
+                                ? ClipOval(
+                                    child: Image.network(
+                                      user.avatarUrl!,
+                                      width: 48,
+                                      height: 48,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return const Icon(Icons.person, color: Colors.white);
+                                      },
+                                    ),
+                                  )
+                                : const Icon(Icons.person, color: Colors.white),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -229,6 +261,14 @@ class _HomeScreenState extends State<HomeScreen> {
                             builder: (context) => const ScreenerScreen(),
                           ),
                         );
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.analytics),
+                      title: Text(isUS ? 'AI Prediction Stats' : 'AI 預測準確度'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/prediction-stats');
                       },
                     ),
                     const Divider(),

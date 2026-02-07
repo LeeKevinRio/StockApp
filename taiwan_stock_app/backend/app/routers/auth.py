@@ -11,7 +11,7 @@ from fastapi.security.http import HTTPAuthorizationCredentials
 
 from app.database import get_db
 from app.models import User
-from app.schemas import UserCreate, UserLogin, Token, UserResponse, GoogleAuthRequest
+from app.schemas import UserCreate, UserLogin, Token, UserResponse, GoogleAuthRequest, GoogleAccessTokenRequest
 from app.config import settings
 from app.services.oauth_service import oauth_service
 
@@ -163,6 +163,62 @@ def google_auth(request: GoogleAuthRequest, db: Session = Depends(get_db)):
                 google_id=google_user['google_id'],
                 display_name=google_user.get('name', ''),
                 avatar_url=google_user.get('picture', ''),
+                auth_provider='google',
+            )
+            db.add(user)
+
+        db.commit()
+        db.refresh(user)
+
+    # Create access token
+    access_token = create_access_token(user.id)
+
+    return Token(
+        access_token=access_token,
+        user=UserResponse(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            created_at=user.created_at,
+            auth_provider=user.auth_provider,
+            avatar_url=user.avatar_url,
+            subscription_tier=user.subscription_tier,
+            is_admin=user.is_admin,
+        ),
+    )
+
+
+@router.post("/google-access-token", response_model=Token)
+def google_auth_with_access_token(request: GoogleAccessTokenRequest, db: Session = Depends(get_db)):
+    """Google OAuth 登入 (使用 Access Token) - 用於 Web 平台"""
+    import hashlib
+
+    # 使用 email 作為唯一識別 (因為 Web 無法取得 google_id)
+    # 產生一個基於 email 的偽 google_id
+    google_id = hashlib.sha256(f"google_{request.email}".encode()).hexdigest()[:32]
+
+    # Check if user exists by google_id
+    user = db.query(User).filter(User.google_id == google_id).first()
+
+    if not user:
+        # Check if user exists by email
+        user = db.query(User).filter(User.email == request.email).first()
+
+        if user:
+            # Link Google account to existing user
+            user.google_id = google_id
+            user.auth_provider = 'google'
+            if not user.avatar_url and request.photo_url:
+                user.avatar_url = request.photo_url
+            if not user.display_name and request.display_name:
+                user.display_name = request.display_name
+        else:
+            # Create new user
+            user = User(
+                email=request.email,
+                google_id=google_id,
+                display_name=request.display_name or '',
+                avatar_url=request.photo_url or '',
                 auth_provider='google',
             )
             db.add(user)

@@ -30,6 +30,7 @@ class _MarginChartState extends State<MarginChart> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -38,11 +39,13 @@ class _MarginChartState extends State<MarginChart> {
     try {
       final apiService = Provider.of<ApiService>(context, listen: false);
       final data = await apiService.getMarginTrading(widget.stockId, days: widget.days);
+      if (!mounted) return;
       setState(() {
         _data = data;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;

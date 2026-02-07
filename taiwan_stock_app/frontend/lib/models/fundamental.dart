@@ -21,6 +21,9 @@ class FundamentalData {
   // Revenue metrics - 營收指標
   final double? revenue;          // 營收
   final double? revenueGrowth;    // 營收成長率 (%)
+  final double? revenueMom;       // 營收月增率 (%)
+  final double? revenueYoy;       // 營收年增率 (%)
+  final double? latestMonthRevenue; // 最新月營收
   final double? grossMargin;      // 毛利率 (%)
   final double? operatingMargin;  // 營業利益率 (%)
   final double? netMargin;        // 淨利率 (%)
@@ -49,6 +52,9 @@ class FundamentalData {
     this.roa,
     this.revenue,
     this.revenueGrowth,
+    this.revenueMom,
+    this.revenueYoy,
+    this.latestMonthRevenue,
     this.grossMargin,
     this.operatingMargin,
     this.netMargin,
@@ -75,6 +81,9 @@ class FundamentalData {
       roa: (json['roa'] as num?)?.toDouble(),
       revenue: (json['revenue'] as num?)?.toDouble(),
       revenueGrowth: (json['revenue_growth'] as num?)?.toDouble(),
+      revenueMom: (json['revenue_mom'] as num?)?.toDouble(),
+      revenueYoy: (json['revenue_yoy'] as num?)?.toDouble(),
+      latestMonthRevenue: (json['latest_month_revenue'] as num?)?.toDouble(),
       grossMargin: (json['gross_margin'] as num?)?.toDouble(),
       operatingMargin: (json['operating_margin'] as num?)?.toDouble(),
       netMargin: (json['net_margin'] as num?)?.toDouble(),

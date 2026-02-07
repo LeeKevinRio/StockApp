@@ -1,38 +1,62 @@
 """
 Pattern Recognition Schemas
-專業級高風險交易分析平台 - 形態識別數據模型
+形態識別 API 響應模型
 """
-
-from typing import Dict, List, Optional
 from pydantic import BaseModel
+from typing import List, Dict, Optional
+from enum import Enum
 
 
-class PatternDetail(BaseModel):
-    """單一形態詳情"""
-    type: str  # 形態類型
-    signal: str  # bullish, bearish, neutral
-    confidence: float  # 信心度 0-100
-    description: str  # 形態描述
-    target_price: Optional[float]  # 目標價
-    stop_loss: Optional[float]  # 建議停損
-    is_confirmed: bool  # 是否已確認突破
-    key_prices: Dict[str, float]  # 關鍵價位
+class PatternType(str, Enum):
+    """形態類型"""
+    HEAD_SHOULDERS_TOP = "head_shoulders_top"
+    HEAD_SHOULDERS_BOTTOM = "head_shoulders_bottom"
+    DOUBLE_TOP = "double_top"
+    DOUBLE_BOTTOM = "double_bottom"
+    TRIPLE_TOP = "triple_top"
+    TRIPLE_BOTTOM = "triple_bottom"
+    ASCENDING_TRIANGLE = "ascending_triangle"
+    DESCENDING_TRIANGLE = "descending_triangle"
+    SYMMETRIC_TRIANGLE = "symmetric_triangle"
+    RISING_WEDGE = "rising_wedge"
+    FALLING_WEDGE = "falling_wedge"
+    BULL_FLAG = "bull_flag"
+    BEAR_FLAG = "bear_flag"
+    RECTANGLE = "rectangle"
+    BREAKOUT_UP = "breakout_up"
+    BREAKOUT_DOWN = "breakout_down"
 
 
-class PatternAnalysis(BaseModel):
-    """形態分析結果"""
-    stock_id: str
-    name: str
-    current_price: float
-    has_patterns: bool
-    dominant_signal: str  # bullish, bearish, neutral
-    patterns_count: int
-    bullish_count: int
-    bearish_count: int
-    bullish_score: float
-    bearish_score: float
-    summary: str
-    top_patterns: List[PatternDetail]
+class PatternSignal(str, Enum):
+    """形態信號方向"""
+    BULLISH = "bullish"
+    BEARISH = "bearish"
+    NEUTRAL = "neutral"
+
+
+class PatternItem(BaseModel):
+    """單個形態項目"""
+    pattern_type: PatternType
+    signal: PatternSignal
+    confidence: float
+    start_index: int
+    end_index: int
+    key_prices: Dict[str, float]
+    target_price: Optional[float] = None
+    stop_loss: Optional[float] = None
+    description: str
+    is_confirmed: bool
 
     class Config:
-        from_attributes = True
+        use_enum_values = True
+
+
+class PatternResponse(BaseModel):
+    """形態識別響應"""
+    stock_id: str
+    has_patterns: bool
+    dominant_signal: Optional[PatternSignal] = None
+    patterns: List[PatternItem]
+
+    class Config:
+        use_enum_values = True

@@ -57,6 +57,31 @@ class AuthService {
     return user;
   }
 
+  Future<User> googleLoginWithAccessToken({
+    required String accessToken,
+    required String email,
+    String? displayName,
+    String? photoUrl,
+  }) async {
+    final response = await _apiService.googleAuthWithAccessToken(
+      accessToken: accessToken,
+      email: email,
+      displayName: displayName,
+      photoUrl: photoUrl,
+    );
+    final token = response['access_token'];
+    final user = User.fromJson(response['user']);
+
+    // Save token and user data
+    await _storage.write(key: _tokenKey, value: token);
+    await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
+
+    // Set token in API service
+    _apiService.setAuthToken(token);
+
+    return user;
+  }
+
   Future<String?> getToken() async {
     return await _storage.read(key: _tokenKey);
   }

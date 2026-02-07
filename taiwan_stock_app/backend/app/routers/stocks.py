@@ -12,14 +12,17 @@ from app.schemas import (
     StockDetail, StockPrice, StockHistory,
     RSIResponse, MACDResponse, BollingerResponse, KDResponse,
     AllIndicatorsResponse, IndicatorDataPoint, MACDDataPoint,
-    BollingerDataPoint, KDDataPoint
+    BollingerDataPoint, KDDataPoint,
+    PatternResponse, PatternItem, PatternType, PatternSignal,
 )
 from app.services import StockDataService
 from app.services.technical_indicators import TechnicalIndicators
+from app.services.pattern_recognition import PatternRecognitionService
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/api/stocks", tags=["stocks"])
 stock_service = StockDataService()
+pattern_service = PatternRecognitionService()
 
 
 @router.get("/search")
@@ -406,4 +409,72 @@ def get_all_indicators(
         macd=macd_list,
         bollinger=bb_list,
         kd=kd_list
+    )
+
+
+@router.get("/{stock_id}/patterns", response_model=PatternResponse)
+def get_stock_patterns(
+    stock_id: str,
+    lookback: int = Query(60, description="回顧天數"),
+    market: str = Query("TW", description="Market region: TW or US"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    取得股票形態識別結果
+
+    識別常見的技術分析形態包括：
+    - 頭肩頂/頭肩底 (Head and Shoulders)
+    - 雙頂/雙底 (Double Top/Bottom)
+    - 三角形整理 (Triangles)
+    - 楔形 (Wedges)
+    - 旗形 (Flags)
+    - 突破信號 (Breakouts)
+
+    Args:
+        stock_id: 股票代碼
+        lookback: 回顧天數（預設60天）
+        market: 市場 - "TW"(台股) 或 "US"(美股)
+    """
+    # 取得歷史數據
+    df = _get_history_dataframe(stock_id, db, lookback + 30, market=market)
+    if df.empty:
+        raise HTTPException(status_code=404, detail="No history data")
+
+    # 執行形態識別
+    detected_patterns = pattern_service.detect_all_patterns(df, lookback=lookback)
+
+    # 轉換為響應格式
+    patterns = []
+    for p in detected_patterns:
+        patterns.append(PatternItem(
+            pattern_type=p.pattern_type.value,
+            signal=p.signal.value,
+            confidence=p.confidence,
+            start_index=p.start_index,
+            end_index=p.end_index,
+            key_prices=p.key_prices,
+            target_price=p.target_price,
+            stop_loss=p.stop_loss,
+            description=p.description,
+            is_confirmed=p.is_confirmed,
+        ))
+
+    # 計算主導信號
+    dominant_signal = None
+    if patterns:
+        bullish_score = sum(p.confidence for p in patterns if p.signal == "bullish")
+        bearish_score = sum(p.confidence for p in patterns if p.signal == "bearish")
+        if bullish_score > bearish_score * 1.2:
+            dominant_signal = "bullish"
+        elif bearish_score > bullish_score * 1.2:
+            dominant_signal = "bearish"
+        else:
+            dominant_signal = "neutral"
+
+    return PatternResponse(
+        stock_id=stock_id,
+        has_patterns=len(patterns) > 0,
+        dominant_signal=dominant_signal,
+        patterns=patterns,
     )

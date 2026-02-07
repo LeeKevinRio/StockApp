@@ -20,6 +20,53 @@ class TakeProfitTarget {
   }
 }
 
+/// 隔天漲跌預測
+class NextDayPrediction {
+  final String direction; // 'UP' or 'DOWN'
+  final double probability; // 預測準確度 0.55-0.95
+  final double predictedChangePercent; // 預測漲跌幅 %
+  final double? priceRangeLow; // 預測最低價
+  final double? priceRangeHigh; // 預測最高價
+  final String reasoning; // 預測依據
+
+  NextDayPrediction({
+    required this.direction,
+    required this.probability,
+    required this.predictedChangePercent,
+    this.priceRangeLow,
+    this.priceRangeHigh,
+    required this.reasoning,
+  });
+
+  factory NextDayPrediction.fromJson(Map<String, dynamic> json) {
+    return NextDayPrediction(
+      direction: json['direction'] ?? 'UP',
+      probability: (json['probability'] as num?)?.toDouble() ?? 0.5,
+      predictedChangePercent: (json['predicted_change_percent'] as num?)?.toDouble() ?? 0.0,
+      priceRangeLow: json['price_range_low'] != null
+          ? (json['price_range_low'] as num).toDouble()
+          : null,
+      priceRangeHigh: json['price_range_high'] != null
+          ? (json['price_range_high'] as num).toDouble()
+          : null,
+      reasoning: json['reasoning'] ?? '',
+    );
+  }
+
+  bool get isUp => direction == 'UP';
+
+  Color get directionColor => isUp ? Colors.red : Colors.green;
+
+  String get directionText => isUp ? '預測上漲' : '預測下跌';
+
+  String get probabilityText => '${(probability * 100).toStringAsFixed(0)}%';
+
+  String get changeText {
+    final sign = predictedChangePercent >= 0 ? '+' : '';
+    return '$sign${predictedChangePercent.toStringAsFixed(2)}%';
+  }
+}
+
 class AISuggestion {
   final String stockId;
   final String name;
@@ -40,6 +87,9 @@ class AISuggestion {
   final String? timeHorizon;
   final double? predictedChangePercent;
 
+  // 隔天漲跌預測
+  final NextDayPrediction? nextDayPrediction;
+
   AISuggestion({
     required this.stockId,
     required this.name,
@@ -57,6 +107,7 @@ class AISuggestion {
     this.riskLevel,
     this.timeHorizon,
     this.predictedChangePercent,
+    this.nextDayPrediction,
   });
 
   factory AISuggestion.fromJson(Map<String, dynamic> json) {
@@ -94,6 +145,9 @@ class AISuggestion {
       timeHorizon: json['time_horizon'],
       predictedChangePercent: json['predicted_change_percent'] != null
           ? (json['predicted_change_percent'] as num).toDouble()
+          : null,
+      nextDayPrediction: json['next_day_prediction'] != null
+          ? NextDayPrediction.fromJson(json['next_day_prediction'])
           : null,
     );
   }

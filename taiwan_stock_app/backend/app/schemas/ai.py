@@ -20,6 +20,16 @@ class TakeProfitTarget(BaseModel):
     description: str  # 保守/中性/積極
 
 
+class NextDayPrediction(BaseModel):
+    """隔天漲跌預測"""
+    direction: str  # 'UP' or 'DOWN'
+    probability: float  # 0.55 ~ 0.95
+    predicted_change_percent: float  # 預測漲跌幅 %
+    price_range_low: Optional[float] = None  # 預測最低價
+    price_range_high: Optional[float] = None  # 預測最高價
+    reasoning: str  # 預測依據說明
+
+
 class AISuggestion(BaseModel):
     stock_id: str
     name: str
@@ -39,6 +49,9 @@ class AISuggestion(BaseModel):
     risk_level: Optional[str] = None  # HIGH, MEDIUM, LOW
     time_horizon: Optional[str] = None  # 短線/中線/長線
     predicted_change_percent: Optional[Decimal] = None
+
+    # 隔天漲跌預測
+    next_day_prediction: Optional[dict] = None  # NextDayPrediction 格式
 
     class Config:
         from_attributes = True

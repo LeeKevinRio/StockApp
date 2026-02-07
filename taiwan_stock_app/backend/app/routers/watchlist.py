@@ -23,7 +23,7 @@ def get_watchlist(
     current_user: User = Depends(get_current_user),
 ):
     """
-    取得自選股列表
+    取得自選股列表（優化版本：批量獲取報價）
 
     Args:
         market: 市場過濾 - "TW"(台股), "US"(美股), None(全部)
@@ -39,13 +39,34 @@ def get_watchlist(
 
     watchlist_items = query.all()
 
-    results = []
-    for watchlist, stock in watchlist_items:
-        # Determine market region
-        market_region = getattr(stock, 'market_region', 'TW') or 'TW'
+    if not watchlist_items:
+        return []
 
-        # Get realtime price based on market
-        price_data = stock_service.get_realtime_price(stock.stock_id, market=market_region)
+    # 分離台股和美股
+    tw_stocks = []
+    us_stocks = []
+    stock_info_map = {}  # stock_id -> (watchlist, stock)
+
+    for watchlist, stock in watchlist_items:
+        market_region = getattr(stock, 'market_region', 'TW') or 'TW'
+        stock_info_map[stock.stock_id] = (watchlist, stock, market_region)
+
+        if market_region == "US":
+            us_stocks.append(stock.stock_id)
+        else:
+            tw_stocks.append(stock.stock_id)
+
+    # 批量獲取報價
+    tw_prices = stock_service.get_realtime_prices_batch(tw_stocks, market="TW") if tw_stocks else {}
+    us_prices = stock_service.get_realtime_prices_batch(us_stocks, market="US") if us_stocks else {}
+
+    # 合併報價數據
+    all_prices = {**tw_prices, **us_prices}
+
+    # 構建結果
+    results = []
+    for stock_id, (watchlist, stock, market_region) in stock_info_map.items():
+        price_data = all_prices.get(stock_id)
 
         if price_data:
             results.append({
@@ -57,6 +78,18 @@ def get_watchlist(
                 "notes": watchlist.notes,
                 "market_region": market_region,
                 "currency": price_data.get("currency", "TWD"),
+            })
+        else:
+            # 即使沒有報價也返回基本資訊
+            results.append({
+                "stock_id": stock.stock_id,
+                "name": stock.name,
+                "current_price": 0,
+                "change_percent": 0,
+                "added_at": watchlist.added_at.isoformat() if watchlist.added_at else None,
+                "notes": watchlist.notes,
+                "market_region": market_region,
+                "currency": "TWD" if market_region == "TW" else "USD",
             })
 
     return results

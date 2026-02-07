@@ -5,6 +5,7 @@ from .user import User
 from .stock import Stock, StockPrice, StockChip
 from .watchlist import Watchlist
 from .ai_report import AIReport, AIChatHistory
+from .prediction_record import PredictionRecord
 from .alert import PriceAlert
 from .news import StockNews
 from .social import SocialPost, StockSentiment
@@ -26,6 +27,7 @@ __all__ = [
     "Watchlist",
     "AIReport",
     "AIChatHistory",
+    "PredictionRecord",
     "PriceAlert",
     "StockNews",
     "SocialPost",

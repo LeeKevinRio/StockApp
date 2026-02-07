@@ -367,12 +367,17 @@ class _CandlestickChartState extends State<CandlestickChart> {
   List<LineChartBarData> _buildCandlesticks(List<StockHistory> data) {
     List<LineChartBarData> bars = [];
 
+    // 根據數據量動態調整 K 線寬度
+    // 數據越少，K 線越粗
+    final double bodyWidth = data.length <= 20 ? 12 : (data.length <= 40 ? 8 : 6);
+    final double wickWidth = data.length <= 20 ? 3 : 2;
+
     for (int i = 0; i < data.length; i++) {
       final candle = data[i];
       final isRising = candle.close >= candle.open;
       final color = isRising ? Colors.red : Colors.green;
 
-      // Upper shadow
+      // Upper shadow (影線上半部)
       bars.add(LineChartBarData(
         spots: [
           FlSpot(i.toDouble(), candle.high),
@@ -380,11 +385,11 @@ class _CandlestickChartState extends State<CandlestickChart> {
         ],
         isCurved: false,
         color: color,
-        barWidth: 1,
+        barWidth: wickWidth,
         dotData: const FlDotData(show: false),
       ));
 
-      // Lower shadow
+      // Lower shadow (影線下半部)
       bars.add(LineChartBarData(
         spots: [
           FlSpot(i.toDouble(), candle.close < candle.open ? candle.close : candle.open),
@@ -392,11 +397,11 @@ class _CandlestickChartState extends State<CandlestickChart> {
         ],
         isCurved: false,
         color: color,
-        barWidth: 1,
+        barWidth: wickWidth,
         dotData: const FlDotData(show: false),
       ));
 
-      // Body
+      // Body (實體部分)
       bars.add(LineChartBarData(
         spots: [
           FlSpot(i.toDouble(), candle.open),
@@ -404,7 +409,7 @@ class _CandlestickChartState extends State<CandlestickChart> {
         ],
         isCurved: false,
         color: color,
-        barWidth: 4,
+        barWidth: bodyWidth,
         dotData: const FlDotData(show: false),
       ));
     }
@@ -491,6 +496,8 @@ class _CandlestickChartState extends State<CandlestickChart> {
             final index = entry.key;
             final candle = entry.value;
             final isRising = candle.close >= candle.open;
+            // 根據數據量動態調整成交量柱寬度
+            final double volumeBarWidth = visibleData.length <= 20 ? 10 : (visibleData.length <= 40 ? 6 : 4);
 
             return BarChartGroupData(
               x: index,
@@ -498,9 +505,9 @@ class _CandlestickChartState extends State<CandlestickChart> {
                 BarChartRodData(
                   toY: candle.volume.toDouble(),
                   color: isRising
-                      ? Colors.red.withOpacity(0.5)
-                      : Colors.green.withOpacity(0.5),
-                  width: 4,
+                      ? Colors.red.withOpacity(0.7)
+                      : Colors.green.withOpacity(0.7),
+                  width: volumeBarWidth,
                 ),
               ],
             );

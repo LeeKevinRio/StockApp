@@ -53,13 +53,14 @@ class AIProvider with ChangeNotifier {
   String? get error => _error;
   String? get suggestionsError => _suggestionsError;
 
+  /// 載入已有的 AI 建議（快速）
   Future<void> loadSuggestions() async {
     _isLoadingSuggestions = true;
     _suggestionsError = null;
     notifyListeners();
 
     try {
-      _suggestions = await _apiService.getAISuggestions();
+      _suggestions = await _apiService.getAISuggestions(generateMissing: false);
       _isLoadingSuggestions = false;
       notifyListeners();
     } catch (e) {
@@ -69,8 +70,21 @@ class AIProvider with ChangeNotifier {
     }
   }
 
+  /// 刷新並生成缺少的 AI 建議（較慢）
   Future<void> refreshSuggestions() async {
-    await loadSuggestions();
+    _isLoadingSuggestions = true;
+    _suggestionsError = null;
+    notifyListeners();
+
+    try {
+      _suggestions = await _apiService.getAISuggestions(generateMissing: true);
+      _isLoadingSuggestions = false;
+      notifyListeners();
+    } catch (e) {
+      _suggestionsError = e.toString();
+      _isLoadingSuggestions = false;
+      notifyListeners();
+    }
   }
 
   Future<void> loadChatHistory({String? stockId}) async {
@@ -84,6 +98,7 @@ class AIProvider with ChangeNotifier {
     // Add user message
     _messages.add(ChatMessage(role: 'user', content: message));
     _isLoading = true;
+    _error = null;
     notifyListeners();
 
     try {
@@ -99,10 +114,26 @@ class AIProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _error = e.toString();
+      final errorStr = e.toString();
+      _error = errorStr;
       _isLoading = false;
+
+      // Add error message to chat so user can see it
+      String errorMessage;
+      if (errorStr.contains('429') || errorStr.contains('quota') || errorStr.contains('配額')) {
+        errorMessage = 'AI 服務配額已達上限，請稍後再試。';
+      } else if (errorStr.contains('Failed to fetch') || errorStr.contains('SocketException')) {
+        errorMessage = '無法連接到伺服器，請檢查網路連線。';
+      } else {
+        errorMessage = 'AI 服務暫時不可用，請稍後再試。';
+      }
+
+      _messages.add(ChatMessage(
+        role: 'assistant',
+        content: errorMessage,
+      ));
+
       notifyListeners();
-      rethrow;
     }
   }
 }

@@ -10,7 +10,10 @@ from app.database import get_db
 from app.models import User, Watchlist, Stock, AIReport, AIChatHistory
 from app.schemas import AISuggestion, AIChatRequest, AIChatResponse, ChatMessage
 from app.services import AISuggestionService, AIChatService, StockDataService
+from app.services.prediction_tracker import PredictionTracker
 from app.routers.auth import get_current_user
+
+prediction_tracker = PredictionTracker()
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 stock_service = StockDataService()
@@ -18,10 +21,15 @@ stock_service = StockDataService()
 
 @router.get("/suggestions", response_model=List[AISuggestion])
 def get_ai_suggestions(
+    generate_missing: bool = Query(False, description="是否自動生成缺少的建議（會較慢）"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """取得 AI 每日建議（所有自選股，包含台股與美股）"""
+    """
+    取得 AI 每日建議（所有自選股，包含台股與美股）
+
+    預設只返回已有的建議（快速），設定 generate_missing=true 才會生成新建議
+    """
     # Get user's watchlist with stock info
     watchlist = (
         db.query(Watchlist, Stock)
@@ -54,6 +62,12 @@ def get_ai_suggestions(
             suggestion = existing_report.suggestion
             bullish_prob = confidence if suggestion == "BUY" else (1 - confidence)
 
+            # Handle key_factors format conversion (old format was list of strings)
+            key_factors = existing_report.key_factors or []
+            if key_factors and isinstance(key_factors[0], str):
+                # Convert old format to new format
+                key_factors = [{"category": "分析", "factor": f, "impact": "neutral"} for f in key_factors]
+
             results.append(
                 AISuggestion(
                     stock_id=existing_report.stock_id,
@@ -64,12 +78,12 @@ def get_ai_suggestions(
                     target_price=existing_report.target_price,
                     stop_loss_price=existing_report.stop_loss_price,
                     reasoning=existing_report.reasoning,
-                    key_factors=existing_report.key_factors,
+                    key_factors=key_factors,
                     report_date=existing_report.report_date,
                 )
             )
-        else:
-            # Generate new suggestion with correct market parameter
+        elif generate_missing:
+            # Only generate new suggestion if explicitly requested
             try:
                 # Create service instance based on user's subscription tier
                 suggestion_service = AISuggestionService.for_user(current_user)
@@ -171,6 +185,11 @@ def get_stock_suggestion(
             suggestion = existing_report.suggestion
             bullish_prob = confidence if suggestion == "BUY" else (1 - confidence) if suggestion == "SELL" else 0.5
 
+            # Handle key_factors format conversion (old format was list of strings)
+            key_factors = existing_report.key_factors or []
+            if key_factors and isinstance(key_factors[0], str):
+                key_factors = [{"category": "分析", "factor": f, "impact": "neutral"} for f in key_factors]
+
             return AISuggestion(
                 stock_id=existing_report.stock_id,
                 name=stock_name,
@@ -180,7 +199,7 @@ def get_stock_suggestion(
                 target_price=existing_report.target_price,
                 stop_loss_price=existing_report.stop_loss_price,
                 reasoning=existing_report.reasoning,
-                key_factors=existing_report.key_factors or [],
+                key_factors=key_factors,
                 report_date=existing_report.report_date,
                 entry_price_min=existing_report.entry_price_min,
                 entry_price_max=existing_report.entry_price_max,
@@ -188,6 +207,7 @@ def get_stock_suggestion(
                 risk_level=existing_report.risk_level,
                 time_horizon=existing_report.time_horizon,
                 predicted_change_percent=existing_report.predicted_change_percent,
+                next_day_prediction=existing_report.next_day_prediction,
             )
 
         # Generate new suggestion with market parameter
@@ -223,6 +243,7 @@ def get_stock_suggestion(
                 risk_level=suggestion_data.get("risk_level"),
                 time_horizon=suggestion_data.get("time_horizon"),
                 predicted_change_percent=suggestion_data.get("predicted_change_percent"),
+                next_day_prediction=suggestion_data.get("next_day_prediction"),
             )
             db.add(report)
             db.commit()
@@ -230,6 +251,28 @@ def get_stock_suggestion(
             # Database save failed, but we still have the suggestion data
             db.rollback()
             print(f"Warning: Failed to save AI report to database: {db_error}")
+
+        # 儲存預測記錄（用於準確度追蹤）
+        try:
+            next_day_pred = suggestion_data.get("next_day_prediction")
+            if next_day_pred:
+                # 獲取最新收盤價
+                analysis_scores = suggestion_data.get("analysis_scores", {})
+                latest_price = analysis_scores.get("latest_price", 0) or 0
+                ai_provider = suggestion_data.get("ai_provider", "Unknown")
+
+                prediction_tracker.save_prediction(
+                    db=db,
+                    stock_id=stock_id,
+                    stock_name=stock_name,
+                    market=market,
+                    prediction_data=next_day_pred,
+                    base_close_price=latest_price,
+                    ai_provider=ai_provider
+                )
+                print(f"Saved prediction record for {stock_id}")
+        except Exception as pred_error:
+            print(f"Warning: Failed to save prediction record: {pred_error}")
 
         # Fix report_date format - convert string to date if needed
         if isinstance(suggestion_data.get("report_date"), str):
@@ -267,8 +310,19 @@ def ai_chat(
     # Create chat service based on user's subscription tier
     chat_service = AIChatService.for_user(current_user)
 
-    # Get AI response
-    response_data = chat_service.chat(request.message, request.stock_id, chat_history)
+    try:
+        # Get AI response
+        response_data = chat_service.chat(request.message, request.stock_id, chat_history)
+    except Exception as e:
+        error_str = str(e)
+        print(f"AI Chat Error: {error_str}")
+        # Handle quota exceeded error
+        if "429" in error_str or "quota" in error_str.lower() or "ResourceExhausted" in error_str:
+            raise HTTPException(
+                status_code=429,
+                detail="AI 服務配額已達上限，請稍後再試。(API quota exceeded, please try again later.)"
+            )
+        raise HTTPException(status_code=500, detail=f"AI 服務暫時不可用: {error_str}")
 
     # Save to database
     user_msg = AIChatHistory(

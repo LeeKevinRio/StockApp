@@ -30,6 +30,7 @@ class _DividendHistoryState extends State<DividendHistory> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -38,11 +39,13 @@ class _DividendHistoryState extends State<DividendHistory> {
     try {
       final apiService = Provider.of<ApiService>(context, listen: false);
       final data = await apiService.getDividends(widget.stockId, market: widget.market);
+      if (!mounted) return;
       setState(() {
         _data = data;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;

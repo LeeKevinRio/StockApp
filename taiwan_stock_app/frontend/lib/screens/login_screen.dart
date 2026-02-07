@@ -18,7 +18,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isGoogleLoading = false;
 
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email', 'profile'],
+    clientId: '506193160322-omn6g1hja95mv192ajdu0ospgndohh6o.apps.googleusercontent.com',
+    scopes: ['openid', 'email', 'profile'],
   );
 
   @override
@@ -74,14 +75,26 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
-      final String? idToken = googleAuth.idToken;
 
-      if (idToken == null) {
-        throw Exception('Failed to get Google ID token');
-      }
+      // 優先使用 idToken，若無則使用 accessToken
+      final String? idToken = googleAuth.idToken;
+      final String? accessToken = googleAuth.accessToken;
 
       final authProvider = context.read<AuthProvider>();
-      await authProvider.googleLogin(idToken);
+
+      if (idToken != null) {
+        await authProvider.googleLogin(idToken);
+      } else if (accessToken != null) {
+        // 使用 accessToken 登入
+        await authProvider.googleLoginWithAccessToken(
+          accessToken: accessToken,
+          email: googleUser.email,
+          displayName: googleUser.displayName,
+          photoUrl: googleUser.photoUrl,
+        );
+      } else {
+        throw Exception('無法取得 Google 認證資訊');
+      }
 
       if (mounted) {
         Navigator.of(context).pushReplacementNamed('/home');
@@ -130,12 +143,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 TextFormField(
                   controller: _emailController,
                   decoration: const InputDecoration(
-                    labelText: 'Email',
+                    labelText: '帳號',
+                    hintText: '任意字串皆可',
                     border: OutlineInputBorder(),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return '請輸入 Email';
+                      return '請輸入帳號';
                     }
                     return null;
                   },

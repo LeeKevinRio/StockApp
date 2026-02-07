@@ -40,6 +40,7 @@ class _SentimentViewState extends State<SentimentView> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -52,11 +53,13 @@ class _SentimentViewState extends State<SentimentView> {
         market: widget.market,
       );
 
+      if (!mounted) return;
       setState(() {
         _data = sentimentData;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;

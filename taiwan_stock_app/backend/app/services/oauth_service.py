@@ -24,6 +24,9 @@ class OAuthService:
             如果驗證失敗返回 None
         """
         try:
+            print(f"Verifying Google token with client_id: {settings.GOOGLE_CLIENT_ID[:20]}...")
+            print(f"Token preview: {token[:50]}...")
+
             # Verify the token with Google
             idinfo = id_token.verify_oauth2_token(
                 token,
@@ -31,8 +34,11 @@ class OAuthService:
                 settings.GOOGLE_CLIENT_ID
             )
 
+            print(f"Token verified successfully. User: {idinfo.get('email')}")
+
             # Check issuer
             if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+                print(f"Invalid issuer: {idinfo['iss']}")
                 return None
 
             # Extract user info
@@ -46,10 +52,10 @@ class OAuthService:
 
         except ValueError as e:
             # Invalid token
-            print(f"Google token verification failed: {e}")
+            print(f"Google token verification failed (ValueError): {e}")
             return None
         except Exception as e:
-            print(f"Unexpected error during Google token verification: {e}")
+            print(f"Unexpected error during Google token verification: {type(e).__name__}: {e}")
             return None
 
 

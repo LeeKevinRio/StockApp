@@ -1,25 +1,33 @@
 """
 User schemas
 """
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, Literal
 
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: str  # 允許任意字串作為帳號，不限 email 格式
     password: str
     display_name: Optional[str] = None
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    email: str  # 允許任意字串作為帳號
     password: str
 
 
 class GoogleAuthRequest(BaseModel):
-    """Google OAuth 登入請求"""
+    """Google OAuth 登入請求 (ID Token)"""
     id_token: str
+
+
+class GoogleAccessTokenRequest(BaseModel):
+    """Google OAuth 登入請求 (Access Token) - 用於 Web 平台"""
+    access_token: str
+    email: str
+    display_name: Optional[str] = None
+    photo_url: Optional[str] = None
 
 
 class UserResponse(BaseModel):

@@ -93,6 +93,33 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  Future<void> googleLoginWithAccessToken({
+    required String accessToken,
+    required String email,
+    String? displayName,
+    String? photoUrl,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      _user = await _authService.googleLoginWithAccessToken(
+        accessToken: accessToken,
+        email: email,
+        displayName: displayName,
+        photoUrl: photoUrl,
+      );
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> refreshUser() async {
     final refreshedUser = await _authService.refreshUser();
     if (refreshedUser != null) {

@@ -30,6 +30,7 @@ class _FundamentalCardState extends State<FundamentalCard> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -38,11 +39,13 @@ class _FundamentalCardState extends State<FundamentalCard> {
     try {
       final apiService = Provider.of<ApiService>(context, listen: false);
       final data = await apiService.getFundamental(widget.stockId, market: widget.market);
+      if (!mounted) return;
       setState(() {
         _data = data;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -131,6 +134,21 @@ class _FundamentalCardState extends State<FundamentalCard> {
             _buildMetricRow([
               _MetricItem('毛利率', _formatPercent(_data!.grossMargin), null),
               _MetricItem('營業利益率', _formatPercent(_data!.operatingMargin), null),
+            ]),
+            const SizedBox(height: 12),
+            // 營收成長
+            _buildSectionTitle('營收成長'),
+            _buildMetricRow([
+              _MetricItem(
+                '月增率 (MoM)',
+                _formatGrowth(_data!.revenueMom),
+                _getGrowthColor(_data!.revenueMom),
+              ),
+              _MetricItem(
+                '年增率 (YoY)',
+                _formatGrowth(_data!.revenueYoy),
+                _getGrowthColor(_data!.revenueYoy),
+              ),
             ]),
             const SizedBox(height: 12),
             // 市值相關
@@ -236,6 +254,20 @@ class _FundamentalCardState extends State<FundamentalCard> {
     if (roe > 15) return Colors.green;
     if (roe < 5) return Colors.red;
     return null;
+  }
+
+  String _formatGrowth(double? value) {
+    if (value == null) return '-';
+    final sign = value >= 0 ? '+' : '';
+    return '$sign${value.toStringAsFixed(2)}%';
+  }
+
+  Color? _getGrowthColor(double? growth) {
+    if (growth == null) return null;
+    if (growth > 10) return Colors.green;
+    if (growth > 0) return Colors.lightGreen;
+    if (growth > -10) return Colors.orange;
+    return Colors.red;
   }
 }
 

@@ -154,21 +154,29 @@ class _AISuggestionsScreenState extends State<AISuggestionsScreen>
             ),
             const SizedBox(height: 16),
             Text(
-              isTaiwan ? 'No Taiwan Stock Suggestions' : 'No US Stock Suggestions',
+              isTaiwan ? '尚無 AI 建議' : 'No AI Suggestions',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 8),
             Text(
               isTaiwan
-                  ? 'Add Taiwan stocks to watchlist first'
-                  : 'Add US stocks to watchlist first',
+                  ? '點擊下方按鈕為自選股生成 AI 分析'
+                  : 'Click below to generate AI analysis for your watchlist',
               style: const TextStyle(color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isTaiwan
+                  ? '（首次生成需要 30-60 秒）'
+                  : '(First generation takes 30-60 seconds)',
+              style: const TextStyle(color: Colors.orange, fontSize: 12),
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () => provider.loadSuggestions(),
-              icon: const Icon(Icons.refresh),
-              label: const Text('Generate AI Suggestions'),
+              onPressed: () => provider.refreshSuggestions(),
+              icon: const Icon(Icons.auto_awesome),
+              label: Text(isTaiwan ? '生成 AI 建議' : 'Generate AI Suggestions'),
             ),
           ],
         ),
@@ -317,6 +325,11 @@ class SuggestionCard extends StatelessWidget {
                 ),
               ],
             ),
+            // 隔天漲跌預測區塊
+            if (suggestion.nextDayPrediction != null) ...[
+              const SizedBox(height: 12),
+              _buildNextDayPrediction(suggestion.nextDayPrediction!, currencySymbol, isTaiwan),
+            ],
             if (suggestion.targetPrice != null ||
                 suggestion.stopLossPrice != null) ...[
               const SizedBox(height: 12),
@@ -442,6 +455,152 @@ class SuggestionCard extends StatelessWidget {
               color: color,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// 建構隔天預測區塊
+  Widget _buildNextDayPrediction(NextDayPrediction prediction, String currency, bool isTaiwan) {
+    final isUp = prediction.direction == 'UP';
+    final directionColor = isUp ? Colors.red : Colors.green;
+    final directionIcon = isUp ? Icons.arrow_upward : Icons.arrow_downward;
+    final directionText = isUp
+        ? (isTaiwan ? '預測上漲' : 'Predicted UP')
+        : (isTaiwan ? '預測下跌' : 'Predicted DOWN');
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            directionColor.withAlpha(20),
+            directionColor.withAlpha(10),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: directionColor.withAlpha(80)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 標題
+          Row(
+            children: [
+              Icon(Icons.schedule, size: 16, color: directionColor),
+              const SizedBox(width: 4),
+              Text(
+                isTaiwan ? '明日漲跌預測' : 'Tomorrow Prediction',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: directionColor,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: directionColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(directionIcon, size: 14, color: Colors.white),
+                    const SizedBox(width: 2),
+                    Text(
+                      directionText,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // 預測數據
+          Row(
+            children: [
+              // 預測漲跌幅
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      isTaiwan ? '預測漲跌幅' : 'Change',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${prediction.predictedChangePercent >= 0 ? '+' : ''}${prediction.predictedChangePercent.toStringAsFixed(2)}%',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: directionColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // 預測準確率
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      isTaiwan ? '預測信心度' : 'Confidence',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${(prediction.probability * 100).toStringAsFixed(0)}%',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // 預測價格區間
+              if (prediction.priceRangeLow != null && prediction.priceRangeHigh != null)
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        isTaiwan ? '預測區間' : 'Range',
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${prediction.priceRangeLow!.toStringAsFixed(1)}-${prediction.priceRangeHigh!.toStringAsFixed(1)}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blueGrey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          // 預測依據
+          if (prediction.reasoning.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              prediction.reasoning,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey.shade600,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
         ],
       ),
     );

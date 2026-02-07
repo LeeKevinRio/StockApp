@@ -23,6 +23,7 @@ class Settings:
     FINMIND_TOKEN: str = os.getenv("FINMIND_TOKEN", "")
     FUGLE_API_KEY: str = os.getenv("FUGLE_API_KEY", "")
     GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
@@ -37,8 +38,11 @@ class Settings:
     AI_MODEL: str = os.getenv("AI_MODEL", "gemini-1.5-flash")
 
     # AI Models by subscription tier
-    AI_MODEL_FREE: str = os.getenv("AI_MODEL_FREE", "gemini-1.5-flash")
+    AI_MODEL_FREE: str = os.getenv("AI_MODEL_FREE", "gemini-2.0-flash")
     AI_MODEL_PRO: str = os.getenv("AI_MODEL_PRO", "gemini-2.5-pro")
+
+    # Groq Model (fallback when Gemini quota exceeded)
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
     # CORS
     CORS_ORIGINS: list = ["http://localhost:3000", "http://localhost:8080"]

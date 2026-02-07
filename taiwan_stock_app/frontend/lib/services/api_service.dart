@@ -6,7 +6,10 @@ import '../models/watchlist_item.dart';
 import '../models/ai_suggestion.dart';
 import '../models/stock_history.dart';
 import '../models/indicator_data.dart';
-import '../models/portfolio.dart';
+import '../models/portfolio.dart'
+    show Portfolio, Position, Transaction, PortfolioSummary, PositionAllocation,
+         CreatePortfolioRequest, CreateTransactionRequest;
+import '../models/alert.dart' show PriceAlert, CreateAlertRequest;
 import '../models/trading.dart';
 import '../models/social_sentiment.dart';
 import '../models/fundamental.dart';
@@ -54,6 +57,26 @@ class ApiService {
       Uri.parse('$baseUrl/api/auth/google'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'id_token': idToken}),
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> googleAuthWithAccessToken({
+    required String accessToken,
+    required String email,
+    String? displayName,
+    String? photoUrl,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/auth/google-access-token'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'access_token': accessToken,
+        'email': email,
+        'display_name': displayName,
+        'photo_url': photoUrl,
+      }),
     );
     _checkResponse(response);
     return jsonDecode(response.body);
@@ -159,19 +182,21 @@ class ApiService {
 
   // ==================== AI 相關 ====================
 
-  Future<List<AISuggestion>> getAISuggestions() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/api/ai/suggestions'),
-      headers: _headers,
+  /// 獲取 AI 建議
+  /// [generateMissing] 為 true 時會為沒有建議的股票生成新建議（較慢）
+  Future<List<AISuggestion>> getAISuggestions({bool generateMissing = false}) async {
+    final uri = Uri.parse('$baseUrl/api/ai/suggestions').replace(
+      queryParameters: {'generate_missing': generateMissing.toString()},
     );
+    final response = await http.get(uri, headers: _headers);
     _checkResponse(response);
     final List<dynamic> data = jsonDecode(response.body);
     return data.map((e) => AISuggestion.fromJson(e)).toList();
   }
 
-  Future<AISuggestion> getStockSuggestion(String stockId, {String market = 'TW'}) async {
+  Future<AISuggestion> getStockSuggestion(String stockId, {String market = 'TW', bool refresh = false}) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/ai/suggestions/$stockId?market=$market'),
+      Uri.parse('$baseUrl/api/ai/suggestions/$stockId?market=$market&refresh=$refresh'),
       headers: _headers,
     );
     _checkResponse(response);
@@ -191,42 +216,89 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
-  // ==================== 價格警示相關 ====================
+  // ==================== 預測準確度追蹤 ====================
 
-  Future<List<Map<String, dynamic>>> getAlerts() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/api/alerts'),
-      headers: _headers,
-    );
+  Future<Map<String, dynamic>> getPredictionStatistics({int days = 30, String? market, String? stockId}) async {
+    final params = <String, String>{'days': days.toString()};
+    if (market != null) params['market'] = market;
+    if (stockId != null) params['stock_id'] = stockId;
+
+    final uri = Uri.parse('$baseUrl/api/predictions/statistics').replace(queryParameters: params);
+    final response = await http.get(uri, headers: _headers);
     _checkResponse(response);
-    final List<dynamic> data = jsonDecode(response.body);
-    return data.cast<Map<String, dynamic>>();
+    return jsonDecode(response.body);
   }
 
-  Future<Map<String, dynamic>> createAlert({
-    required String stockId,
-    required String alertType,
-    double? targetPrice,
-    double? percentThreshold,
-    bool notifyPush = true,
-    bool notifyEmail = false,
-    String? notes,
-  }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/alerts'),
+  Future<Map<String, dynamic>> getYesterdayPredictions() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/predictions/yesterday'),
       headers: _headers,
-      body: jsonEncode({
-        'stock_id': stockId,
-        'alert_type': alertType,
-        if (targetPrice != null) 'target_price': targetPrice,
-        if (percentThreshold != null) 'percent_threshold': percentThreshold,
-        'notify_push': notifyPush,
-        'notify_email': notifyEmail,
-        if (notes != null) 'notes': notes,
-      }),
     );
     _checkResponse(response);
     return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> getDailyPredictions(String date) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/predictions/daily/$date'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> updatePredictionResults({String? market}) async {
+    final uri = market != null
+        ? Uri.parse('$baseUrl/api/predictions/update-results?market=$market')
+        : Uri.parse('$baseUrl/api/predictions/update-results');
+    final response = await http.post(uri, headers: _headers);
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> getTodayPredictions() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/predictions/today'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> getAllStocksPredictionStats({int days = 30}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/predictions/all-stocks?days=$days'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  // ==================== 價格警示相關 ====================
+
+  Future<List<PriceAlert>> getAlerts({bool? activeOnly}) async {
+    String url = '$baseUrl/api/alerts';
+    if (activeOnly != null) {
+      url += '?active_only=$activeOnly';
+    }
+    final response = await http.get(
+      Uri.parse(url),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    final Map<String, dynamic> responseData = jsonDecode(response.body);
+    final List<dynamic> data = responseData['alerts'] ?? [];
+    return data.map((e) => PriceAlert.fromJson(e)).toList();
+  }
+
+  Future<PriceAlert> createAlert(CreateAlertRequest request) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/alerts'),
+      headers: _headers,
+      body: jsonEncode(request.toJson()),
+    );
+    _checkResponse(response);
+    return PriceAlert.fromJson(jsonDecode(response.body));
   }
 
   Future<Map<String, dynamic>> updateAlert(
@@ -262,13 +334,14 @@ class ApiService {
     _checkResponse(response);
   }
 
-  Future<Map<String, dynamic>> toggleAlert(int alertId) async {
+  Future<PriceAlert> toggleAlert(int alertId, bool isActive) async {
     final response = await http.put(
       Uri.parse('$baseUrl/api/alerts/$alertId/toggle'),
       headers: _headers,
+      body: jsonEncode({'is_active': isActive}),
     );
     _checkResponse(response);
-    return jsonDecode(response.body);
+    return PriceAlert.fromJson(jsonDecode(response.body));
   }
 
   Future<Map<String, dynamic>> resetAlert(int alertId) async {
@@ -280,14 +353,24 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
-  Future<List<Map<String, dynamic>>> getTriggeredAlerts() async {
+  Future<List<PriceAlert>> checkAlerts() async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/alerts/check'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((e) => PriceAlert.fromJson(e)).toList();
+  }
+
+  Future<List<PriceAlert>> getTriggeredAlerts() async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/alerts/triggered/list'),
       headers: _headers,
     );
     _checkResponse(response);
     final List<dynamic> data = jsonDecode(response.body);
-    return data.cast<Map<String, dynamic>>();
+    return data.map((e) => PriceAlert.fromJson(e)).toList();
   }
 
   // ==================== 技術指標相關 ====================
@@ -337,6 +420,22 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
+  // ==================== 形態識別相關 ====================
+
+  /// 取得股票形態識別結果
+  Future<Map<String, dynamic>> getStockPatterns(
+    String stockId, {
+    int lookback = 60,
+    String market = 'TW',
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/stocks/$stockId/patterns?lookback=$lookback&market=$market'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
   // ==================== 新聞相關 ====================
 
   Future<Map<String, dynamic>> getStockNews(String stockId, {int limit = 10, String market = 'TW'}) async {
@@ -359,36 +458,46 @@ class ApiService {
 
   // ==================== 投資組合相關 ====================
 
-  Future<List<PortfolioSummary>> getPortfolios() async {
+  Future<List<Portfolio>> getPortfolios() async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/portfolio'),
       headers: _headers,
     );
     _checkResponse(response);
     final List<dynamic> data = jsonDecode(response.body);
-    return data.map((e) => PortfolioSummary.fromJson(e)).toList();
+    return data.map((e) => Portfolio.fromJson(e)).toList();
   }
 
-  Future<Map<String, dynamic>> createPortfolio(String name, String? description) async {
+  Future<Portfolio> createPortfolio(CreatePortfolioRequest request) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/portfolio'),
       headers: _headers,
-      body: jsonEncode({
-        'name': name,
-        if (description != null) 'description': description,
-      }),
+      body: jsonEncode(request.toJson()),
     );
     _checkResponse(response);
-    return jsonDecode(response.body);
+    return Portfolio.fromJson(jsonDecode(response.body));
   }
 
-  Future<PortfolioDetail> getPortfolioDetail(int portfolioId) async {
+  Future<Portfolio> getPortfolio(int portfolioId) async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/portfolio/$portfolioId'),
       headers: _headers,
     );
     _checkResponse(response);
-    return PortfolioDetail.fromJson(jsonDecode(response.body));
+    return Portfolio.fromJson(jsonDecode(response.body));
+  }
+
+  Future<Portfolio> updatePortfolio(int portfolioId, {String? name, String? description}) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/portfolio/$portfolioId'),
+      headers: _headers,
+      body: jsonEncode({
+        if (name != null) 'name': name,
+        if (description != null) 'description': description,
+      }),
+    );
+    _checkResponse(response);
+    return Portfolio.fromJson(jsonDecode(response.body));
   }
 
   Future<void> deletePortfolio(int portfolioId) async {
@@ -399,42 +508,62 @@ class ApiService {
     _checkResponse(response);
   }
 
-  Future<Map<String, dynamic>> addPortfolioHolding(
-    int portfolioId,
-    String stockId,
-    int quantity,
-    double avgCost,
-    DateTime buyDate,
-  ) async {
+  Future<List<Position>> getPositions(int portfolioId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/portfolio/$portfolioId/positions'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((e) => Position.fromJson(e)).toList();
+  }
+
+  Future<PortfolioSummary> getPortfolioSummary(int portfolioId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/portfolio/$portfolioId/summary'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return PortfolioSummary.fromJson(jsonDecode(response.body));
+  }
+
+  Future<List<PositionAllocation>> getPositionAllocation(int portfolioId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/portfolio/$portfolioId/allocation'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((e) => PositionAllocation.fromJson(e)).toList();
+  }
+
+  Future<List<Transaction>> getTransactions(int portfolioId, {int limit = 50}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/portfolio/$portfolioId/transactions?limit=$limit'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.map((e) => Transaction.fromJson(e)).toList();
+  }
+
+  Future<Transaction> addTransaction(int portfolioId, CreateTransactionRequest request) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/api/portfolio/$portfolioId/holdings'),
+      Uri.parse('$baseUrl/api/portfolio/$portfolioId/transactions'),
       headers: _headers,
-      body: jsonEncode({
-        'stock_id': stockId,
-        'quantity': quantity,
-        'avg_cost': avgCost,
-        'buy_date': buyDate.toIso8601String().split('T')[0],
-      }),
+      body: jsonEncode(request.toJson()),
     );
     _checkResponse(response);
-    return jsonDecode(response.body);
+    return Transaction.fromJson(jsonDecode(response.body));
   }
 
-  Future<void> deletePortfolioHolding(int holdingId) async {
-    final response = await http.delete(
-      Uri.parse('$baseUrl/api/portfolio/holdings/$holdingId'),
-      headers: _headers,
-    );
-    _checkResponse(response);
-  }
-
-  Future<PortfolioPerformance> getPortfolioPerformance(int portfolioId, {int days = 30}) async {
+  Future<Map<String, dynamic>> getPortfolioPerformance(int portfolioId, {int days = 30}) async {
     final response = await http.get(
       Uri.parse('$baseUrl/api/portfolio/$portfolioId/performance?days=$days'),
       headers: _headers,
     );
     _checkResponse(response);
-    return PortfolioPerformance.fromJson(jsonDecode(response.body));
+    return jsonDecode(response.body);
   }
 
   // ==================== 虛擬交易相關 ====================

@@ -26,7 +26,10 @@ class FundamentalResponse(BaseModel):
 
     # Revenue metrics
     revenue: Optional[float] = None
-    revenue_growth: Optional[float] = None
+    revenue_growth: Optional[float] = None  # 營收年增率 YoY
+    revenue_mom: Optional[float] = None  # 營收月增率 MoM
+    revenue_yoy: Optional[float] = None  # 營收年增率 YoY (同 revenue_growth)
+    latest_month_revenue: Optional[float] = None  # 最新月營收
     gross_margin: Optional[float] = None
     operating_margin: Optional[float] = None
     net_margin: Optional[float] = None

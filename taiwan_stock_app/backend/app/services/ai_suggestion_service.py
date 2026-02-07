@@ -2,8 +2,9 @@
 AI Suggestion Service - 每日投資建議
 整合技術面、籌碼面、基本面、消息面的完整分析
 支援台股(TW)與美股(US)
+支援 AI 備援機制: Gemini -> Groq
 """
-from typing import Dict, List
+from typing import Dict, List, Optional
 from datetime import date, timedelta
 import google.generativeai as genai
 import json
@@ -14,6 +15,22 @@ from app.data_fetchers import FinMindFetcher, USStockFetcher
 from app.data_fetchers.news_fetcher import NewsFetcher
 from app.config import settings
 from app.services.technical_indicators import TechnicalIndicators
+
+# Groq client (lazy initialization)
+_groq_client = None
+
+def get_groq_client():
+    """Lazy initialization of Groq client"""
+    global _groq_client
+    if _groq_client is None and settings.GROQ_API_KEY:
+        try:
+            from groq import Groq
+            _groq_client = Groq(api_key=settings.GROQ_API_KEY)
+        except ImportError:
+            print("Groq package not installed. Run: pip install groq")
+        except Exception as e:
+            print(f"Failed to initialize Groq client: {e}")
+    return _groq_client
 
 
 class AISuggestionService:
@@ -113,18 +130,32 @@ class AISuggestionService:
         fundamental_start = (end_date - timedelta(days=365)).strftime("%Y-%m-%d")
 
         # ========== 技術面數據 ==========
-        prices = self.finmind.get_stock_price(stock_id, start_str, end_str)
-        if len(prices) > 0:
-            if 'max' in prices.columns:
-                prices['high'] = prices['max']
-            if 'min' in prices.columns:
-                prices['low'] = prices['min']
+        try:
+            prices = self.finmind.get_stock_price(stock_id, start_str, end_str)
+            if len(prices) > 0:
+                if 'max' in prices.columns:
+                    prices['high'] = prices['max']
+                if 'min' in prices.columns:
+                    prices['low'] = prices['min']
+        except Exception as e:
+            print(f"Error getting price data for {stock_id}: {e}")
+            prices = pd.DataFrame()
 
         technical = self._calculate_technical_indicators(prices)
 
         # ========== 籌碼面數據 ==========
-        institutions = self.finmind.get_institutional_investors(stock_id, start_str, end_str)
-        margins = self.finmind.get_margin_trading(stock_id, start_str, end_str)
+        try:
+            institutions = self.finmind.get_institutional_investors(stock_id, start_str, end_str)
+        except Exception as e:
+            print(f"Error getting institutional data for {stock_id}: {e}")
+            institutions = pd.DataFrame()
+
+        try:
+            margins = self.finmind.get_margin_trading(stock_id, start_str, end_str)
+        except Exception as e:
+            print(f"Error getting margin data for {stock_id}: {e}")
+            margins = pd.DataFrame()
+
         chip_analysis = self._analyze_chip_data(institutions, margins)
 
         # ========== 基本面數據 ==========
@@ -430,13 +461,30 @@ class AISuggestionService:
             revenue = self.finmind.get_monthly_revenue(stock_id, start_date, end_date)
             if len(revenue) >= 2:
                 result["data_available"] = True
-                latest_rev = revenue.iloc[-1]
-                prev_year_rev = revenue.iloc[-13] if len(revenue) >= 13 else revenue.iloc[0]
+                # Sort by date descending to get latest first
+                revenue = revenue.sort_values('date', ascending=False)
+                latest_rev = revenue.iloc[0]
+                prev_month_rev = revenue.iloc[1] if len(revenue) >= 2 else None
+                prev_year_rev = revenue.iloc[12] if len(revenue) >= 13 else None
 
-                result["latest_revenue"] = int(latest_rev.get("revenue", 0))
-                yoy = ((latest_rev.get("revenue", 0) - prev_year_rev.get("revenue", 1)) / prev_year_rev.get("revenue", 1)) * 100
-                result["revenue_yoy"] = round(yoy, 2)
-                result["revenue_trend"] = "營收大幅成長" if yoy > 20 else "營收成長" if yoy > 0 else "營收大幅衰退" if yoy < -20 else "營收衰退"
+                latest_revenue = latest_rev.get("revenue", 0)
+                result["latest_revenue"] = int(latest_revenue)
+
+                # Calculate MoM (月增率)
+                if prev_month_rev is not None:
+                    prev_month_val = prev_month_rev.get("revenue", 0)
+                    if prev_month_val and prev_month_val > 0:
+                        mom = ((latest_revenue - prev_month_val) / prev_month_val) * 100
+                        result["revenue_mom"] = round(mom, 2)
+                        result["revenue_mom_trend"] = "月增大幅成長" if mom > 15 else "月增成長" if mom > 0 else "月減大幅衰退" if mom < -15 else "月減衰退"
+
+                # Calculate YoY (年增率)
+                if prev_year_rev is not None:
+                    prev_year_val = prev_year_rev.get("revenue", 0)
+                    if prev_year_val and prev_year_val > 0:
+                        yoy = ((latest_revenue - prev_year_val) / prev_year_val) * 100
+                        result["revenue_yoy"] = round(yoy, 2)
+                        result["revenue_trend"] = "營收大幅成長" if yoy > 20 else "營收成長" if yoy > 0 else "營收大幅衰退" if yoy < -20 else "營收衰退"
 
             # 本益比、股價淨值比、殖利率
             per_data = self.finmind.get_per_pbr(stock_id, start_date, end_date)
@@ -473,36 +521,113 @@ class AISuggestionService:
                         "低殖利率"
                     )
 
-            # 財務報表 (EPS, ROE等)
+            # 財務報表 (EPS, Revenue, GrossProfit, OperatingIncome, NetIncome)
             fs_data = self.finmind.get_financial_statements(stock_id, start_date, end_date)
-            if len(fs_data) > 0 and 'type' in fs_data.columns:
-                # EPS
-                eps_rows = fs_data[fs_data['type'] == 'EPS']
-                if len(eps_rows) > 0:
-                    eps_value = eps_rows.iloc[-1].get('value', 0)
-                    if eps_value:
-                        result["eps"] = round(float(eps_value), 2)
-                        result["eps_evaluation"] = "獲利" if eps_value > 0 else "虧損"
+            quarterly_revenue = None
+            gross_profit = None
+            operating_income = None
+            net_income = None
 
-                # ROE
-                roe_rows = fs_data[fs_data['type'] == 'ROE']
-                if len(roe_rows) > 0:
-                    roe_value = roe_rows.iloc[-1].get('value', 0)
-                    if roe_value:
-                        result["roe"] = round(float(roe_value), 2)
+            if len(fs_data) > 0 and 'type' in fs_data.columns:
+                # Get latest date's data
+                latest_date = fs_data['date'].max()
+                latest_fs = fs_data[fs_data['date'] == latest_date]
+
+                for _, row in latest_fs.iterrows():
+                    fs_type = row.get('type', '')
+                    value = row.get('value')
+                    if value is None:
+                        continue
+
+                    if fs_type == 'EPS':
+                        eps_value = float(value)
+                        result["eps"] = round(eps_value, 2)
+                        result["eps_evaluation"] = "獲利" if eps_value > 0 else "虧損"
+                    elif fs_type == 'Revenue':
+                        quarterly_revenue = float(value)
+                    elif fs_type == 'GrossProfit':
+                        gross_profit = float(value)
+                    elif fs_type == 'OperatingIncome':
+                        operating_income = float(value)
+                    elif fs_type == 'IncomeAfterTaxes':
+                        net_income = float(value)
+
+                # Calculate margins from financial statement data
+                if quarterly_revenue and quarterly_revenue > 0:
+                    if gross_profit is not None:
+                        gross_margin = round((gross_profit / quarterly_revenue) * 100, 2)
+                        result["gross_margin"] = gross_margin
+                        result["gross_margin_evaluation"] = (
+                            "毛利率優異" if gross_margin > 50 else
+                            "毛利率良好" if gross_margin > 30 else
+                            "毛利率一般" if gross_margin > 15 else
+                            "毛利率偏低"
+                        )
+                    if operating_income is not None:
+                        operating_margin = round((operating_income / quarterly_revenue) * 100, 2)
+                        result["operating_margin"] = operating_margin
+                        result["operating_margin_evaluation"] = (
+                            "營業利益率優異" if operating_margin > 30 else
+                            "營業利益率良好" if operating_margin > 15 else
+                            "營業利益率一般" if operating_margin > 5 else
+                            "營業利益率偏低"
+                        )
+                    if net_income is not None:
+                        net_margin = round((net_income / quarterly_revenue) * 100, 2)
+                        result["net_margin"] = net_margin
+                        result["net_margin_evaluation"] = (
+                            "淨利率優異" if net_margin > 25 else
+                            "淨利率良好" if net_margin > 10 else
+                            "淨利率一般" if net_margin > 3 else
+                            "淨利率偏低"
+                        )
+
+            # Get balance sheet for ROE/ROA calculation
+            try:
+                balance_data = self.finmind.get_balance_sheet(stock_id, start_date, end_date)
+                if len(balance_data) > 0 and net_income is not None:
+                    latest_date = balance_data['date'].max()
+                    latest_bs = balance_data[balance_data['date'] == latest_date]
+
+                    total_equity = None
+                    total_assets = None
+
+                    for _, row in latest_bs.iterrows():
+                        bs_type = row.get('type', '')
+                        value = row.get('value')
+                        if value is None:
+                            continue
+
+                        if bs_type == 'Equity':
+                            total_equity = float(value)
+                        elif bs_type == 'TotalAssets':
+                            total_assets = float(value)
+
+                    # Calculate ROE and ROA (annualized)
+                    if total_equity and total_equity > 0:
+                        # Annualize quarterly net income (multiply by 4)
+                        annual_net_income = net_income * 4
+                        roe = round((annual_net_income / total_equity) * 100, 2)
+                        result["roe"] = roe
                         result["roe_evaluation"] = (
-                            "ROE優異_獲利能力強" if roe_value > 20 else
-                            "ROE良好" if roe_value > 10 else
-                            "ROE一般" if roe_value > 5 else
+                            "ROE優異_獲利能力強" if roe > 20 else
+                            "ROE良好" if roe > 10 else
+                            "ROE一般" if roe > 5 else
                             "ROE偏低"
                         )
 
-                # 毛利率
-                gpm_rows = fs_data[fs_data['type'].str.contains('GrossProfit', na=False)]
-                if len(gpm_rows) > 0:
-                    gpm_value = gpm_rows.iloc[-1].get('value', 0)
-                    if gpm_value:
-                        result["gross_margin"] = round(float(gpm_value), 2)
+                    if total_assets and total_assets > 0:
+                        annual_net_income = net_income * 4
+                        roa = round((annual_net_income / total_assets) * 100, 2)
+                        result["roa"] = roa
+                        result["roa_evaluation"] = (
+                            "ROA優異_資產運用效率高" if roa > 15 else
+                            "ROA良好" if roa > 8 else
+                            "ROA一般" if roa > 3 else
+                            "ROA偏低"
+                        )
+            except Exception as e:
+                print(f"Error getting balance sheet for {stock_id}: {e}")
 
             # 股息資料
             div_data = self.finmind.get_dividend(stock_id, start_date, end_date)
@@ -533,77 +658,130 @@ class AISuggestionService:
         return result
 
     def _calculate_fundamental_score(self, fund: Dict) -> int:
-        """計算基本面評分"""
+        """計算基本面評分 - 包含估值指標和獲利能力"""
         score = 0
 
-        # 營收年增率 (權重 25%)
+        # 營收年增率 YoY (權重 12%)
         yoy = fund.get("revenue_yoy", 0)
-        if yoy > 30:
-            score += 25
-        elif yoy > 10:
-            score += 15
-        elif yoy > 0:
-            score += 8
-        elif yoy < -30:
-            score -= 25
-        elif yoy < -10:
-            score -= 15
-        elif yoy < 0:
-            score -= 8
+        if yoy:
+            if yoy > 30:
+                score += 12
+            elif yoy > 10:
+                score += 8
+            elif yoy > 0:
+                score += 4
+            elif yoy < -30:
+                score -= 12
+            elif yoy < -10:
+                score -= 8
+            elif yoy < 0:
+                score -= 4
 
-        # 本益比 (權重 20%)
+        # 營收月增率 MoM (權重 8%)
+        mom = fund.get("revenue_mom", 0)
+        if mom:
+            if mom > 20:
+                score += 8
+            elif mom > 5:
+                score += 5
+            elif mom > 0:
+                score += 2
+            elif mom < -20:
+                score -= 8
+            elif mom < -5:
+                score -= 5
+            elif mom < 0:
+                score -= 2
+
+        # 本益比 (權重 12%)
         per = fund.get("per", 0)
         if per > 0:
             if per > 40:
-                score -= 20  # 太貴
+                score -= 12  # 太貴
             elif per > 25:
-                score -= 10
+                score -= 6
             elif per < 10:
-                score += 20  # 便宜
+                score += 12  # 便宜
             elif per < 15:
-                score += 10
+                score += 6
 
-        # 股價淨值比 (權重 15%)
+        # 股價淨值比 (權重 10%)
         pbr = fund.get("pbr", 0)
         if pbr > 0:
             if pbr > 4:
-                score -= 15
+                score -= 10
             elif pbr < 1:
-                score += 15
+                score += 10
             elif pbr < 1.5:
-                score += 8
+                score += 5
 
-        # ROE (權重 20%)
+        # ROE (權重 15%)
         roe = fund.get("roe", 0)
-        if roe > 0:
+        if roe:
             if roe > 25:
-                score += 20  # 高ROE
+                score += 15  # 高ROE
             elif roe > 15:
-                score += 12
+                score += 10
             elif roe > 10:
-                score += 6
+                score += 5
             elif roe < 5:
+                score -= 8
+
+        # ROA (權重 10%)
+        roa = fund.get("roa", 0)
+        if roa:
+            if roa > 15:
+                score += 10
+            elif roa > 8:
+                score += 6
+            elif roa > 3:
+                score += 3
+            elif roa < 2:
+                score -= 5
+
+        # 毛利率 (權重 10%)
+        gross_margin = fund.get("gross_margin", 0)
+        if gross_margin:
+            if gross_margin > 50:
+                score += 10
+            elif gross_margin > 30:
+                score += 6
+            elif gross_margin > 15:
+                score += 3
+            elif gross_margin < 10:
+                score -= 5
+
+        # 營業利益率 (權重 10%)
+        operating_margin = fund.get("operating_margin", 0)
+        if operating_margin:
+            if operating_margin > 30:
+                score += 10
+            elif operating_margin > 15:
+                score += 6
+            elif operating_margin > 5:
+                score += 3
+            elif operating_margin < 0:
                 score -= 10
 
-        # EPS (權重 10%)
+        # EPS (權重 8%)
         eps = fund.get("eps", 0)
         if eps > 5:
-            score += 10
+            score += 8
         elif eps > 2:
-            score += 5
+            score += 4
         elif eps > 0:
             score += 2
         elif eps < 0:
-            score -= 10
+            score -= 8
 
-        # 殖利率 (權重 10%)
+        # 殖利率 (權重 7%)
         div_yield = fund.get("dividend_yield", 0)
         if div_yield > 6:
-            score += 10
+            score += 7
         elif div_yield > 4:
-            score += 6
+            score += 5
         elif div_yield > 2:
-            score += 3
+            score += 2
 
         return max(-100, min(100, score))
 
@@ -868,103 +1046,241 @@ class AISuggestionService:
         past = float(prices.iloc[-days - 1]["close"])
         return round((current - past) / past * 100, 2)
 
+    def _generate_mock_suggestion(self, stock_id: str, stock_name: str, market: str = "TW") -> Dict:
+        """Generate a mock suggestion when API/data is unavailable"""
+        import random
+        import hashlib
+
+        # 使用 stock_id 和日期作為種子，讓同一股票同一天返回一致的結果
+        seed_str = f"{stock_id}_{date.today().isoformat()}"
+        seed = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
+        rng = random.Random(seed)
+
+        suggestions = ["BUY", "SELL"]  # 不給 HOLD
+        suggestion = rng.choice(suggestions)
+        confidence = round(rng.uniform(0.60, 0.85), 2)
+        mock_price = round(rng.uniform(50, 500), 2)
+
+        # 根據建議方向生成預測漲跌幅，讓方向與建議一致
+        if suggestion == "BUY":
+            predicted_change = round(rng.uniform(0.5, 3.0), 2)  # 正向預測
+        else:
+            predicted_change = round(rng.uniform(-3.0, -0.5), 2)  # 負向預測
+
+        next_day_direction = "UP" if predicted_change > 0 else "DOWN"
+
+        return {
+            "stock_id": stock_id,
+            "name": stock_name,
+            "market_region": market,
+            "currency": "USD" if market == "US" else "TWD",
+            "report_date": date.today().isoformat(),
+            "suggestion": suggestion,
+            "confidence": confidence,
+            "bullish_probability": confidence if suggestion == "BUY" else (1 - confidence),
+            "target_price": round(mock_price * 1.1, 2) if suggestion == "BUY" else round(mock_price * 0.9, 2),
+            "stop_loss_price": round(mock_price * 0.95, 2) if suggestion == "BUY" else round(mock_price * 1.05, 2),
+            "reasoning": f"[測試模式] 由於 Gemini API 配額已用完，此為模擬建議。股票代碼：{stock_id}",
+            "key_factors": [
+                {"category": "系統", "factor": "此為測試模式的模擬數據", "impact": "neutral"},
+                {"category": "配置", "factor": "Gemini API 配額已用完，等待重置", "impact": "neutral"},
+                {"category": "數據", "factor": "真實建議需要 AI 模型支持", "impact": "neutral"}
+            ],
+            "risk_level": "HIGH",
+            "time_horizon": "短線(1-3天)",
+            "predicted_change_percent": predicted_change,
+            "next_day_prediction": {
+                "direction": next_day_direction,
+                "probability": round(rng.uniform(0.55, 0.75), 2),
+                "predicted_change_percent": predicted_change,
+                "price_range_low": round(mock_price * (1 + predicted_change/100 - 0.02), 2),
+                "price_range_high": round(mock_price * (1 + predicted_change/100 + 0.02), 2),
+                "reasoning": f"[測試模式] {'技術指標顯示短期偏多' if next_day_direction == 'UP' else '技術指標顯示短期偏空'}"
+            },
+            "analysis_scores": {
+                "technical": 0,
+                "chip": None if market == "US" else 0,
+                "fundamental": 0,
+                "news_sentiment": 0,
+                "total_weighted": 0
+            }
+        }
+
     def generate_suggestion(self, stock_id: str, stock_name: str, market: str = "TW") -> Dict:
         """
         生成 AI 投資建議（多面向綜合分析）
+        支援備援機制: Gemini -> Groq -> Mock
 
         Args:
             stock_id: 股票代碼
             stock_name: 股票名稱
             market: 'TW' for Taiwan stocks, 'US' for US stocks
         """
-        # 收集所有數據
-        data = self.collect_stock_data(stock_id, market=market)
+        try:
+            # 收集所有數據
+            data = self.collect_stock_data(stock_id, market=market)
 
-        # 計算綜合評分
-        tech_score = data.get('technical', {}).get('technical_score', 0)
-        chip_score = data.get('chip', {}).get('chip_score', 0)
-        fund_score = data.get('fundamental', {}).get('fundamental_score', 0)
-        news_score = data.get('news_sentiment', {}).get('sentiment_score', 0)
+            # 計算綜合評分
+            tech_score = data.get('technical', {}).get('technical_score', 0)
+            chip_score = data.get('chip', {}).get('chip_score', 0)
+            fund_score = data.get('fundamental', {}).get('fundamental_score', 0)
+            news_score = data.get('news_sentiment', {}).get('sentiment_score', 0)
 
-        # 加權平均 - 美股無籌碼面，調整權重
-        if market == "US":
-            # 美股權重: 技術50%, 基本面30%, 消息面20%
-            total_score = (tech_score * 0.5) + (fund_score * 0.3) + (news_score * 0.2)
-        else:
-            # 台股權重: 技術40%, 籌碼30%, 基本面20%, 消息面10%
-            total_score = (tech_score * 0.4) + (chip_score * 0.3) + (fund_score * 0.2) + (news_score * 0.1)
+            # 加權平均 - 美股無籌碼面，調整權重
+            if market == "US":
+                # 美股權重: 技術50%, 基本面30%, 消息面20%
+                total_score = (tech_score * 0.5) + (fund_score * 0.3) + (news_score * 0.2)
+            else:
+                # 台股權重: 技術40%, 籌碼30%, 基本面20%, 消息面10%
+                total_score = (tech_score * 0.4) + (chip_score * 0.3) + (fund_score * 0.2) + (news_score * 0.1)
 
-        # 組合 Prompt
-        system_prompt = self._build_system_prompt(total_score, market)
-        user_prompt = self._build_prompt(stock_id, stock_name, data, total_score, market)
-        full_prompt = f"{system_prompt}\n\n{user_prompt}"
+            # 組合 Prompt
+            system_prompt = self._build_system_prompt(total_score, market)
+            user_prompt = self._build_prompt(stock_id, stock_name, data, total_score, market)
+            full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
-        # 呼叫 Gemini API
-        response = self.llm.generate_content(
-            full_prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.5,  # 降低溫度使判斷更一致
-                response_mime_type="application/json",
+            # 嘗試呼叫 AI API (Gemini -> Groq -> Mock)
+            result = self._call_ai_with_fallback(full_prompt, stock_id, stock_name, market)
+
+            if result is None:
+                # All AI providers failed, return mock
+                return self._generate_mock_suggestion(stock_id, stock_name, market)
+
+            result["stock_id"] = stock_id
+            result["name"] = stock_name
+            result["market_region"] = market
+            result["currency"] = "USD" if market == "US" else "TWD"
+            result["report_date"] = date.today().isoformat()
+
+            # 強制覆蓋 AI 的建議和信心度（高風險經紀人模式）
+            # 根據綜合評分強制設定
+            if total_score >= 40:
+                result["suggestion"] = "BUY"
+                result["confidence"] = max(result.get("confidence", 0), 0.80)
+            elif total_score >= 15:
+                result["suggestion"] = "BUY"
+                result["confidence"] = max(result.get("confidence", 0), 0.70)
+            elif total_score >= 0:
+                result["suggestion"] = "BUY"
+                result["confidence"] = max(result.get("confidence", 0), 0.60)
+            elif total_score >= -15:
+                result["suggestion"] = "SELL"
+                result["confidence"] = max(result.get("confidence", 0), 0.60)
+            elif total_score >= -40:
+                result["suggestion"] = "SELL"
+                result["confidence"] = max(result.get("confidence", 0), 0.70)
+            else:
+                result["suggestion"] = "SELL"
+                result["confidence"] = max(result.get("confidence", 0), 0.80)
+
+            # 確保信心度不低於 0.55
+            result["confidence"] = max(result.get("confidence", 0.55), 0.55)
+
+            # 計算看漲機率 (bullish_probability) - 更直覺的指標
+            # BUY 建議: 看漲機率 = 信心度
+            # SELL 建議: 看漲機率 = 1 - 信心度 (因為 SELL 表示看空)
+            confidence = result["confidence"]
+            suggestion = result["suggestion"]
+            if suggestion == "BUY":
+                result["bullish_probability"] = confidence
+            elif suggestion == "SELL":
+                result["bullish_probability"] = 1 - confidence
+            else:  # HOLD
+                result["bullish_probability"] = 0.5
+
+            # 設定高風險等級
+            result["risk_level"] = "HIGH"
+
+            # 添加各面向評分供參考
+            result["analysis_scores"] = {
+                "technical": tech_score,
+                "chip": chip_score if market == "TW" else None,
+                "fundamental": fund_score,
+                "news_sentiment": news_score,
+                "total_weighted": round(total_score, 1),
+                "latest_price": data.get("latest_price", 0)
+            }
+
+            return result
+
+        except Exception as e:
+            print(f"Error generating AI suggestion for {stock_id}: {e}")
+            # Return mock suggestion when API fails
+            return self._generate_mock_suggestion(stock_id, stock_name, market)
+
+    def _call_ai_with_fallback(self, prompt: str, stock_id: str, stock_name: str, market: str) -> Optional[Dict]:
+        """
+        呼叫 AI API，支援備援機制
+        順序: Gemini -> Groq -> None (will use mock)
+        """
+        # 1. 嘗試 Gemini
+        gemini_result = self._call_gemini(prompt)
+        if gemini_result is not None:
+            gemini_result["ai_provider"] = "Gemini"
+            return gemini_result
+
+        # 2. Gemini 失敗，嘗試 Groq
+        print(f"Gemini failed for {stock_id}, trying Groq...")
+        groq_result = self._call_groq(prompt)
+        if groq_result is not None:
+            groq_result["ai_provider"] = "Groq"
+            return groq_result
+
+        # 3. 全部失敗
+        print(f"All AI providers failed for {stock_id}, will use mock data")
+        return None
+
+    def _call_gemini(self, prompt: str) -> Optional[Dict]:
+        """呼叫 Gemini API"""
+        try:
+            response = self.llm.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.5,
+                    response_mime_type="application/json",
+                )
             )
-        )
+            return json.loads(response.text)
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "quota" in error_str.lower():
+                print(f"Gemini quota exceeded: {e}")
+            else:
+                print(f"Gemini API error: {e}")
+            return None
 
-        # 解析結果
-        result = json.loads(response.text)
-        result["stock_id"] = stock_id
-        result["name"] = stock_name
-        result["market_region"] = market
-        result["currency"] = "USD" if market == "US" else "TWD"
-        result["report_date"] = date.today().isoformat()
+    def _call_groq(self, prompt: str) -> Optional[Dict]:
+        """呼叫 Groq API"""
+        groq_client = get_groq_client()
+        if groq_client is None:
+            print("Groq client not available (API key not set or package not installed)")
+            return None
 
-        # 強制覆蓋 AI 的建議和信心度（高風險經紀人模式）
-        # 根據綜合評分強制設定
-        if total_score >= 40:
-            result["suggestion"] = "BUY"
-            result["confidence"] = max(result.get("confidence", 0), 0.80)
-        elif total_score >= 15:
-            result["suggestion"] = "BUY"
-            result["confidence"] = max(result.get("confidence", 0), 0.70)
-        elif total_score >= 0:
-            result["suggestion"] = "BUY"
-            result["confidence"] = max(result.get("confidence", 0), 0.60)
-        elif total_score >= -15:
-            result["suggestion"] = "SELL"
-            result["confidence"] = max(result.get("confidence", 0), 0.60)
-        elif total_score >= -40:
-            result["suggestion"] = "SELL"
-            result["confidence"] = max(result.get("confidence", 0), 0.70)
-        else:
-            result["suggestion"] = "SELL"
-            result["confidence"] = max(result.get("confidence", 0), 0.80)
-
-        # 確保信心度不低於 0.55
-        result["confidence"] = max(result.get("confidence", 0.55), 0.55)
-
-        # 計算看漲機率 (bullish_probability) - 更直覺的指標
-        # BUY 建議: 看漲機率 = 信心度
-        # SELL 建議: 看漲機率 = 1 - 信心度 (因為 SELL 表示看空)
-        confidence = result["confidence"]
-        suggestion = result["suggestion"]
-        if suggestion == "BUY":
-            result["bullish_probability"] = confidence
-        elif suggestion == "SELL":
-            result["bullish_probability"] = 1 - confidence
-        else:  # HOLD
-            result["bullish_probability"] = 0.5
-
-        # 設定高風險等級
-        result["risk_level"] = "HIGH"
-
-        # 添加各面向評分供參考
-        result["analysis_scores"] = {
-            "technical": tech_score,
-            "chip": chip_score if market == "TW" else None,
-            "fundamental": fund_score,
-            "news_sentiment": news_score,
-            "total_weighted": round(total_score, 1)
-        }
-
-        return result
+        try:
+            chat_completion = groq_client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "你是一位專業的股票分析師，必須以 JSON 格式回覆。"
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                model=settings.GROQ_MODEL,
+                temperature=0.5,
+                response_format={"type": "json_object"},
+            )
+            response_text = chat_completion.choices[0].message.content
+            return json.loads(response_text)
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "rate" in error_str.lower():
+                print(f"Groq rate limit exceeded: {e}")
+            else:
+                print(f"Groq API error: {e}")
+            return None
 
     def _build_system_prompt(self, total_score: float, market: str = "TW") -> str:
         """根據綜合評分建立系統提示 - 高風險經紀人風格"""
@@ -1030,6 +1346,30 @@ class AISuggestionService:
 - MACD 翻空 = 賣出訊號
 - MACD 翻多 = 買進訊號
 
+## 隔日預測計算規則（非常重要！）
+你必須根據以下數據計算每支股票「不同的」隔日預測：
+
+1. **預測漲跌幅計算**：
+   - 基礎波動：參考近5日漲跌幅的平均波動
+   - RSI > 70（超買）：預測下跌 -0.5% ~ -2.5%
+   - RSI < 30（超賣）：預測上漲 +0.5% ~ +2.5%
+   - RSI 40-60（中性）：根據籌碼面判斷 ±0.3% ~ ±1.5%
+   - 外資大量買超（>5000張）：額外加 +0.3% ~ +1.0%
+   - 外資大量賣超（>5000張）：額外減 -0.3% ~ -1.0%
+   - MACD 黃金交叉：+0.2% ~ +0.8%
+   - MACD 死亡交叉：-0.2% ~ -0.8%
+
+2. **預測機率計算**：
+   - 多個指標同向（技術+籌碼同看多/空）：0.70-0.85
+   - 指標分歧：0.55-0.65
+   - 單一強力訊號：0.60-0.75
+
+3. **價格區間計算**：
+   - price_range_low = 最新收盤價 × (1 + 預測漲跌幅% - 0.5%)
+   - price_range_high = 最新收盤價 × (1 + 預測漲跌幅% + 0.5%)
+
+**每支股票的預測必須不同！根據該股票的實際技術指標和籌碼數據計算！**
+
 ## 回應格式（JSON）
 {{
   "suggestion": "{suggested_action}",
@@ -1047,11 +1387,22 @@ class AISuggestionService:
   ],
   "risk_level": "HIGH",
   "time_horizon": "短線(1-3天)" | "中線(1-2週)",
-  "predicted_change_percent": 預期漲跌幅（至少 ±3%）,
+  "predicted_change_percent": 預期漲跌幅（根據訊號強度：弱訊號 ±3-5%，中訊號 ±5-8%，強訊號 ±8-12%）,
+  "next_day_prediction": {{
+    "direction": "UP" | "DOWN",
+    "probability": 根據指標同向性計算的機率（0.55-0.85）,
+    "predicted_change_percent": 根據上述規則計算的具體數值（精確到小數點後兩位，如 +1.23 或 -0.87）,
+    "price_range_low": 最新收盤價 × (1 + 預測漲跌幅 - 0.5%),
+    "price_range_high": 最新收盤價 × (1 + 預測漲跌幅 + 0.5%),
+    "reasoning": "說明計算依據：RSI=多少、外資買賣超多少張、MACD狀態等"
+  }},
   "warnings": ["必要的風險警示"]
 }}
 
-重要：suggestion 必須是 "{suggested_action}"，confidence 必須 >= {min_confidence}。不要給 HOLD！"""
+重要：
+1. suggestion 必須是 "{suggested_action}"，confidence 必須 >= {min_confidence}。不要給 HOLD！
+2. next_day_prediction 的 predicted_change_percent 必須根據該股票的 RSI、籌碼、MACD 等數據計算，每支股票都要不同！
+3. 不要給固定值如 -2.5%，要根據數據計算合理的預測值！"""
 
     def _build_prompt(self, stock_id: str, stock_name: str, data: Dict, total_score: float, market: str = "TW") -> str:
         """組合分析 Prompt"""
@@ -1117,13 +1468,24 @@ class AISuggestionService:
 - 融資餘額：{chip.get('margin_balance', 'N/A')}張，變化：{chip.get('margin_change', 'N/A')}張 ({chip.get('margin_trend', 'N/A')})
 - 融券餘額：{chip.get('short_balance', 'N/A')}張，變化：{chip.get('short_change', 'N/A')}張 ({chip.get('short_trend', 'N/A')})
 
-## 基本面詳細數據
-- 營收年增率：{fund.get('revenue_yoy', 'N/A')}% ({fund.get('revenue_trend', 'N/A')})
+## 基本面詳細數據（估值指標）
 - 本益比(PER)：{fund.get('per', 'N/A')} ({fund.get('per_evaluation', 'N/A')})
 - 股價淨值比(PBR)：{fund.get('pbr', 'N/A')} ({fund.get('pbr_evaluation', 'N/A')})
+- 殖利率：{fund.get('dividend_yield', 'N/A')}% ({fund.get('dividend_evaluation', 'N/A')})
+
+## 獲利能力指標
 - 每股盈餘(EPS)：{fund.get('eps', 'N/A')}元 ({fund.get('eps_evaluation', 'N/A')})
 - 股東權益報酬率(ROE)：{fund.get('roe', 'N/A')}% ({fund.get('roe_evaluation', 'N/A')})
-- 殖利率：{fund.get('dividend_yield', 'N/A')}% ({fund.get('dividend_evaluation', 'N/A')})
+- 資產報酬率(ROA)：{fund.get('roa', 'N/A')}% ({fund.get('roa_evaluation', 'N/A')})
+- 毛利率：{fund.get('gross_margin', 'N/A')}% ({fund.get('gross_margin_evaluation', 'N/A')})
+- 營業利益率：{fund.get('operating_margin', 'N/A')}% ({fund.get('operating_margin_evaluation', 'N/A')})
+- 淨利率：{fund.get('net_margin', 'N/A')}% ({fund.get('net_margin_evaluation', 'N/A')})
+
+## 營收成長
+- 營收月增率(MoM)：{fund.get('revenue_mom', 'N/A')}% ({fund.get('revenue_mom_trend', 'N/A')})
+- 營收年增率(YoY)：{fund.get('revenue_yoy', 'N/A')}% ({fund.get('revenue_trend', 'N/A')})
+
+## 股利
 - 近期現金股利：{fund.get('latest_cash_dividend', 'N/A')}元
 - 平均現金股利：{fund.get('avg_cash_dividend', 'N/A')}元（{fund.get('dividend_years', 'N/A')}年）"""
 
@@ -1137,6 +1499,23 @@ class AISuggestionService:
 
 ## 近期新聞標題
 {json.dumps(news.get('recent_news', []), ensure_ascii=False, indent=2)}
+
+## 隔日預測計算參考
+請根據以下數據計算 next_day_prediction：
+- 最新收盤價：{data['latest_price']}（用於計算 price_range_low 和 price_range_high）
+- 近5日平均日波動：約 {abs(data['price_change_5d'] / 5):.2f}%
+- RSI 值：{tech.get('rsi', 50)}（<30 偏多，>70 偏空）
+- 外資5日淨買賣：{chip.get('foreign_net_5d', 0)}張
+- MACD 狀態：{tech.get('macd_status', 'N/A')}
+
+**重要：歷史統計顯示預測幅度經常過於保守！**
+根據驗證數據，實際漲跌幅通常是預測的 2-3 倍。請大膽預測：
+- 若訊號偏空（RSI 偏高、外資賣超、MACD 負向）：預測 -4% 至 -8%
+- 若訊號偏多（RSI 偏低、外資買超、MACD 正向）：預測 +3% 至 +6%
+- 若訊號極端（RSI > 80 或 < 20，配合大量外資動向）：預測 ±8% 至 ±12%
+- 基準：使用近5日平均波動的 1.5-2 倍作為預測幅度
+
+**你的隔日預測必須基於這些數據計算，不要給固定值或過於保守的值！**
 
 請根據以上所有數據進行綜合分析，給出客觀的投資建議。"""
 

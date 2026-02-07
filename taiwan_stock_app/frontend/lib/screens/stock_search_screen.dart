@@ -267,7 +267,6 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
             trailing: _AddToWatchlistButton(
               stockId: stock.stockId,
               market: marketProvider.marketCode,
-              onAdd: () => _addToWatchlist(stock.stockId, marketProvider.marketCode),
             ),
           ),
         );
@@ -275,39 +274,15 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
     );
   }
 
-  Future<void> _addToWatchlist(String stockId, String market) async {
-    try {
-      await context.read<WatchlistProvider>().addStock(stockId, market: market);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(market == 'US' ? 'Added to watchlist' : '已加入自選股'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(market == 'US' ? 'Error: $e' : '錯誤：$e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-    }
-  }
 }
 
 class _AddToWatchlistButton extends StatefulWidget {
   final String stockId;
   final String market;
-  final VoidCallback onAdd;
 
   const _AddToWatchlistButton({
     required this.stockId,
     required this.market,
-    required this.onAdd,
   });
 
   @override
@@ -316,6 +291,40 @@ class _AddToWatchlistButton extends StatefulWidget {
 
 class _AddToWatchlistButtonState extends State<_AddToWatchlistButton> {
   bool _isAdding = false;
+
+  Future<void> _addToWatchlist() async {
+    if (_isAdding) return;
+
+    setState(() => _isAdding = true);
+
+    try {
+      await context.read<WatchlistProvider>().addStock(
+        widget.stockId,
+        market: widget.market,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.market == 'US' ? 'Added to watchlist' : '已加入自選股'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.market == 'US' ? 'Error: $e' : '錯誤：$e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isAdding = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -358,18 +367,9 @@ class _AddToWatchlistButtonState extends State<_AddToWatchlistButton> {
                 )
               : const Icon(Icons.add, size: 18),
           label: Text(_isAdding
-              ? (isUS ? 'Adding' : '加入中')
+              ? (isUS ? 'Adding...' : '加入中...')
               : (isUS ? 'Add' : '加入')),
-          onPressed: _isAdding
-              ? null
-              : () async {
-                  setState(() => _isAdding = true);
-                  widget.onAdd();
-                  await Future.delayed(const Duration(milliseconds: 500));
-                  if (mounted) {
-                    setState(() => _isAdding = false);
-                  }
-                },
+          onPressed: _isAdding ? null : _addToWatchlist,
         );
       },
     );

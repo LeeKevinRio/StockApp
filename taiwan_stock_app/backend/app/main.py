@@ -20,6 +20,7 @@ from app.routers import (
     screener_router,
     admin_router,
 )
+from app.routers.predictions import router as predictions_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -50,12 +51,20 @@ app.include_router(portfolio_router)
 app.include_router(fundamental_router)
 app.include_router(screener_router)
 app.include_router(admin_router)
+app.include_router(predictions_router)
 
 
 @app.on_event("startup")
 def on_startup():
     """Create database tables on startup"""
     create_tables()
+
+    # 啟動排程器
+    try:
+        from app.scheduler import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        print(f"Warning: Could not start scheduler: {e}")
 
 
 @app.get("/")

@@ -9,6 +9,9 @@ import 'providers/alert_provider.dart';
 import 'providers/app_state_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/market_provider.dart';
+import 'providers/notification_provider.dart';
+import 'providers/dashboard_provider.dart';
+import 'screens/notification_center_screen.dart';
 import 'config/app_theme.dart';
 import 'utils/page_transitions.dart';
 import 'screens/login_screen.dart';
@@ -18,6 +21,7 @@ import 'screens/stock_detail_screen.dart';
 import 'screens/alerts_screen.dart';
 import 'screens/portfolio_screen.dart';
 import 'screens/admin_screen.dart';
+import 'screens/prediction_stats_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,6 +60,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => ThemeProvider(),
         ),
+        ChangeNotifierProvider(
+          create: (_) => NotificationProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => DashboardProvider(apiService),
+        ),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
@@ -73,6 +83,8 @@ class MyApp extends StatelessWidget {
               '/alerts': (context) => const AlertsScreen(),
               '/portfolio': (context) => const PortfolioScreen(),
               '/admin': (context) => const AdminScreen(),
+              '/notifications': (context) => const NotificationCenterScreen(),
+              '/prediction-stats': (context) => const PredictionStatsScreen(),
             },
             onGenerateRoute: (settings) {
               if (settings.name == '/stock-detail') {

@@ -97,3 +97,27 @@ class FinMindFetcher:
     def get_stock_list(self) -> pd.DataFrame:
         """取得所有上市櫃股票清單"""
         return self._request("TaiwanStockInfo", {})
+
+    def get_balance_sheet(
+        self, stock_id: str, start_date: str, end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """取得資產負債表"""
+        params = {"data_id": stock_id, "start_date": start_date}
+        if end_date:
+            params["end_date"] = end_date
+        try:
+            return self._request("TaiwanStockBalanceSheet", params)
+        except:
+            return pd.DataFrame()
+
+    def get_cash_flow(
+        self, stock_id: str, start_date: str, end_date: Optional[str] = None
+    ) -> pd.DataFrame:
+        """取得現金流量表"""
+        params = {"data_id": stock_id, "start_date": start_date}
+        if end_date:
+            params["end_date"] = end_date
+        try:
+            return self._request("TaiwanStockCashFlowsStatement", params)
+        except:
+            return pd.DataFrame()

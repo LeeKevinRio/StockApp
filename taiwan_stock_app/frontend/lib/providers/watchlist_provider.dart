@@ -36,14 +36,23 @@ class WatchlistProvider with ChangeNotifier {
         .toSet();
   }
 
-  Future<void> loadWatchlist({String? market}) async {
-    _isLoading = true;
+  /// 清除錯誤狀態
+  void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  Future<void> loadWatchlist({String? market, bool silent = false}) async {
+    if (!silent) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
 
     try {
       _items = await _apiService.getWatchlist(market: market ?? _marketFilter);
       _applySortAndFilter();
+      _error = null;  // 清除任何之前的錯誤
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -55,10 +64,13 @@ class WatchlistProvider with ChangeNotifier {
 
   /// Set market filter and reload watchlist
   void setMarketFilter(String? market) {
-    if (_marketFilter != market) {
-      _marketFilter = market;
-      loadWatchlist(market: market);
-    }
+    // 即使市場相同也強制重新載入（解決首次載入問題）
+    _marketFilter = market;
+    // 清除舊資料，避免顯示混合結果
+    _items = [];
+    _sortedItems = [];
+    notifyListeners();
+    loadWatchlist(market: market);
   }
 
   Future<void> refresh() async {
@@ -66,24 +78,37 @@ class WatchlistProvider with ChangeNotifier {
   }
 
   Future<void> addStock(String stockId, {String? notes, String market = 'TW'}) async {
+    // 先檢查是否已在自選股中
+    if (isInWatchlist(stockId)) {
+      throw Exception(market == 'US' ? 'Already in watchlist' : '此股票已在自選股中');
+    }
+
     try {
       await _apiService.addToWatchlist(stockId, notes: notes, market: market);
-      await loadWatchlist(market: _marketFilter);
+      // 靜默刷新列表（不顯示 loading）
+      await loadWatchlist(market: _marketFilter, silent: true);
     } catch (e) {
-      _error = e.toString();
-      notifyListeners();
+      // 不要設置全局 error，只拋出讓調用方處理
       rethrow;
     }
   }
 
   Future<void> removeStock(String stockId) async {
+    // 樂觀更新：先從本地移除
+    final removedItem = _items.firstWhere(
+      (item) => item.stockId == stockId,
+      orElse: () => throw Exception('Stock not found'),
+    );
+    _items.removeWhere((item) => item.stockId == stockId);
+    _applySortAndFilter();
+    notifyListeners();
+
     try {
       await _apiService.removeFromWatchlist(stockId);
-      _items.removeWhere((item) => item.stockId == stockId);
-      _applySortAndFilter();
-      notifyListeners();
     } catch (e) {
-      _error = e.toString();
+      // 如果刪除失敗，恢復本地狀態
+      _items.add(removedItem);
+      _applySortAndFilter();
       notifyListeners();
       rethrow;
     }

@@ -28,6 +28,7 @@ class AIReport(Base):
     risk_level = Column(String(20))  # HIGH, MEDIUM, LOW
     time_horizon = Column(String(50))  # 操作週期（短線/中線/長線）
     predicted_change_percent = Column(Numeric(5, 2))  # 預期漲跌幅 %
+    next_day_prediction = Column(JSON)  # 隔天漲跌預測 {direction, probability, ...}
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

@@ -30,6 +30,7 @@ class _InstitutionalChartState extends State<InstitutionalChart> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -38,11 +39,13 @@ class _InstitutionalChartState extends State<InstitutionalChart> {
     try {
       final apiService = Provider.of<ApiService>(context, listen: false);
       final data = await apiService.getInstitutional(widget.stockId, days: widget.days);
+      if (!mounted) return;
       setState(() {
         _data = data;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;

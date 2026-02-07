@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../models/stock.dart';
 import '../models/stock_history.dart';
-import '../widgets/candlestick_chart.dart';
+import '../models/chart_settings.dart';
+import '../models/ai_suggestion.dart';
+import '../widgets/chart/enhanced_candlestick_chart.dart';
 import '../widgets/indicator_charts/indicators_tab_view.dart';
 import '../widgets/news_card.dart';
 import '../widgets/sentiment_view.dart';
@@ -325,9 +327,20 @@ class _KLineTabContent extends StatefulWidget {
 }
 
 class _KLineTabContentState extends State<_KLineTabContent> {
-  String _selectedPeriod = 'day';
-  int _days = 60;
+  ChartSettings _chartSettings = ChartSettings();
   Future<List<StockHistory>>? _dataFuture;
+  Future<List<PatternMarker>>? _patternsFuture;
+
+  int get _days {
+    switch (_chartSettings.period) {
+      case ChartPeriod.day:
+        return 60;
+      case ChartPeriod.week:
+        return 52;
+      case ChartPeriod.month:
+        return 24;
+    }
+  }
 
   @override
   void initState() {
@@ -340,180 +353,130 @@ class _KLineTabContentState extends State<_KLineTabContent> {
     _dataFuture = apiService.getStockHistory(
       widget.stockId,
       days: _days,
-      period: _selectedPeriod,
+      period: _chartSettings.period.value,
       market: widget.market,
     );
+
+    // Load patterns
+    if (_chartSettings.showPatterns) {
+      _loadPatterns();
+    }
   }
 
-  void _onPeriodChanged(String period) {
+  void _loadPatterns() {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    _patternsFuture = apiService
+        .getStockPatterns(widget.stockId, lookback: _days, market: widget.market)
+        .then((data) {
+      final patterns = (data['patterns'] as List?)
+              ?.map((p) => PatternMarker.fromJson(p))
+              .toList() ??
+          [];
+      return patterns;
+    }).catchError((_) => <PatternMarker>[]);
+  }
+
+  void _onSettingsChanged(ChartSettings newSettings) {
+    final periodChanged = newSettings.period != _chartSettings.period;
     setState(() {
-      _selectedPeriod = period;
-      // Adjust days based on period
-      switch (period) {
-        case 'day':
-          _days = 60;
-          break;
-        case 'week':
-          _days = 52; // ~1 year
-          break;
-        case 'month':
-          _days = 24; // 2 years
-          break;
+      _chartSettings = newSettings;
+      if (periodChanged) {
+        _loadData();
       }
-      _loadData();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Period selector
-        _buildPeriodSelector(context),
-        // Chart content
-        Expanded(
-          child: FutureBuilder<List<StockHistory>>(
-            future: _dataFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+    return FutureBuilder<List<StockHistory>>(
+      future: _dataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-              if (snapshot.hasError) {
-                String errorMsg = '載入K線數據失敗';
-                String errorDetail = '';
+        if (snapshot.hasError) {
+          String errorMsg = '載入K線數據失敗';
+          String errorDetail = '';
 
-                if (snapshot.error is ApiException) {
-                  final apiError = snapshot.error as ApiException;
-                  errorMsg = '載入失敗 (${apiError.statusCode})';
-                  errorDetail = apiError.message;
-                } else {
-                  errorDetail = snapshot.error.toString();
-                }
+          if (snapshot.error is ApiException) {
+            final apiError = snapshot.error as ApiException;
+            errorMsg = '載入失敗 (${apiError.statusCode})';
+            errorDetail = apiError.message;
+          } else {
+            errorDetail = snapshot.error.toString();
+          }
 
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          errorMsg,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          errorDetail,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Theme.of(context).textTheme.bodySmall?.color,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton.icon(
-                          onPressed: () => setState(() => _loadData()),
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('重新載入'),
-                        ),
-                      ],
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    errorMsg,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
+                    textAlign: TextAlign.center,
                   ),
-                );
-              }
-
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.show_chart,
-                        size: 64,
-                        color: Theme.of(context).disabledColor,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text('暫無K線數據'),
-                    ],
+                  const SizedBox(height: 8),
+                  Text(
+                    errorDetail,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                );
-              }
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () => setState(() => _loadData()),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('重新載入'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
 
-              return CandlestickChart(
-                data: snapshot.data!,
-                showVolume: true,
-                enableZoom: true,
-                enableCrosshair: true,
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.show_chart,
+                  size: 64,
+                  color: Theme.of(context).disabledColor,
+                ),
+                const SizedBox(height: 16),
+                const Text('暫無K線數據'),
+              ],
+            ),
+          );
+        }
 
-  Widget _buildPeriodSelector(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).dividerColor,
-            width: 1,
-          ),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _buildPeriodButton(context, 'day', '日K'),
-          const SizedBox(width: 8),
-          _buildPeriodButton(context, 'week', '週K'),
-          const SizedBox(width: 8),
-          _buildPeriodButton(context, 'month', '月K'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPeriodButton(BuildContext context, String period, String label) {
-    final isSelected = _selectedPeriod == period;
-    return GestureDetector(
-      onTap: () => _onPeriodChanged(period),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? Theme.of(context).primaryColor
-              : Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected
-                ? Theme.of(context).primaryColor
-                : Theme.of(context).dividerColor,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected
-                ? Colors.white
-                : Theme.of(context).textTheme.bodyMedium?.color,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ),
+        return FutureBuilder<List<PatternMarker>>(
+          future: _patternsFuture,
+          builder: (context, patternsSnapshot) {
+            return EnhancedCandlestickChart(
+              data: snapshot.data!,
+              settings: _chartSettings,
+              patterns: patternsSnapshot.data ?? [],
+              onSettingsChanged: _onSettingsChanged,
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -544,6 +507,7 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
   }
 
   Future<void> _loadSuggestion() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -551,8 +515,9 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
 
     try {
       final apiService = Provider.of<ApiService>(context, listen: false);
-      final suggestion = await apiService.getStockSuggestion(widget.stockId, market: widget.market);
+      final suggestion = await apiService.getStockSuggestion(widget.stockId, market: widget.market, refresh: true);
 
+      if (!mounted) return;
       setState(() {
         _suggestion = {
           'stock_id': suggestion.stockId,
@@ -564,10 +529,12 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
           'stop_loss_price': suggestion.stopLossPrice,
           'key_factors': suggestion.keyFactors,
           'report_date': suggestion.reportDate,
+          'next_day_prediction': suggestion.nextDayPrediction,
         };
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -623,9 +590,17 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
     final reasoning = _suggestion!['reasoning'] as String? ?? '';
     final targetPrice = _suggestion!['target_price'] as num?;
     final stopLossPrice = _suggestion!['stop_loss_price'] as num?;
+    final reportDate = _suggestion!['report_date'] as DateTime?;
 
     final suggestionColor = _getSuggestionColor(suggestion);
     final suggestionIcon = _getSuggestionIcon(suggestion);
+
+    // 時間格式化
+    final now = DateTime.now();
+    final currentTimeStr = '${now.year}/${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final dataTimeStr = reportDate != null
+        ? '${reportDate.year}/${reportDate.month.toString().padLeft(2, '0')}/${reportDate.day.toString().padLeft(2, '0')}'
+        : '未知';
 
     return RefreshIndicator(
       onRefresh: _loadSuggestion,
@@ -635,6 +610,35 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 時間資訊卡片
+            Card(
+              color: Colors.grey[100],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '當前時間：$currentTimeStr',
+                            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                          ),
+                          Text(
+                            '資料日期：$dataTimeStr',
+                            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             // AI 建議卡片
             Card(
               child: Padding(
@@ -678,6 +682,9 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
               ),
             ),
             const SizedBox(height: 16),
+            // 隔日漲跌預測
+            if (_suggestion!['next_day_prediction'] != null)
+              _buildNextDayPredictionCard(_suggestion!['next_day_prediction']),
             // 價格目標
             if (targetPrice != null || stopLossPrice != null)
               Card(
@@ -801,5 +808,131 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
       default:
         return '建議持有';
     }
+  }
+
+  Widget _buildNextDayPredictionCard(NextDayPrediction prediction) {
+    final direction = prediction.direction;
+    final probability = prediction.probability;
+    final predictedChange = prediction.predictedChangePercent;
+    final priceRangeLow = prediction.priceRangeLow;
+    final priceRangeHigh = prediction.priceRangeHigh;
+    final reasoning = prediction.reasoning;
+
+    final isUp = direction == 'UP';
+    final directionColor = isUp ? Colors.red : Colors.green;
+    final directionIcon = isUp ? Icons.arrow_upward : Icons.arrow_downward;
+    final directionText = isUp ? '預測上漲' : '預測下跌';
+    final changeSign = predictedChange >= 0 ? '+' : '';
+
+    return Card(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              directionColor.withAlpha(20),
+              directionColor.withAlpha(10),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 標題
+            Row(
+              children: [
+                Icon(Icons.schedule, size: 20, color: directionColor),
+                const SizedBox(width: 8),
+                Text(
+                  '明日漲跌預測',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: directionColor,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: directionColor,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(directionIcon, size: 16, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        directionText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // 預測數據
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      const Text('預測機率', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${(probability * 100).toStringAsFixed(0)}%',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: directionColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    children: [
+                      const Text('預測漲跌', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$changeSign${predictedChange.toStringAsFixed(2)}%',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: directionColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (priceRangeLow != null && priceRangeHigh != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                '預測價格區間: $currencySymbol${priceRangeLow.toStringAsFixed(2)} - $currencySymbol${priceRangeHigh.toStringAsFixed(2)}',
+                style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                textAlign: TextAlign.center,
+              ),
+            ],
+            if (reasoning.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                reasoning,
+                style: TextStyle(color: Colors.grey[700], fontSize: 13, height: 1.4),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -16,18 +16,28 @@ class WatchlistScreen extends StatefulWidget {
 }
 
 class _WatchlistScreenState extends State<WatchlistScreen> {
+  String? _lastMarket;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final marketProvider = context.read<MarketProvider>();
-      context.read<WatchlistProvider>().loadWatchlist(market: marketProvider.marketCode);
+      _lastMarket = marketProvider.marketCode;
+      context.read<WatchlistProvider>().setMarketFilter(marketProvider.marketCode);
     });
   }
 
   void _onMarketChanged() {
     final marketProvider = context.read<MarketProvider>();
-    context.read<WatchlistProvider>().setMarketFilter(marketProvider.marketCode);
+    final newMarket = marketProvider.marketCode;
+
+    // 只有市場真的改變時才重新載入
+    if (_lastMarket != newMarket) {
+      _lastMarket = newMarket;
+      // 強制重新載入，清除舊資料
+      context.read<WatchlistProvider>().setMarketFilter(newMarket);
+    }
   }
 
   @override
@@ -126,19 +136,80 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     itemCount: provider.items.length,
                     itemBuilder: (context, index) {
                       final stock = provider.items[index];
-                      return StockCard(
-                        stock: stock,
-                        onTap: () {
-                          Navigator.pushNamed(
-                            context,
-                            '/stock-detail',
-                            arguments: {
-                              'stockId': stock.stockId,
-                              'market': stock.marketRegion,
-                            },
+                      return Dismissible(
+                        key: Key(stock.stockId),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20),
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.delete, color: Colors.white),
+                        ),
+                        confirmDismiss: (direction) async {
+                          return await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: Text(marketProvider.isUSMarket ? 'Confirm Delete' : '確認刪除'),
+                              content: Text(
+                                marketProvider.isUSMarket
+                                    ? 'Remove ${stock.stockId} from watchlist?'
+                                    : '確定要從自選股移除 ${stock.name} (${stock.stockId}) 嗎？',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, false),
+                                  child: Text(marketProvider.isUSMarket ? 'Cancel' : '取消'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: Text(
+                                    marketProvider.isUSMarket ? 'Delete' : '刪除',
+                                    style: const TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ) ?? false;
+                        },
+                        onDismissed: (direction) {
+                          provider.removeStock(stock.stockId);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                marketProvider.isUSMarket
+                                    ? '${stock.stockId} removed'
+                                    : '${stock.name} 已移除',
+                              ),
+                              action: SnackBarAction(
+                                label: marketProvider.isUSMarket ? 'Undo' : '復原',
+                                onPressed: () {
+                                  provider.addStock(
+                                    stock.stockId,
+                                    market: stock.marketRegion ?? 'TW',
+                                  );
+                                },
+                              ),
+                            ),
                           );
                         },
-                        onDelete: () => _confirmDelete(context, stock.stockId, marketProvider.isUSMarket),
+                        child: StockCard(
+                          stock: stock,
+                          onTap: () {
+                            Navigator.pushNamed(
+                              context,
+                              '/stock-detail',
+                              arguments: {
+                                'stockId': stock.stockId,
+                                'market': stock.marketRegion,
+                              },
+                            );
+                          },
+                          onDelete: () => _confirmDelete(context, stock.stockId, marketProvider.isUSMarket),
+                        ),
                       );
                     },
                   ),
