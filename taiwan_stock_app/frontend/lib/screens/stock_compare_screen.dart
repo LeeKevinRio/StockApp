@@ -242,12 +242,13 @@ class _StockCompareScreenState extends State<StockCompareScreen> {
               spacing: 12,
               children: _selectedStocks.asMap().entries.map((entry) {
                 final color = _getStockColor(entry.key);
+                final name = _stockInfo[entry.value]?["name"] ?? "";
                 return Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(width: 16, height: 3, color: color),
                     const SizedBox(width: 4),
-                    Text(entry.value,
+                    Text('${entry.value} $name',
                         style: const TextStyle(fontSize: 12)),
                   ],
                 );
@@ -339,11 +340,14 @@ class _StockCompareScreenState extends State<StockCompareScreen> {
               child: DataTable(
                 columns: [
                   const DataColumn(label: Text('指標')),
-                  ..._selectedStocks.map((id) => DataColumn(
-                        label: Text(id,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.bold)),
-                      )),
+                  ..._selectedStocks.map((id) {
+                    final name = _stockInfo[id]?["name"] ?? "";
+                    return DataColumn(
+                      label: Text('$id\n$name',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 12)),
+                    );
+                  }),
                 ],
                 rows: _buildDataRows(),
               ),

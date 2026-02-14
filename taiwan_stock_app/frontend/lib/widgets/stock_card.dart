@@ -36,18 +36,12 @@ class StockCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      stock.stockId,
+                      '${stock.stockId} ${stock.name}',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        fontSize: 15,
                       ),
-                    ),
-                    Text(
-                      stock.name,
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                     if (stock.industry != null)
                       Text(
