@@ -183,6 +183,115 @@ class ApiService {
     _checkResponse(response);
   }
 
+  // ==================== 自選股分組相關 ====================
+
+  Future<List<Map<String, dynamic>>> getWatchlistGroups() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/watchlist/groups'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    final List<dynamic> data = jsonDecode(response.body);
+    return data.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> createWatchlistGroup(String name, {String color = '#2196F3'}) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/watchlist/groups'),
+      headers: _headers,
+      body: jsonEncode({'name': name, 'color': color}),
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  Future<void> updateWatchlistGroup(int groupId, {String? name, String? color}) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/watchlist/groups/$groupId'),
+      headers: _headers,
+      body: jsonEncode({
+        if (name != null) 'name': name,
+        if (color != null) 'color': color,
+      }),
+    );
+    _checkResponse(response);
+  }
+
+  Future<void> deleteWatchlistGroup(int groupId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/watchlist/groups/$groupId'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+  }
+
+  Future<void> assignStockToGroup(String stockId, int? groupId) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/watchlist/$stockId/group'),
+      headers: _headers,
+      body: jsonEncode({'group_id': groupId}),
+    );
+    _checkResponse(response);
+  }
+
+  // ==================== 交易日記相關 ====================
+
+  Future<Map<String, dynamic>> getDiaryEntries({
+    int limit = 50,
+    int offset = 0,
+    String? stockId,
+    String? tradeType,
+    String? emotion,
+  }) async {
+    final params = <String>['limit=$limit', 'offset=$offset'];
+    if (stockId != null) params.add('stock_id=$stockId');
+    if (tradeType != null) params.add('trade_type=$tradeType');
+    if (emotion != null) params.add('emotion=$emotion');
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/diary?${params.join("&")}'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> createDiaryEntry(Map<String, dynamic> data) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/diary'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> updateDiaryEntry(int entryId, Map<String, dynamic> data) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/diary/$entryId'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  Future<void> deleteDiaryEntry(int entryId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/diary/$entryId'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+  }
+
+  Future<Map<String, dynamic>> getDiaryStats({int days = 30}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/diary/stats?days=$days'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
   // ==================== AI 相關 ====================
 
   /// 獲取 AI 建議

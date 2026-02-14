@@ -3,7 +3,7 @@ Database models
 """
 from .user import User
 from .stock import Stock, StockPrice, StockChip
-from .watchlist import Watchlist
+from .watchlist import Watchlist, WatchlistGroup
 from .ai_report import AIReport, AIChatHistory
 from .prediction_record import PredictionRecord
 from .alert import PriceAlert
@@ -18,6 +18,7 @@ from .fundamental import (
     MarginTrading,
     FinancialStatement,
 )
+from .trading_diary import TradingDiaryEntry
 
 __all__ = [
     "User",
@@ -25,6 +26,7 @@ __all__ = [
     "StockPrice",
     "StockChip",
     "Watchlist",
+    "WatchlistGroup",
     "AIReport",
     "AIChatHistory",
     "PredictionRecord",
@@ -44,4 +46,5 @@ __all__ = [
     "InstitutionalTrading",
     "MarginTrading",
     "FinancialStatement",
+    "TradingDiaryEntry",
 ]

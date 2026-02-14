@@ -25,6 +25,7 @@ import 'screens/prediction_stats_screen.dart';
 import 'screens/market_heatmap_screen.dart';
 import 'screens/calendar_screen.dart';
 import 'screens/stock_compare_screen.dart';
+import 'screens/trading_diary_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -91,6 +92,7 @@ class MyApp extends StatelessWidget {
               '/market-heatmap': (context) => const MarketHeatmapScreen(),
               '/calendar': (context) => const CalendarScreen(),
               '/stock-compare': (context) => const StockCompareScreen(),
+              '/trading-diary': (context) => const TradingDiaryScreen(),
             },
             onGenerateRoute: (settings) {
               if (settings.name == '/stock-detail') {

@@ -23,6 +23,7 @@ from app.routers import (
 from app.routers.predictions import router as predictions_router
 from app.routers.market_overview import router as market_overview_router
 from app.routers.calendar import router as calendar_router
+from app.routers.trading_diary import router as trading_diary_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -56,6 +57,7 @@ app.include_router(admin_router)
 app.include_router(predictions_router)
 app.include_router(market_overview_router)
 app.include_router(calendar_router)
+app.include_router(trading_diary_router)
 
 
 @app.on_event("startup")

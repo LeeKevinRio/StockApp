@@ -295,6 +295,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         Navigator.pushNamed(context, '/prediction-stats');
                       },
                     ),
+                    ListTile(
+                      leading: const Icon(Icons.book),
+                      title: Text(isUS ? 'Trading Diary' : '交易日記'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/trading-diary');
+                      },
+                    ),
                     const Divider(),
                     ListTile(
                       leading: const Icon(Icons.newspaper),

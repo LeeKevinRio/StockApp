@@ -1,19 +1,35 @@
 """
-Watchlist router - 支援台股(TW)與美股(US)
+Watchlist router - 支援台股(TW)與美股(US)，含分組功能
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from decimal import Decimal
+from pydantic import BaseModel
 
 from app.database import get_db
-from app.models import User, Watchlist, Stock
+from app.models import User, Watchlist, WatchlistGroup, Stock
 from app.schemas import WatchlistItem, WatchlistAdd
 from app.services import StockDataService
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 stock_service = StockDataService()
+
+
+# ---- Watchlist Group schemas ----
+
+class GroupCreate(BaseModel):
+    name: str
+    color: Optional[str] = "#2196F3"
+
+class GroupUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+    sort_order: Optional[int] = None
+
+class StockGroupAssign(BaseModel):
+    group_id: Optional[int] = None  # None = 移出分組
 
 
 @router.get("")
@@ -182,3 +198,150 @@ def remove_from_watchlist(
     db.commit()
 
     return {"message": "Removed from watchlist successfully"}
+
+
+# ==================== 自選股分組 ====================
+
+@router.get("/groups")
+def get_watchlist_groups(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """取得使用者的自選股分組"""
+    groups = (
+        db.query(WatchlistGroup)
+        .filter(WatchlistGroup.user_id == current_user.id)
+        .order_by(WatchlistGroup.sort_order, WatchlistGroup.id)
+        .all()
+    )
+    return [
+        {
+            "id": g.id,
+            "name": g.name,
+            "color": g.color,
+            "sort_order": g.sort_order,
+            "stock_count": db.query(Watchlist).filter(
+                Watchlist.user_id == current_user.id,
+                Watchlist.group_id == g.id,
+            ).count(),
+        }
+        for g in groups
+    ]
+
+
+@router.post("/groups")
+def create_watchlist_group(
+    data: GroupCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """建立自選股分組"""
+    # 限制最多 10 個分組
+    count = db.query(WatchlistGroup).filter(
+        WatchlistGroup.user_id == current_user.id
+    ).count()
+    if count >= 10:
+        raise HTTPException(status_code=400, detail="最多只能建立 10 個分組")
+
+    group = WatchlistGroup(
+        user_id=current_user.id,
+        name=data.name,
+        color=data.color,
+        sort_order=count,
+    )
+    db.add(group)
+    db.commit()
+    db.refresh(group)
+
+    return {
+        "id": group.id,
+        "name": group.name,
+        "color": group.color,
+        "sort_order": group.sort_order,
+    }
+
+
+@router.put("/groups/{group_id}")
+def update_watchlist_group(
+    group_id: int,
+    data: GroupUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """更新自選股分組"""
+    group = (
+        db.query(WatchlistGroup)
+        .filter(WatchlistGroup.id == group_id, WatchlistGroup.user_id == current_user.id)
+        .first()
+    )
+    if not group:
+        raise HTTPException(status_code=404, detail="分組不存在")
+
+    if data.name is not None:
+        group.name = data.name
+    if data.color is not None:
+        group.color = data.color
+    if data.sort_order is not None:
+        group.sort_order = data.sort_order
+
+    db.commit()
+    return {"message": "分組已更新"}
+
+
+@router.delete("/groups/{group_id}")
+def delete_watchlist_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """刪除自選股分組（股票會回到未分組）"""
+    group = (
+        db.query(WatchlistGroup)
+        .filter(WatchlistGroup.id == group_id, WatchlistGroup.user_id == current_user.id)
+        .first()
+    )
+    if not group:
+        raise HTTPException(status_code=404, detail="分組不存在")
+
+    # 將該分組下的股票移回未分組
+    db.query(Watchlist).filter(
+        Watchlist.user_id == current_user.id,
+        Watchlist.group_id == group_id,
+    ).update({"group_id": None})
+
+    db.delete(group)
+    db.commit()
+    return {"message": "分組已刪除"}
+
+
+@router.put("/{stock_id}/group")
+def assign_stock_to_group(
+    stock_id: str,
+    data: StockGroupAssign,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """將股票指定到分組"""
+    watchlist_item = (
+        db.query(Watchlist)
+        .filter(
+            Watchlist.user_id == current_user.id,
+            Watchlist.stock_id == stock_id,
+        )
+        .first()
+    )
+    if not watchlist_item:
+        raise HTTPException(status_code=404, detail="Stock not in watchlist")
+
+    # 驗證分組存在
+    if data.group_id is not None:
+        group = db.query(WatchlistGroup).filter(
+            WatchlistGroup.id == data.group_id,
+            WatchlistGroup.user_id == current_user.id,
+        ).first()
+        if not group:
+            raise HTTPException(status_code=404, detail="分組不存在")
+
+    watchlist_item.group_id = data.group_id
+    db.commit()
+    return {"message": "已更新分組"}

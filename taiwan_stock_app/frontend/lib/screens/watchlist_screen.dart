@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/watchlist_provider.dart';
 import '../providers/market_provider.dart';
+import '../services/api_service.dart';
 import '../widgets/stock_card.dart';
 import '../widgets/common/sort_filter_bar.dart';
 import '../widgets/common/skeleton_loader.dart';
@@ -17,6 +18,8 @@ class WatchlistScreen extends StatefulWidget {
 
 class _WatchlistScreenState extends State<WatchlistScreen> {
   String? _lastMarket;
+  List<Map<String, dynamic>> _groups = [];
+  int? _selectedGroupId; // null = 全部
 
   @override
   void initState() {
@@ -25,7 +28,15 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       final marketProvider = context.read<MarketProvider>();
       _lastMarket = marketProvider.marketCode;
       context.read<WatchlistProvider>().setMarketFilter(marketProvider.marketCode);
+      _loadGroups();
     });
+  }
+
+  Future<void> _loadGroups() async {
+    try {
+      final groups = await context.read<ApiService>().getWatchlistGroups();
+      if (mounted) setState(() => _groups = groups);
+    } catch (_) {}
   }
 
   void _onMarketChanged() {
@@ -105,6 +116,43 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
 
           return Column(
             children: [
+              // 分組 tab
+              if (_groups.isNotEmpty)
+                Container(
+                  height: 44,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6, top: 6, bottom: 6),
+                        child: ChoiceChip(
+                          label: Text(marketProvider.isUSMarket ? 'All' : '全部'),
+                          selected: _selectedGroupId == null,
+                          onSelected: (_) => setState(() => _selectedGroupId = null),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                      ..._groups.map((g) => Padding(
+                        padding: const EdgeInsets.only(right: 6, top: 6, bottom: 6),
+                        child: ChoiceChip(
+                          label: Text(g['name'] ?? ''),
+                          selected: _selectedGroupId == g['id'],
+                          onSelected: (_) => setState(() => _selectedGroupId = g['id'] as int?),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      )),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6, bottom: 6),
+                        child: ActionChip(
+                          label: const Icon(Icons.add, size: 16),
+                          onPressed: _showCreateGroupDialog,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               // Sort and filter bar
               SortFilterBar(
                 currentSort: provider.currentSort,
@@ -221,6 +269,48 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       ),
     );
       },
+    );
+  }
+
+  void _showCreateGroupDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('建立分組'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: '分組名稱',
+            hintText: '例如: 半導體、金融股',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isNotEmpty) {
+                try {
+                  await context.read<ApiService>().createWatchlistGroup(name);
+                  if (context.mounted) Navigator.pop(context);
+                  _loadGroups();
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('建立失敗: $e')),
+                    );
+                  }
+                }
+              }
+            },
+            child: const Text('建立'),
+          ),
+        ],
+      ),
     );
   }
 
