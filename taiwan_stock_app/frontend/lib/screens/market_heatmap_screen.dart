@@ -75,7 +75,13 @@ class _MarketHeatmapScreenState extends State<MarketHeatmapScreen>
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              Navigator.of(context).pushReplacementNamed('/home');
+            }
+          },
         ),
         title: Text(isUS ? 'Market Heatmap' : '市場熱力圖'),
         actions: [
