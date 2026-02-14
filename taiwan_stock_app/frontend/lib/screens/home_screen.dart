@@ -347,6 +347,23 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                     ListTile(
+                      leading: const Icon(Icons.privacy_tip),
+                      title: Text(isUS ? 'Privacy Policy' : '隱私權政策'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/privacy');
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.description),
+                      title: Text(isUS ? 'Terms of Service' : '使用條款'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/terms');
+                      },
+                    ),
+                    const Divider(),
+                    ListTile(
                       leading: const Icon(Icons.logout),
                       title: Text(isUS ? 'Logout' : '登出'),
                       onTap: () async {

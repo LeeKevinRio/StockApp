@@ -27,6 +27,8 @@ import 'screens/market_heatmap_screen.dart';
 import 'screens/calendar_screen.dart';
 import 'screens/stock_compare_screen.dart';
 import 'screens/trading_diary_screen.dart';
+import 'screens/privacy_policy_screen.dart';
+import 'screens/terms_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -105,6 +107,8 @@ class MyApp extends StatelessWidget {
               '/calendar': (context) => const CalendarScreen(),
               '/stock-compare': (context) => const StockCompareScreen(),
               '/trading-diary': (context) => const TradingDiaryScreen(),
+              '/privacy': (context) => const PrivacyPolicyScreen(),
+              '/terms': (context) => const TermsScreen(),
             },
             onGenerateRoute: (settings) {
               if (settings.name == '/stock-detail') {
