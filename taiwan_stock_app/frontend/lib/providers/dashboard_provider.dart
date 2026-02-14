@@ -202,7 +202,13 @@ class DashboardProvider with ChangeNotifier {
   /// 加載 AI 精選
   Future<List<AIPick>> _loadAIPicks() async {
     try {
-      final suggestions = await _apiService.getAISuggestions();
+      // 先嘗試讀取快取
+      var suggestions = await _apiService.getAISuggestions();
+
+      // 如果沒有快取，觸發 AI 生成
+      if (suggestions.isEmpty) {
+        suggestions = await _apiService.getAISuggestions(generateMissing: true);
+      }
 
       if (suggestions.isEmpty) {
         return [];

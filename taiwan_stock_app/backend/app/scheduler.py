@@ -121,14 +121,14 @@ def start_scheduler():
         replace_existing=True
     )
 
-    # 可選：自動生成每日預測
-    # 台股：每週一至週五 09:30
-    # scheduler.add_job(
-    #     generate_daily_predictions,
-    #     CronTrigger(day_of_week='mon-fri', hour=9, minute=30, timezone=TW_TZ),
-    #     id='generate_tw_predictions',
-    #     replace_existing=True
-    # )
+    # 每日自動生成 AI 預測
+    # 台股：每週一至週五 09:30（開盤後）
+    scheduler.add_job(
+        generate_daily_predictions,
+        CronTrigger(day_of_week='mon-fri', hour=9, minute=30, timezone=TW_TZ),
+        id='generate_tw_predictions',
+        replace_existing=True
+    )
 
     scheduler.start()
     print(f"[{datetime.now(TW_TZ)}] Scheduler started with jobs:")
