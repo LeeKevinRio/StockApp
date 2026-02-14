@@ -28,18 +28,25 @@ import 'screens/calendar_screen.dart';
 import 'screens/stock_compare_screen.dart';
 import 'screens/trading_diary_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MyApp());
+
+  // 在 app 啟動前從 storage 恢復 auth token，避免 Web 重整後遺失
+  final apiService = ApiService();
+  final authService = AuthService(apiService);
+  await authService.isLoggedIn();
+
+  runApp(MyApp(apiService: apiService, authService: authService));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final ApiService apiService;
+  final AuthService authService;
+
+  const MyApp({super.key, required this.apiService, required this.authService});
 
   @override
   Widget build(BuildContext context) {
-    final apiService = ApiService();
-    final authService = AuthService(apiService);
 
     return MultiProvider(
       providers: [
