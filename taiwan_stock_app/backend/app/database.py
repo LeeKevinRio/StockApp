@@ -9,10 +9,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "sqlite:///./taiwan_stock.db"
-)
+# 使用絕對路徑，避免工作目錄不同導致連到不同 DB
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_raw_url = os.getenv("DATABASE_URL", "sqlite:///./taiwan_stock.db")
+if _raw_url.startswith("sqlite:///./"):
+    _db_filename = _raw_url.replace("sqlite:///./", "")
+    DATABASE_URL = f"sqlite:///{os.path.join(_backend_dir, _db_filename)}"
+else:
+    DATABASE_URL = _raw_url
 
 # SQLite 需要特殊的連接參數
 if DATABASE_URL.startswith("sqlite"):
