@@ -60,48 +60,74 @@ class MarketOverviewCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // 指數值
+              // 指數值或市場平均漲跌
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    data.indexValue.toStringAsFixed(2),
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: changeColor,
+                  if (data.indexValue > 0)
+                    Text(
+                      data.indexValue.toStringAsFixed(2),
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: changeColor,
+                      ),
+                    )
+                  else
+                    Text(
+                      '${isUp ? '+' : ''}${data.changePercent.toStringAsFixed(2)}%',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: changeColor,
+                      ),
                     ),
-                  ),
                   const SizedBox(width: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: changeColor.withAlpha(25),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isUp
-                              ? Icons.arrow_drop_up
-                              : isDown
-                                  ? Icons.arrow_drop_down
-                                  : Icons.remove,
-                          color: changeColor,
-                          size: 20,
-                        ),
-                        Text(
-                          '${isUp ? '+' : ''}${data.indexChange.toStringAsFixed(2)} (${isUp ? '+' : ''}${data.changePercent.toStringAsFixed(2)}%)',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
+                  if (data.indexValue > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: changeColor.withAlpha(25),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isUp
+                                ? Icons.arrow_drop_up
+                                : isDown
+                                    ? Icons.arrow_drop_down
+                                    : Icons.remove,
                             color: changeColor,
+                            size: 20,
                           ),
+                          Text(
+                            '${isUp ? '+' : ''}${data.indexChange.toStringAsFixed(2)} (${isUp ? '+' : ''}${data.changePercent.toStringAsFixed(2)}%)',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: changeColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: changeColor.withAlpha(25),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '平均漲跌幅',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: changeColor,
                         ),
-                      ],
+                      ),
                     ),
-                  ),
                 ],
               ),
 

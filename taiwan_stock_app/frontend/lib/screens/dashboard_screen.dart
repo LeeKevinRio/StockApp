@@ -219,6 +219,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // AI 精選推薦卡片
           AIPicksCard(
             picks: dashboardProvider.aiPicks,
+            isLoading: dashboardProvider.isLoadingAI,
             onViewAll: () => _navigateToAISuggestions(context),
             onPickTap: (pick) => _navigateToStock(context, pick.stockId, pick.market),
           ),

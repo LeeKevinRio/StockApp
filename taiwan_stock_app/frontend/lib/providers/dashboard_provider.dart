@@ -10,6 +10,7 @@ class DashboardProvider with ChangeNotifier {
 
   DashboardData? _dashboardData;
   bool _isLoading = false;
+  bool _isLoadingAI = false;
   String? _error;
   String _currentMarket = 'TW';
   DateTime? _lastRefresh;
@@ -21,6 +22,9 @@ class DashboardProvider with ChangeNotifier {
 
   /// 是否正在加載
   bool get isLoading => _isLoading;
+
+  /// AI 精選是否正在加載
+  bool get isLoadingAI => _isLoadingAI;
 
   /// 錯誤信息
   String? get error => _error;
@@ -69,11 +73,10 @@ class DashboardProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      // 並行加載各個數據源
+      // 並行加載快速數據源（不含 AI 精選，避免阻塞整個 Dashboard）
       final results = await Future.wait([
         _loadMarketOverview(),
         _loadWatchlistSummary(),
-        _loadAIPicks(),
         _loadLatestNews(),
         _loadAlertSummary(),
       ]);
@@ -81,18 +84,20 @@ class DashboardProvider with ChangeNotifier {
       _dashboardData = DashboardData(
         marketOverview: results[0] as MarketOverview,
         watchlistSummary: results[1] as WatchlistSummary,
-        aiPicks: results[2] as List<AIPick>,
-        latestNews: results[3] as List<NewsItem>,
-        alertSummary: results[4] as AlertSummary,
+        aiPicks: _dashboardData?.aiPicks ?? [],
+        latestNews: results[2] as List<NewsItem>,
+        alertSummary: results[3] as AlertSummary,
       );
 
       _lastRefresh = DateTime.now();
       _isLoading = false;
       notifyListeners();
+
+      // AI 精選獨立異步加載（不阻塞 Dashboard 渲染）
+      _loadAIPicksAsync();
     } catch (e) {
       _error = e.toString();
       _isLoading = false;
-      // 如果出錯，使用空數據
       _dashboardData ??= DashboardData.empty(market: _currentMarket);
       notifyListeners();
       if (kDebugMode) {
@@ -101,42 +106,88 @@ class DashboardProvider with ChangeNotifier {
     }
   }
 
+  /// 異步加載 AI 精選（不阻塞主 Dashboard）
+  Future<void> _loadAIPicksAsync() async {
+    _isLoadingAI = true;
+    notifyListeners();
+
+    try {
+      final picks = await _loadAIPicks();
+      if (_dashboardData != null) {
+        _dashboardData = DashboardData(
+          marketOverview: _dashboardData!.marketOverview,
+          watchlistSummary: _dashboardData!.watchlistSummary,
+          aiPicks: picks,
+          latestNews: _dashboardData!.latestNews,
+          alertSummary: _dashboardData!.alertSummary,
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('AI picks async load error: $e');
+      }
+    } finally {
+      _isLoadingAI = false;
+      notifyListeners();
+    }
+  }
+
   /// 刷新 Dashboard
   Future<void> refresh() async {
     await loadDashboard(forceRefresh: true);
   }
 
-  /// 加載市場概況
+  /// 加載市場概況（從熱力圖 API 聚合真實數據）
   Future<MarketOverview> _loadMarketOverview() async {
     try {
-      // 嘗試從 API 獲取市場概況
-      // 暫時使用模擬數據
-      if (_currentMarket == 'TW') {
-        return MarketOverview(
-          indexValue: 22856.78,
-          indexChange: 156.32,
-          changePercent: 0.69,
-          totalVolume: 3245,
-          upCount: 523,
-          downCount: 412,
-          flatCount: 156,
-          indexName: '加權指數',
-          updateTime: DateTime.now(),
-        );
-      } else {
-        return MarketOverview(
-          indexValue: 5234.56,
-          indexChange: -23.45,
-          changePercent: -0.45,
-          totalVolume: 0,
-          upCount: 245,
-          downCount: 267,
-          flatCount: 0,
-          indexName: 'S&P 500',
-          updateTime: DateTime.now(),
-        );
+      final heatmapData = await _apiService.getMarketHeatmap(market: _currentMarket);
+      final sectors = heatmapData['sectors'] as List<dynamic>? ?? [];
+
+      int upCount = 0;
+      int downCount = 0;
+      int flatCount = 0;
+      double totalVolume = 0;
+      double totalChange = 0;
+      int stockCount = 0;
+
+      for (final sector in sectors) {
+        final sectorMap = sector as Map<String, dynamic>;
+        final stocks = sectorMap['stocks'] as List<dynamic>? ?? [];
+        for (final stock in stocks) {
+          final s = stock as Map<String, dynamic>;
+          final changePct = (s['change_percent'] as num?)?.toDouble() ?? 0;
+          if (changePct > 0) {
+            upCount++;
+          } else if (changePct < 0) {
+            downCount++;
+          } else {
+            flatCount++;
+          }
+          totalVolume += (s['volume'] as num?)?.toDouble() ?? 0;
+          totalChange += changePct;
+          stockCount++;
+        }
       }
+
+      final avgChange = stockCount > 0 ? totalChange / stockCount : 0.0;
+      // 成交量轉為億元（張 × 1000 股 / 1億）
+      final volumeInYi = (totalVolume * 1000 / 100000000).round();
+
+      return MarketOverview(
+        indexValue: 0,
+        indexChange: 0,
+        changePercent: avgChange,
+        totalVolume: volumeInYi,
+        upCount: upCount,
+        downCount: downCount,
+        flatCount: flatCount,
+        indexName: _currentMarket == 'TW' ? '代表股概況' : 'US Market',
+        updateTime: DateTime.now(),
+      );
     } catch (e) {
+      if (kDebugMode) {
+        print('Load market overview error: $e');
+      }
       return _currentMarket == 'TW'
           ? MarketOverview.taiwanDefault()
           : MarketOverview.usDefault();

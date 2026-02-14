@@ -5,12 +5,14 @@ import '../../config/app_theme.dart';
 /// AI 精選推薦卡片
 class AIPicksCard extends StatelessWidget {
   final List<AIPick> picks;
+  final bool isLoading;
   final VoidCallback? onViewAll;
   final Function(AIPick)? onPickTap;
 
   const AIPicksCard({
     super.key,
     required this.picks,
+    this.isLoading = false,
     this.onViewAll,
     this.onPickTap,
   });
@@ -66,7 +68,32 @@ class AIPicksCard extends StatelessWidget {
               ],
             ),
 
-            if (picks.isEmpty) ...[
+            if (isLoading && picks.isEmpty) ...[
+              const SizedBox(height: 24),
+              Center(
+                child: Column(
+                  children: [
+                    const SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.purple,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'AI 分析中...',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ] else if (picks.isEmpty) ...[
               const SizedBox(height: 24),
               Center(
                 child: Column(
@@ -78,7 +105,7 @@ class AIPicksCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '暫無 AI 推薦',
+                      '請先新增自選股，AI 將自動分析推薦',
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 13,
