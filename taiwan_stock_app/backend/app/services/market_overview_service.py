@@ -2,9 +2,10 @@
 市場概覽服務
 聚合產業數據、熱力圖、漲跌排行
 """
-from typing import Dict, List
+from typing import Dict, List, Any, Tuple
 from datetime import date, timedelta
 import logging
+import time
 
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,51 @@ from app.database import SessionLocal
 from app.models.stock import Stock
 
 logger = logging.getLogger(__name__)
+
+
+class TTLCache:
+    """簡易 TTL 快取，基於 dict + 時間戳記"""
+
+    def __init__(self):
+        self._store: Dict[str, Tuple[float, Any]] = {}  # key -> (expire_time, data)
+
+    def get(self, key: str) -> Any:
+        """取得快取資料，若已過期則回傳 None"""
+        if key in self._store:
+            expire_time, data = self._store[key]
+            if time.time() < expire_time:
+                logger.info(f"TTL 快取命中: {key}")
+                return data
+            # 已過期，移除
+            del self._store[key]
+            logger.info(f"TTL 快取已過期: {key}")
+        return None
+
+    def set(self, key: str, data: Any, ttl_seconds: int):
+        """寫入快取，設定 TTL（秒）"""
+        self._store[key] = (time.time() + ttl_seconds, data)
+        logger.info(f"TTL 快取已寫入: {key}, TTL={ttl_seconds}s")
+
+    def clear(self):
+        """清除所有快取"""
+        self._store.clear()
+
+    def invalidate(self, prefix: str = ""):
+        """清除符合前綴的快取"""
+        if not prefix:
+            self.clear()
+            return
+        keys_to_remove = [k for k in self._store if k.startswith(prefix)]
+        for k in keys_to_remove:
+            del self._store[k]
+
+
+# 模組層級的快取實例（跨請求共享）
+_result_cache = TTLCache()
+
+# 快取 TTL 設定（秒）
+HEATMAP_CACHE_TTL = 300   # 熱力圖快取 5 分鐘
+RANKINGS_CACHE_TTL = 180   # 排行快取 3 分鐘
 
 
 class MarketOverviewService:
@@ -90,7 +136,12 @@ class MarketOverviewService:
             logger.warning(f"TWSE 批量預取失敗: {e}")
 
     def get_heatmap_data(self, market: str = "TW") -> Dict:
-        """取得熱力圖數據（按產業分組）"""
+        """取得熱力圖數據（按產業分組），帶 TTL 快取（5 分鐘）"""
+        cache_key = f"heatmap:{market}"
+        cached = _result_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         sectors = self.TW_SECTORS if market == "TW" else self.US_SECTORS
         result = {"sectors": [], "market": market}
 
@@ -139,10 +190,22 @@ class MarketOverviewService:
 
         # 按平均漲跌幅排序
         result["sectors"].sort(key=lambda x: x["avg_change"], reverse=True)
+
+        # 清除 _tw_quote_cache 避免跨請求的陳舊資料
+        self._tw_quote_cache.clear()
+
+        # 寫入結果快取
+        _result_cache.set(cache_key, result, HEATMAP_CACHE_TTL)
+
         return result
 
     def get_rankings(self, market: str = "TW", category: str = "gainers", limit: int = 20) -> Dict:
-        """取得漲跌排行"""
+        """取得漲跌排行，帶 TTL 快取（3 分鐘）"""
+        cache_key = f"rankings:{market}:{category}:{limit}"
+        cached = _result_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         sectors = self.TW_SECTORS if market == "TW" else self.US_SECTORS
         all_stocks = []
 
@@ -184,12 +247,17 @@ class MarketOverviewService:
         elif category == "active":
             all_stocks.sort(key=lambda x: abs(x["change_percent"]), reverse=True)
 
-        return {
+        result = {
             "market": market,
             "category": category,
             "stocks": all_stocks[:limit],
             "total": len(all_stocks),
         }
+
+        # 寫入結果快取
+        _result_cache.set(cache_key, result, RANKINGS_CACHE_TTL)
+
+        return result
 
     def _get_tw_quote(self, stock_id: str) -> Dict:
         """取得台股即時報價（TWSE 快取 → FinMind → TWSE 單股 fallback）"""
