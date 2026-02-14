@@ -48,8 +48,10 @@ class MarketOverviewService:
 
     def __init__(self):
         self.finmind = FinMindFetcher(settings.FINMIND_TOKEN)
+        self.twse = TWSEFetcher()
         self.us_fetcher = USStockFetcher()
         self._stock_name_cache: Dict[str, str] = {}
+        self._tw_quote_cache: Dict[str, Dict] = {}
 
     def _get_stock_name(self, stock_id: str) -> str:
         """從資料庫查詢台股公司名稱"""
@@ -65,10 +67,39 @@ class MarketOverviewService:
         except Exception:
             return stock_id
 
+    def _prefetch_tw_quotes(self, stock_ids: List[str]):
+        """批量預取台股報價（TWSE API），快取結果"""
+        try:
+            results = self.twse.get_realtime_price(stock_ids)
+            for item in results:
+                sid = item["stock_id"]
+                price = item.get("price", 0)
+                yesterday = item.get("yesterday_close", 0)
+                change = price - yesterday if price and yesterday else 0
+                change_pct = (change / yesterday * 100) if yesterday > 0 else 0
+                self._tw_quote_cache[sid] = {
+                    "stock_id": sid,
+                    "name": item.get("name", sid),
+                    "price": round(price, 2),
+                    "change": round(change, 2),
+                    "change_percent": round(change_pct, 2),
+                    "volume": item.get("volume", 0),
+                }
+            logger.info(f"TWSE 批量預取成功: {len(results)} 支股票")
+        except Exception as e:
+            logger.warning(f"TWSE 批量預取失敗: {e}")
+
     def get_heatmap_data(self, market: str = "TW") -> Dict:
         """取得熱力圖數據（按產業分組）"""
         sectors = self.TW_SECTORS if market == "TW" else self.US_SECTORS
         result = {"sectors": [], "market": market}
+
+        # 台股：先用 TWSE 批量預取所有股票報價
+        if market == "TW":
+            all_tw_ids = []
+            for ids in sectors.values():
+                all_tw_ids.extend(ids[:6])
+            self._prefetch_tw_quotes(list(set(all_tw_ids)))
 
         for sector_name, stock_ids in sectors.items():
             sector_data = {
@@ -120,6 +151,10 @@ class MarketOverviewService:
         for ids in sectors.values():
             all_ids.update(ids)
 
+        # 台股：批量預取
+        if market == "TW" and not self._tw_quote_cache:
+            self._prefetch_tw_quotes(list(all_ids))
+
         for stock_id in all_ids:
             try:
                 if market == "TW":
@@ -157,7 +192,12 @@ class MarketOverviewService:
         }
 
     def _get_tw_quote(self, stock_id: str) -> Dict:
-        """取得台股即時報價"""
+        """取得台股即時報價（TWSE 快取 → FinMind → TWSE 單股 fallback）"""
+        # 1. 先檢查 TWSE 批量預取的快取
+        if stock_id in self._tw_quote_cache:
+            return self._tw_quote_cache[stock_id]
+
+        # 2. 嘗試 FinMind
         try:
             end_date = date.today()
             start_date = end_date - timedelta(days=7)
@@ -192,5 +232,21 @@ class MarketOverviewService:
                     "volume": int(latest.get("Trading_Volume", 0)),
                 }
         except Exception as e:
-            logger.warning(f"台股報價取得失敗 {stock_id}: {e}")
+            logger.warning(f"FinMind 報價失敗 {stock_id}: {e}")
+
+        # 3. Fallback: TWSE 單股即時查詢
+        try:
+            quote = self.twse.get_realtime_quote(stock_id)
+            if quote and quote.get("price", 0) > 0:
+                return {
+                    "stock_id": stock_id,
+                    "name": quote.get("name") or self._get_stock_name(stock_id),
+                    "price": round(quote.get("price", 0), 2),
+                    "change": round(quote.get("change", 0), 2),
+                    "change_percent": round(quote.get("change_percent", 0), 2),
+                    "volume": quote.get("volume", 0),
+                }
+        except Exception as e:
+            logger.warning(f"TWSE 報價也失敗 {stock_id}: {e}")
+
         return {}
