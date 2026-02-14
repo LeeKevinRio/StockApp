@@ -785,6 +785,30 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
+  // ==================== 市場概覽相關 ====================
+
+  Future<Map<String, dynamic>> getMarketHeatmap({String market = 'TW'}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/market/heatmap?market=$market'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> getMarketRankings({
+    String market = 'TW',
+    String category = 'gainers',
+    int limit = 20,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/market/rankings?market=$market&category=$category&limit=$limit'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
   // ==================== 管理員相關 ====================
 
   Future<List<Map<String, dynamic>>> getAdminUsers({int skip = 0, int limit = 50}) async {

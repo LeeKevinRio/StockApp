@@ -251,6 +251,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                     ListTile(
+                      leading: const Icon(Icons.grid_view),
+                      title: Text(isUS ? 'Market Heatmap' : '市場熱力圖'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/market-heatmap');
+                      },
+                    ),
+                    ListTile(
                       leading: const Icon(Icons.filter_list),
                       title: Text(isUS ? 'Stock Screener' : '股票篩選'),
                       onTap: () {

@@ -22,6 +22,7 @@ import 'screens/alerts_screen.dart';
 import 'screens/portfolio_screen.dart';
 import 'screens/admin_screen.dart';
 import 'screens/prediction_stats_screen.dart';
+import 'screens/market_heatmap_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -85,6 +86,7 @@ class MyApp extends StatelessWidget {
               '/admin': (context) => const AdminScreen(),
               '/notifications': (context) => const NotificationCenterScreen(),
               '/prediction-stats': (context) => const PredictionStatsScreen(),
+              '/market-heatmap': (context) => const MarketHeatmapScreen(),
             },
             onGenerateRoute: (settings) {
               if (settings.name == '/stock-detail') {
