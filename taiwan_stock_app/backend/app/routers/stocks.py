@@ -5,6 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models import User, Stock
@@ -410,6 +413,126 @@ def get_all_indicators(
         bollinger=bb_list,
         kd=kd_list
     )
+
+
+@router.get("/{stock_id}/risk")
+def get_stock_risk(
+    stock_id: str,
+    days: int = Query(252, description="計算天數（預設一年252交易日）"),
+    market: str = Query("TW", description="Market region: TW or US"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    取得股票風險指標
+
+    回傳：Beta、波動度、VaR、最大回撤
+    """
+    import numpy as np
+
+    df = _get_history_dataframe(stock_id, db, days + 30, market=market)
+    if df.empty or len(df) < 30:
+        raise HTTPException(status_code=404, detail="Insufficient history data for risk calculation")
+
+    closes = df['close'].values.astype(float)
+
+    # 日報酬率
+    returns = np.diff(closes) / closes[:-1]
+
+    # 波動度（年化標準差）
+    daily_volatility = float(np.std(returns))
+    annual_volatility = daily_volatility * np.sqrt(252)
+
+    # VaR (Value at Risk) - 95% 信心水準
+    var_95 = float(np.percentile(returns, 5))
+    var_99 = float(np.percentile(returns, 1))
+
+    # 最大回撤 (Maximum Drawdown)
+    peak = closes[0]
+    max_drawdown = 0.0
+    for price in closes:
+        if price > peak:
+            peak = price
+        drawdown = (peak - price) / peak
+        if drawdown > max_drawdown:
+            max_drawdown = drawdown
+
+    # Beta — 需要大盤指數
+    beta = None
+    benchmark_id = "^TWII" if market == "TW" else "^GSPC"
+    try:
+        benchmark_df = _get_history_dataframe(benchmark_id, db, days + 30, market=market)
+        if not benchmark_df.empty and len(benchmark_df) >= 30:
+            bench_closes = benchmark_df['close'].values.astype(float)
+            # 對齊長度
+            min_len = min(len(closes), len(bench_closes))
+            stock_rets = np.diff(closes[-min_len:]) / closes[-min_len:-1]
+            bench_rets = np.diff(bench_closes[-min_len:]) / bench_closes[-min_len:-1]
+
+            if len(stock_rets) == len(bench_rets) and len(stock_rets) > 1:
+                covariance = np.cov(stock_rets, bench_rets)[0][1]
+                bench_variance = np.var(bench_rets)
+                if bench_variance > 0:
+                    beta = float(covariance / bench_variance)
+    except Exception as e:
+        logger.warning(f"Beta calculation failed for {stock_id}: {e}")
+
+    # 夏普比率（假設無風險利率 2%）
+    risk_free_rate = 0.02
+    avg_annual_return = float(np.mean(returns)) * 252
+    sharpe_ratio = None
+    if annual_volatility > 0:
+        sharpe_ratio = round((avg_annual_return - risk_free_rate) / annual_volatility, 3)
+
+    return {
+        "stock_id": stock_id,
+        "market": market,
+        "data_days": len(df),
+        "beta": round(beta, 3) if beta is not None else None,
+        "annual_volatility": round(annual_volatility * 100, 2),
+        "daily_volatility": round(daily_volatility * 100, 2),
+        "var_95": round(var_95 * 100, 2),
+        "var_99": round(var_99 * 100, 2),
+        "max_drawdown": round(max_drawdown * 100, 2),
+        "sharpe_ratio": sharpe_ratio,
+        "risk_level": _classify_risk_level(annual_volatility, max_drawdown, beta),
+    }
+
+
+def _classify_risk_level(volatility: float, max_drawdown: float, beta: float = None) -> str:
+    """根據風險指標分類風險等級"""
+    score = 0
+    # 波動度評分
+    if volatility > 0.5:
+        score += 3
+    elif volatility > 0.3:
+        score += 2
+    elif volatility > 0.15:
+        score += 1
+
+    # 最大回撤評分
+    if max_drawdown > 0.4:
+        score += 3
+    elif max_drawdown > 0.2:
+        score += 2
+    elif max_drawdown > 0.1:
+        score += 1
+
+    # Beta 評分
+    if beta is not None:
+        if abs(beta) > 1.5:
+            score += 2
+        elif abs(beta) > 1.0:
+            score += 1
+
+    if score >= 6:
+        return "極高"
+    elif score >= 4:
+        return "高"
+    elif score >= 2:
+        return "中"
+    else:
+        return "低"
 
 
 @router.get("/{stock_id}/patterns", response_model=PatternResponse)

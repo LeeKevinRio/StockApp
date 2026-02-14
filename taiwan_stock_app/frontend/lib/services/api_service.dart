@@ -819,6 +819,33 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
+  Future<Map<String, dynamic>> getEconomicCalendar({
+    String market = 'TW',
+    int? month,
+    int? year,
+  }) async {
+    final params = <String>['market=$market'];
+    if (month != null) params.add('month=$month');
+    if (year != null) params.add('year=$year');
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/calendar/economic?${params.join("&")}'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  // ==================== 風險指標相關 ====================
+
+  Future<Map<String, dynamic>> getStockRisk(String stockId, {int days = 252, String market = 'TW'}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/stocks/$stockId/risk?days=$days&market=$market'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
   // ==================== 市場概覽相關 ====================
 
   Future<Map<String, dynamic>> getMarketHeatmap({String market = 'TW'}) async {

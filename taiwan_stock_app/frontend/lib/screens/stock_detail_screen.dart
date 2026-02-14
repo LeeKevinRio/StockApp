@@ -41,8 +41,8 @@ class _StockDetailScreenState extends State<StockDetailScreen>
   @override
   void initState() {
     super.initState();
-    // 8 tabs for TW stocks (with 籌碼), 7 tabs for US stocks (without 籌碼)
-    _tabController = TabController(length: isUSStock ? 7 : 8, vsync: this);
+    // 9 tabs for TW stocks (with 籌碼), 8 tabs for US stocks (without 籌碼)
+    _tabController = TabController(length: isUSStock ? 8 : 9, vsync: this);
     _loadStockData();
   }
 
@@ -97,6 +97,7 @@ class _StockDetailScreenState extends State<StockDetailScreen>
             const Tab(text: '技術分析'),
             const Tab(text: '基本面'),
             if (!isUSStock) const Tab(text: '籌碼'),
+            const Tab(text: '風險'),
             const Tab(text: 'AI建議'),
             const Tab(text: '新聞'),
             const Tab(text: '社群'),
@@ -133,6 +134,7 @@ class _StockDetailScreenState extends State<StockDetailScreen>
                     _buildTechnicalAnalysisTab(),
                     _buildFundamentalTab(),
                     if (!isUSStock) _buildChipAnalysisTab(),
+                    _buildRiskTab(),
                     _buildAISuggestionTab(),
                     _buildNewsTab(),
                     _buildSocialTab(),
@@ -301,6 +303,10 @@ class _StockDetailScreenState extends State<StockDetailScreen>
         ],
       ),
     );
+  }
+
+  Widget _buildRiskTab() {
+    return _StockRiskView(stockId: widget.stockId, market: widget.market);
   }
 
   Widget _buildChipAnalysisTab() {
@@ -966,5 +972,346 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
         ),
       ),
     );
+  }
+}
+
+/// 風險指標顯示組件
+class _StockRiskView extends StatefulWidget {
+  final String stockId;
+  final String market;
+
+  const _StockRiskView({required this.stockId, this.market = 'TW'});
+
+  @override
+  State<_StockRiskView> createState() => _StockRiskViewState();
+}
+
+class _StockRiskViewState extends State<_StockRiskView> {
+  Map<String, dynamic>? _riskData;
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRiskData();
+  }
+
+  Future<void> _loadRiskData() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final api = Provider.of<ApiService>(context, listen: false);
+      final data = await api.getStockRisk(widget.stockId, market: widget.market);
+      if (!mounted) return;
+      setState(() {
+        _riskData = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('計算風險指標中...'),
+          ],
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text('無法計算風險指標',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text(_error!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.grey)),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _loadRiskData,
+                icon: const Icon(Icons.refresh),
+                label: const Text('重試'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_riskData == null) {
+      return const Center(child: Text('暫無風險數據'));
+    }
+
+    final data = _riskData!;
+    final riskLevel = data['risk_level'] as String? ?? '中';
+    final beta = data['beta'] as num?;
+    final annualVol = data['annual_volatility'] as num? ?? 0;
+    final var95 = data['var_95'] as num? ?? 0;
+    final var99 = data['var_99'] as num? ?? 0;
+    final maxDrawdown = data['max_drawdown'] as num? ?? 0;
+    final sharpe = data['sharpe_ratio'] as num?;
+    final dataDays = data['data_days'] as int? ?? 0;
+
+    final riskColor = _getRiskColor(riskLevel);
+
+    return RefreshIndicator(
+      onRefresh: _loadRiskData,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 風險等級卡片
+            Card(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      riskColor.withAlpha(30),
+                      riskColor.withAlpha(10),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Icon(Icons.shield, size: 48, color: riskColor),
+                    const SizedBox(height: 8),
+                    Text(
+                      '風險等級：$riskLevel',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: riskColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '基於 $dataDays 個交易日數據計算',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // 主要風險指標
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('主要風險指標',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Divider(),
+                    if (beta != null)
+                      _buildRiskRow(
+                        'Beta',
+                        beta.toStringAsFixed(3),
+                        subtitle: beta > 1 ? '波動大於大盤' : beta < 1 ? '波動小於大盤' : '與大盤同步',
+                        icon: Icons.compare_arrows,
+                        color: beta.abs() > 1.5
+                            ? Colors.red
+                            : beta.abs() > 1.0
+                                ? Colors.orange
+                                : Colors.green,
+                      ),
+                    _buildRiskRow(
+                      '年化波動度',
+                      '${annualVol.toStringAsFixed(2)}%',
+                      subtitle: annualVol > 50 ? '極高波動' : annualVol > 30 ? '高波動' : annualVol > 15 ? '中等波動' : '低波動',
+                      icon: Icons.show_chart,
+                      color: annualVol > 50
+                          ? Colors.red
+                          : annualVol > 30
+                              ? Colors.orange
+                              : annualVol > 15
+                                  ? Colors.blue
+                                  : Colors.green,
+                    ),
+                    _buildRiskRow(
+                      '最大回撤',
+                      '-${maxDrawdown.toStringAsFixed(2)}%',
+                      subtitle: '歷史期間最大跌幅',
+                      icon: Icons.trending_down,
+                      color: Colors.red,
+                    ),
+                    if (sharpe != null)
+                      _buildRiskRow(
+                        '夏普比率',
+                        sharpe.toStringAsFixed(3),
+                        subtitle: sharpe > 1.0 ? '優秀' : sharpe > 0.5 ? '良好' : sharpe > 0 ? '一般' : '不佳',
+                        icon: Icons.assessment,
+                        color: sharpe > 1.0
+                            ? Colors.green
+                            : sharpe > 0.5
+                                ? Colors.blue
+                                : sharpe > 0
+                                    ? Colors.orange
+                                    : Colors.red,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // VaR 風險值
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('VaR 風險值',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text('單日最大可能損失',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    const Divider(),
+                    _buildVaRRow('95% VaR', var95, '95%的交易日損失不超過此值'),
+                    _buildVaRRow('99% VaR', var99, '99%的交易日損失不超過此值'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // 風險提示
+            Card(
+              color: Colors.orange.withAlpha(26),
+              child: const Padding(
+                padding: EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber, color: Colors.orange),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '風險指標基於歷史數據計算，不代表未來風險。投資前請充分評估自身風險承受能力。',
+                        style: TextStyle(fontSize: 12, color: Colors.orange),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRiskRow(String label, String value,
+      {String? subtitle, IconData? icon, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          if (icon != null)
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: (color ?? Colors.grey).withAlpha(25),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 18, color: color ?? Colors.grey),
+            ),
+          if (icon != null) const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                if (subtitle != null)
+                  Text(subtitle,
+                      style: TextStyle(fontSize: 11, color: color ?? Colors.grey[600])),
+              ],
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVaRRow(String label, num value, String description) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+              Text(
+                '${value.toStringAsFixed(2)}%',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+            ],
+          ),
+          Text(description,
+              style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+        ],
+      ),
+    );
+  }
+
+  Color _getRiskColor(String level) {
+    switch (level) {
+      case '極高':
+        return Colors.red.shade800;
+      case '高':
+        return Colors.red;
+      case '中':
+        return Colors.orange;
+      case '低':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
   }
 }

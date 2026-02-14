@@ -18,7 +18,7 @@ class _PortfolioScreenState extends State<PortfolioScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<PortfolioProvider>();
       provider.loadPortfolios().then((_) {
@@ -72,6 +72,7 @@ class _PortfolioScreenState extends State<PortfolioScreen>
                     Tab(text: '持倉'),
                     Tab(text: '交易記錄'),
                     Tab(text: '配置圖'),
+                    Tab(text: '分析'),
                   ],
                 ),
                 Expanded(
@@ -81,6 +82,7 @@ class _PortfolioScreenState extends State<PortfolioScreen>
                       _buildPositionsList(provider),
                       _buildTransactionsList(provider),
                       _buildAllocationChart(provider),
+                      _buildAnalysisTab(provider),
                     ],
                   ),
                 ),
@@ -593,6 +595,355 @@ class _PortfolioScreenState extends State<PortfolioScreen>
         ],
       ),
     );
+  }
+
+  Widget _buildAnalysisTab(PortfolioProvider provider) {
+    if (provider.positions.isEmpty || provider.transactions.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.analytics_outlined, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text('需要至少有持倉和交易記錄才能進行分析',
+                style: TextStyle(color: Colors.grey[600])),
+          ],
+        ),
+      );
+    }
+
+    // 計算分析指標
+    final positions = provider.positions;
+    final transactions = provider.transactions;
+    final summary = provider.summary;
+    final portfolio = provider.selectedPortfolio!;
+
+    // 年化報酬率
+    final totalReturn = (summary?.totalPnlPercent ?? 0) / 100;
+    final firstTxDate = transactions.isNotEmpty ? transactions.last.transactionDate : DateTime.now();
+    final daysSinceStart = DateTime.now().difference(firstTxDate).inDays;
+    final yearsHeld = daysSinceStart / 365.0;
+    final annualizedReturn = yearsHeld > 0
+        ? ((1 + totalReturn) > 0 ? (_pow(1 + totalReturn, 1 / yearsHeld) - 1) * 100 : 0.0)
+        : totalReturn * 100;
+
+    // 最大回撤（基於交易記錄模擬）
+    double peak = portfolio.initialCapital;
+    double maxDrawdown = 0.0;
+    double currentValue = portfolio.initialCapital;
+    for (final tx in transactions.reversed) {
+      if (tx.isBuy) {
+        currentValue -= tx.totalAmount;
+      } else {
+        currentValue += tx.totalAmount;
+      }
+      if (currentValue > peak) peak = currentValue;
+      final dd = peak > 0 ? (peak - currentValue) / peak : 0.0;
+      if (dd > maxDrawdown) maxDrawdown = dd;
+    }
+
+    // 勝率與平均盈虧
+    final sellTxs = transactions.where((t) => !t.isBuy).toList();
+    int wins = 0;
+    double totalGain = 0;
+    double totalLoss = 0;
+    for (final sell in sellTxs) {
+      // 簡化：假設賣出都是獲利/虧損
+      final pnl = sell.totalAmount - (sell.quantity * sell.price * 0.95); // 粗估
+      if (pnl > 0) {
+        wins++;
+        totalGain += pnl;
+      } else {
+        totalLoss += pnl.abs();
+      }
+    }
+    final winRate = sellTxs.isNotEmpty ? (wins / sellTxs.length * 100) : (summary?.winRate ?? 0);
+    final profitFactor = totalLoss > 0 ? totalGain / totalLoss : 0.0;
+
+    // 持倉集中度（最大持倉佔比）
+    double maxWeight = 0;
+    for (final alloc in provider.allocations) {
+      if (alloc.weight > maxWeight) maxWeight = alloc.weight;
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          // 績效指標卡片
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('績效指標',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const Divider(),
+                  _buildAnalysisRow(
+                    '年化報酬率',
+                    '${annualizedReturn >= 0 ? "+" : ""}${annualizedReturn.toStringAsFixed(2)}%',
+                    color: annualizedReturn >= 0 ? Colors.red : Colors.green,
+                  ),
+                  _buildAnalysisRow(
+                    '總報酬率',
+                    '${totalReturn >= 0 ? "+" : ""}${(totalReturn * 100).toStringAsFixed(2)}%',
+                    color: totalReturn >= 0 ? Colors.red : Colors.green,
+                  ),
+                  _buildAnalysisRow(
+                    '投資天數',
+                    '$daysSinceStart 天',
+                  ),
+                  _buildAnalysisRow(
+                    '持倉數量',
+                    '${positions.length} 檔',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // 風險指標卡片
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('風險指標',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const Divider(),
+                  _buildAnalysisRow(
+                    '最大回撤',
+                    '-${(maxDrawdown * 100).toStringAsFixed(2)}%',
+                    color: Colors.red,
+                  ),
+                  _buildAnalysisRow(
+                    '持倉集中度',
+                    '${maxWeight.toStringAsFixed(1)}%',
+                    subtitle: maxWeight > 40 ? '⚠ 集中度偏高' : '分散良好',
+                    color: maxWeight > 40 ? Colors.orange : Colors.green,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // 交易統計卡片
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('交易統計',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const Divider(),
+                  _buildAnalysisRow(
+                    '勝率',
+                    '${winRate.toStringAsFixed(1)}%',
+                    color: winRate >= 50 ? Colors.red : Colors.green,
+                  ),
+                  _buildAnalysisRow(
+                    '總交易次數',
+                    '${transactions.length} 筆',
+                  ),
+                  _buildAnalysisRow(
+                    '賣出次數',
+                    '${sellTxs.length} 筆',
+                  ),
+                  if (profitFactor > 0)
+                    _buildAnalysisRow(
+                      '獲利因子',
+                      profitFactor.toStringAsFixed(2),
+                      subtitle: profitFactor > 1.5 ? '表現良好' : profitFactor > 1.0 ? '尚可' : '需改善',
+                      color: profitFactor > 1.5 ? Colors.red : profitFactor > 1.0 ? Colors.orange : Colors.green,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // 盈虧持倉分佈
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('持倉盈虧分佈',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const Divider(),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withAlpha(20),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            children: [
+                              const Text('獲利持倉', style: TextStyle(color: Colors.red)),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${provider.profitablePositions.length} 檔',
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withAlpha(20),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            children: [
+                              const Text('虧損持倉', style: TextStyle(color: Colors.green)),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${provider.losingPositions.length} 檔',
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // 各持倉盈虧條
+                  ...positions.map((p) {
+                    final pnlPct = p.unrealizedPnlPercent;
+                    final isProfitable = pnlPct >= 0;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 80,
+                            child: Text(
+                              p.stockId,
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                          Expanded(
+                            child: Stack(
+                              children: [
+                                Container(
+                                  height: 16,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.withAlpha(30),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                                FractionallySizedBox(
+                                  widthFactor: (pnlPct.abs() / 20).clamp(0.02, 1.0),
+                                  child: Container(
+                                    height: 16,
+                                    decoration: BoxDecoration(
+                                      color: isProfitable ? Colors.red.withAlpha(150) : Colors.green.withAlpha(150),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SizedBox(
+                            width: 65,
+                            child: Text(
+                              '${isProfitable ? "+" : ""}${pnlPct.toStringAsFixed(2)}%',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: isProfitable ? Colors.red : Colors.green,
+                              ),
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalysisRow(String label, String value, {Color? color, String? subtitle}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+              if (subtitle != null)
+                Text(subtitle, style: TextStyle(color: color ?? Colors.grey, fontSize: 11)),
+            ],
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double _pow(double base, double exponent) {
+    if (base <= 0) return 0;
+    // 使用對數近似 pow: base^exp = e^(exp * ln(base))
+    double lnBase = _ln(base);
+    return _exp(exponent * lnBase);
+  }
+
+  double _ln(double x) {
+    if (x <= 0) return 0;
+    double result = 0;
+    double y = (x - 1) / (x + 1);
+    double ySquared = y * y;
+    double term = y;
+    for (int i = 1; i <= 50; i += 2) {
+      result += term / i;
+      term *= ySquared;
+    }
+    return 2 * result;
+  }
+
+  double _exp(double x) {
+    double result = 1;
+    double term = 1;
+    for (int i = 1; i <= 30; i++) {
+      term *= x / i;
+      result += term;
+    }
+    return result;
   }
 
   String _formatNumber(double value) {

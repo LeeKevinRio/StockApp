@@ -15,6 +15,7 @@ class _CalendarScreenState extends State<CalendarScreen>
   late TabController _tabController;
   Map<String, dynamic>? _earningsData;
   Map<String, dynamic>? _dividendsData;
+  Map<String, dynamic>? _economicData;
   bool _isLoading = true;
   String? _error;
   late DateTime _selectedMonth;
@@ -22,7 +23,7 @@ class _CalendarScreenState extends State<CalendarScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _selectedMonth = DateTime.now();
     _loadData();
   }
@@ -51,12 +52,17 @@ class _CalendarScreenState extends State<CalendarScreen>
             market: market,
             month: _selectedMonth.month,
             year: _selectedMonth.year),
+        api.getEconomicCalendar(
+            market: market,
+            month: _selectedMonth.month,
+            year: _selectedMonth.year),
       ]);
 
       if (mounted) {
         setState(() {
           _earningsData = results[0];
           _dividendsData = results[1];
+          _economicData = results[2];
           _isLoading = false;
         });
       }
@@ -91,6 +97,7 @@ class _CalendarScreenState extends State<CalendarScreen>
           tabs: const [
             Tab(text: '財報日曆'),
             Tab(text: '除息日曆'),
+            Tab(text: '經濟行事曆'),
           ],
         ),
       ),
@@ -139,6 +146,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                         children: [
                           _buildEventList(_earningsData),
                           _buildEventList(_dividendsData),
+                          _buildEventList(_economicData),
                         ],
                       ),
           ),
@@ -190,9 +198,30 @@ class _CalendarScreenState extends State<CalendarScreen>
     } else if (type == 'revenue') {
       icon = Icons.bar_chart;
       iconColor = Colors.orange;
-    } else {
+    } else if (type == 'cpi' || type == 'ppi') {
+      icon = Icons.show_chart;
+      iconColor = Colors.red;
+    } else if (type == 'gdp') {
+      icon = Icons.trending_up;
+      iconColor = Colors.indigo;
+    } else if (type == 'interest_rate' || type == 'fomc') {
+      icon = Icons.account_balance;
+      iconColor = Colors.purple;
+    } else if (type == 'nonfarm_payrolls') {
+      icon = Icons.people;
+      iconColor = Colors.teal;
+    } else if (type == 'pmi') {
+      icon = Icons.factory;
+      iconColor = Colors.brown;
+    } else if (type == 'institutional') {
+      icon = Icons.business;
+      iconColor = Colors.blueGrey;
+    } else if (type == 'dividend') {
       icon = Icons.payments;
       iconColor = Colors.green;
+    } else {
+      icon = Icons.event;
+      iconColor = Colors.grey;
     }
 
     return Card(
