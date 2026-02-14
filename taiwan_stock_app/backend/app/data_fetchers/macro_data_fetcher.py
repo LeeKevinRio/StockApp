@@ -273,5 +273,47 @@ class MacroDataFetcher:
         }
 
 
+    def calculate_combined_macro_score(self) -> Dict:
+        """
+        綜合宏觀評分：結合市場指標 + FRED 經濟數據
+        市場指標權重 60%，FRED 經濟指標權重 40%
+        """
+        market_result = self.calculate_macro_score()
+        market_score = market_result.get("macro_score", 0)
+
+        # 嘗試取得 FRED 數據
+        fred_score = 0
+        fred_details = {}
+        try:
+            from app.data_fetchers.fred_fetcher import FREDFetcher
+            from app.config import settings
+            if settings.FRED_API_KEY:
+                fred = FREDFetcher(api_key=settings.FRED_API_KEY)
+                fred_result = fred.calculate_economic_score()
+                fred_score = fred_result.get("economic_score", 0)
+                fred_details = fred_result.get("details", {})
+        except Exception as e:
+            logger.warning(f"FRED 數據整合失敗: {e}")
+
+        # 加權合併
+        combined = int(market_score * 0.6 + fred_score * 0.4)
+        combined = max(-100, min(100, combined))
+
+        result = market_result.copy()
+        result["macro_score"] = combined
+        result["market_score_raw"] = market_score
+        result["economic_score_raw"] = fred_score
+        result["fred_details"] = fred_details
+        result["macro_signal"] = (
+            "strong_bullish_宏觀面強烈看多" if combined >= 50 else
+            "bullish_宏觀面看多" if combined >= 20 else
+            "neutral_宏觀面中性" if combined >= -20 else
+            "bearish_宏觀面看空" if combined >= -50 else
+            "strong_bearish_宏觀面強烈看空"
+        )
+
+        return result
+
+
 # 全域實例
 macro_data_fetcher = MacroDataFetcher()

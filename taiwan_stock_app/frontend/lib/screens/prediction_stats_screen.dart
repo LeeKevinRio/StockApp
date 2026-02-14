@@ -182,7 +182,15 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
           const SizedBox(height: 24),
           _buildPeriodSelector(),
           const SizedBox(height: 16),
+          _buildAccuracyGauge(),
+          const SizedBox(height: 16),
           _buildOverallStats(),
+          const SizedBox(height: 16),
+          _buildWinRateStats(),
+          const SizedBox(height: 24),
+          _buildConfusionMatrix(),
+          const SizedBox(height: 24),
+          _buildErrorDistribution(),
           const SizedBox(height: 24),
           _buildAccuracyTrendChart(),
           const SizedBox(height: 24),
@@ -192,6 +200,435 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
           const SizedBox(height: 24),
           _buildRecentRecords(),
         ],
+      ),
+    );
+  }
+
+  /// 準確度半圓儀表
+  Widget _buildAccuracyGauge() {
+    final stats = _statistics;
+    if (stats == null) return const SizedBox.shrink();
+    final accuracy = (stats['direction_accuracy'] ?? 0.0).toDouble();
+    final total = stats['total_predictions'] ?? 0;
+    if (total == 0) return const SizedBox.shrink();
+
+    final color = accuracy >= 70
+        ? Colors.green
+        : accuracy >= 50
+            ? Colors.orange
+            : Colors.red;
+    final label = accuracy >= 70
+        ? '優秀'
+        : accuracy >= 60
+            ? '良好'
+            : accuracy >= 50
+                ? '一般'
+                : '待改進';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const Text('方向預測準確率',
+                style: TextStyle(fontSize: 14, color: Colors.grey)),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: 200,
+              height: 120,
+              child: Stack(
+                alignment: Alignment.bottomCenter,
+                children: [
+                  SizedBox(
+                    width: 200,
+                    height: 120,
+                    child: PieChart(
+                      PieChartData(
+                        startDegreeOffset: 180,
+                        sections: [
+                          PieChartSectionData(
+                            value: accuracy,
+                            color: color,
+                            radius: 20,
+                            showTitle: false,
+                          ),
+                          PieChartSectionData(
+                            value: 100 - accuracy,
+                            color: Colors.grey.shade200,
+                            radius: 20,
+                            showTitle: false,
+                          ),
+                          // 下半部隱藏
+                          PieChartSectionData(
+                            value: 100,
+                            color: Colors.transparent,
+                            radius: 20,
+                            showTitle: false,
+                          ),
+                        ],
+                        sectionsSpace: 0,
+                        centerSpaceRadius: 50,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    child: Column(
+                      children: [
+                        Text(
+                          '${accuracy.toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                          ),
+                        ),
+                        Text(label,
+                            style: TextStyle(fontSize: 14, color: color)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 勝率 + 平均盈虧統計
+  Widget _buildWinRateStats() {
+    final records = _getSortedRecords();
+    if (records.isEmpty) return const SizedBox.shrink();
+
+    int upCorrect = 0, upWrong = 0, downCorrect = 0, downWrong = 0;
+    double totalGain = 0, totalLoss = 0;
+    int gainCount = 0, lossCount = 0;
+
+    for (final r in records) {
+      final predictedDir = r['predicted_direction'] ?? '';
+      final dirCorrect = r['direction_correct'] ?? false;
+      final actualChange = (r['actual_change'] ?? 0.0).toDouble();
+
+      if (predictedDir == 'UP') {
+        if (dirCorrect) {
+          upCorrect++;
+        } else {
+          upWrong++;
+        }
+      } else {
+        if (dirCorrect) {
+          downCorrect++;
+        } else {
+          downWrong++;
+        }
+      }
+
+      // 用「如果跟隨預測建議」的盈虧計算
+      if (dirCorrect) {
+        totalGain += actualChange.abs();
+        gainCount++;
+      } else {
+        totalLoss += actualChange.abs();
+        lossCount++;
+      }
+    }
+
+    final avgGain = gainCount > 0 ? totalGain / gainCount : 0.0;
+    final avgLoss = lossCount > 0 ? totalLoss / lossCount : 0.0;
+    final profitFactor = avgLoss > 0 ? avgGain / avgLoss : 0.0;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.emoji_events, color: Colors.amber),
+                const SizedBox(width: 8),
+                Text('勝率與盈虧統計',
+                    style: Theme.of(context).textTheme.titleMedium),
+              ],
+            ),
+            const Divider(),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildMiniStat('預測漲正確',
+                      '$upCorrect', Colors.green),
+                ),
+                Expanded(
+                  child: _buildMiniStat('預測漲錯誤',
+                      '$upWrong', Colors.red),
+                ),
+                Expanded(
+                  child: _buildMiniStat('預測跌正確',
+                      '$downCorrect', Colors.green),
+                ),
+                Expanded(
+                  child: _buildMiniStat('預測跌錯誤',
+                      '$downWrong', Colors.red),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildMiniStat('平均正確盈幅',
+                      '+${avgGain.toStringAsFixed(2)}%', Colors.green),
+                ),
+                Expanded(
+                  child: _buildMiniStat('平均錯誤虧幅',
+                      '-${avgLoss.toStringAsFixed(2)}%', Colors.red),
+                ),
+                Expanded(
+                  child: _buildMiniStat('盈虧比',
+                      profitFactor.toStringAsFixed(2), Colors.blue),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMiniStat(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(value,
+            style: TextStyle(
+                fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+        const SizedBox(height: 4),
+        Text(label,
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
+            textAlign: TextAlign.center),
+      ],
+    );
+  }
+
+  /// 混淆矩陣（預測 vs 實際方向）
+  Widget _buildConfusionMatrix() {
+    final records = _getSortedRecords();
+    if (records.isEmpty) return const SizedBox.shrink();
+
+    int predUpActUp = 0, predUpActDown = 0;
+    int predDownActUp = 0, predDownActDown = 0;
+
+    for (final r in records) {
+      final pred = r['predicted_direction'] ?? '';
+      final actual = r['actual_direction'] ?? '';
+      if (pred == 'UP' && actual == 'UP') predUpActUp++;
+      if (pred == 'UP' && actual == 'DOWN') predUpActDown++;
+      if (pred == 'DOWN' && actual == 'UP') predDownActUp++;
+      if (pred == 'DOWN' && actual == 'DOWN') predDownActDown++;
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.grid_on, color: Colors.deepPurple),
+                const SizedBox(width: 8),
+                Text('混淆矩陣（預測 vs 實際）',
+                    style: Theme.of(context).textTheme.titleMedium),
+              ],
+            ),
+            const Divider(),
+            Table(
+              border: TableBorder.all(color: Colors.grey.shade300),
+              children: [
+                TableRow(
+                  decoration: BoxDecoration(color: Colors.grey.shade100),
+                  children: const [
+                    Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text('', textAlign: TextAlign.center),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text('實際漲',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Text('實際跌',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                TableRow(children: [
+                  const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Text('預測漲',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                  _buildMatrixCell(predUpActUp, true),
+                  _buildMatrixCell(predUpActDown, false),
+                ]),
+                TableRow(children: [
+                  const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Text('預測跌',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                  _buildMatrixCell(predDownActUp, false),
+                  _buildMatrixCell(predDownActDown, true),
+                ]),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMatrixCell(int count, bool isCorrect) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      color: isCorrect
+          ? Colors.green.withValues(alpha: 0.1)
+          : Colors.red.withValues(alpha: 0.1),
+      child: Text(
+        '$count',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: isCorrect ? Colors.green : Colors.red,
+        ),
+      ),
+    );
+  }
+
+  /// 誤差分布圖（BarChart）
+  Widget _buildErrorDistribution() {
+    final records = _getSortedRecords();
+    if (records.length < 3) return const SizedBox.shrink();
+
+    // 分組統計誤差分布
+    final buckets = <String, int>{
+      '0-0.5%': 0,
+      '0.5-1%': 0,
+      '1-2%': 0,
+      '2-3%': 0,
+      '3-5%': 0,
+      '>5%': 0,
+    };
+    final bucketKeys = buckets.keys.toList();
+
+    for (final r in records) {
+      final error = (r['error_percent'] ?? 0.0).toDouble().abs();
+      if (error <= 0.5) {
+        buckets['0-0.5%'] = buckets['0-0.5%']! + 1;
+      } else if (error <= 1) {
+        buckets['0.5-1%'] = buckets['0.5-1%']! + 1;
+      } else if (error <= 2) {
+        buckets['1-2%'] = buckets['1-2%']! + 1;
+      } else if (error <= 3) {
+        buckets['2-3%'] = buckets['2-3%']! + 1;
+      } else if (error <= 5) {
+        buckets['3-5%'] = buckets['3-5%']! + 1;
+      } else {
+        buckets['>5%'] = buckets['>5%']! + 1;
+      }
+    }
+
+    final maxVal = buckets.values.fold(0, (a, b) => a > b ? a : b).toDouble();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.bar_chart, color: Colors.teal),
+                const SizedBox(width: 8),
+                Text('預測誤差分布',
+                    style: Theme.of(context).textTheme.titleMedium),
+              ],
+            ),
+            const Divider(),
+            SizedBox(
+              height: 200,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: maxVal + 1,
+                  gridData: const FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 30,
+                        getTitlesWidget: (value, _) => Text(
+                          '${value.toInt()}',
+                          style: const TextStyle(
+                              fontSize: 10, color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, _) {
+                          final idx = value.toInt();
+                          if (idx < 0 || idx >= bucketKeys.length) {
+                            return const SizedBox.shrink();
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(bucketKeys[idx],
+                                style: const TextStyle(
+                                    fontSize: 9, color: Colors.grey)),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  barGroups: bucketKeys.asMap().entries.map((entry) {
+                    final idx = entry.key;
+                    final count = buckets[entry.value]!;
+                    final barColor = idx <= 1
+                        ? Colors.green
+                        : idx <= 2
+                            ? Colors.orange
+                            : Colors.red;
+                    return BarChartGroupData(
+                      x: idx,
+                      barRods: [
+                        BarChartRodData(
+                          toY: count.toDouble(),
+                          color: barColor,
+                          width: 24,
+                          borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(4)),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

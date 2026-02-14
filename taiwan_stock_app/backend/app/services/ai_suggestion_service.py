@@ -1077,9 +1077,9 @@ class AISuggestionService:
         return result
 
     def _analyze_macro_data(self) -> Dict:
-        """分析宏觀面數據（VIX、美元指數、美股期貨等）"""
+        """分析宏觀面數據（VIX、美元指數、美股期貨 + FRED 經濟數據）"""
         try:
-            return self.macro_fetcher.calculate_macro_score()
+            return self.macro_fetcher.calculate_combined_macro_score()
         except Exception as e:
             print(f"宏觀數據分析失敗: {e}")
             return {"macro_score": 0, "macro_signal": "no_data", "details": {}}

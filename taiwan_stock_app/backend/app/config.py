@@ -44,6 +44,9 @@ class Settings:
     # Groq Model (fallback when Gemini quota exceeded)
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
+    # FRED API (宏觀經濟數據)
+    FRED_API_KEY: str = os.getenv("FRED_API_KEY", "")
+
     # CORS
     CORS_ORIGINS: list = ["http://localhost:3000", "http://localhost:8080"]
 
