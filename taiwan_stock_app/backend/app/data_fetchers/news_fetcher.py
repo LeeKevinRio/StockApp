@@ -1,10 +1,13 @@
 """
 新聞資料爬蟲
 從多個來源獲取台股相關新聞
+支援 AI 語意分析（Gemini）與關鍵字 fallback
 """
 import aiohttp
 import asyncio
 import logging
+import time
+import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import re
@@ -303,6 +306,102 @@ class NewsFetcher:
             pass
 
         return None
+
+    async def analyze_sentiment_with_ai(self, news_list: List[Dict]) -> List[Dict]:
+        """
+        使用 Gemini AI 批次分析新聞情緒
+        將新聞標題送給 AI 評分 (-1.0 ~ +1.0)
+        結果快取 1 小時，失敗時 fallback 到關鍵字分析
+
+        Args:
+            news_list: 新聞列表，每則需含 'title' 欄位
+
+        Returns:
+            新聞列表，每則附加 'ai_sentiment' (score + label)
+        """
+        if not news_list:
+            return news_list
+
+        # 檢查快取
+        cache_key = "|".join([n.get("title", "")[:30] for n in news_list[:10]])
+        now = time.time()
+        if hasattr(self, '_ai_sentiment_cache') and cache_key in self._ai_sentiment_cache:
+            cached, cached_time = self._ai_sentiment_cache[cache_key]
+            if now - cached_time < 3600:  # 1 小時快取
+                return cached
+
+        titles = [n.get("title", "") for n in news_list if n.get("title")]
+        if not titles:
+            return news_list
+
+        try:
+            import google.generativeai as genai
+            from app.config import settings
+
+            genai.configure(api_key=settings.GOOGLE_API_KEY)
+            model = genai.GenerativeModel(settings.AI_MODEL_FREE)
+
+            prompt = f"""分析以下新聞標題的投資情緒，每則給出 -1.0（極度利空）到 +1.0（極度利多）的分數。
+只回覆 JSON 陣列，格式: [{{"index": 0, "score": 0.5, "label": "利多"}}]
+
+label 只能是: "極度利多", "利多", "中性", "利空", "極度利空"
+
+新聞標題:
+{chr(10).join(f'{i}. {t}' for i, t in enumerate(titles))}"""
+
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.1,
+                    response_mime_type="application/json",
+                )
+            )
+
+            ai_scores = json.loads(response.text)
+
+            # 將 AI 分數映射回新聞
+            score_map = {}
+            if isinstance(ai_scores, list):
+                for item in ai_scores:
+                    idx = item.get("index", -1)
+                    if 0 <= idx < len(news_list):
+                        score_map[idx] = {
+                            "score": max(-1.0, min(1.0, float(item.get("score", 0)))),
+                            "label": item.get("label", "中性"),
+                            "method": "ai"
+                        }
+
+            for i, news in enumerate(news_list):
+                if i in score_map:
+                    news["ai_sentiment"] = score_map[i]
+                else:
+                    # fallback 到關鍵字
+                    simple = self.analyze_sentiment_simple(news.get("title", ""))
+                    news["ai_sentiment"] = {
+                        "score": simple["score"],
+                        "label": "利多" if simple["score"] > 0 else "利空" if simple["score"] < 0 else "中性",
+                        "method": "keyword_fallback"
+                    }
+
+            # 快取結果
+            if not hasattr(self, '_ai_sentiment_cache'):
+                self._ai_sentiment_cache = {}
+            self._ai_sentiment_cache[cache_key] = (news_list, now)
+
+            logger.info(f"AI 語意分析完成，{len(score_map)}/{len(news_list)} 則成功")
+            return news_list
+
+        except Exception as e:
+            logger.warning(f"AI 語意分析失敗，fallback 到關鍵字: {e}")
+            # fallback: 全部用關鍵字分析
+            for news in news_list:
+                simple = self.analyze_sentiment_simple(news.get("title", ""))
+                news["ai_sentiment"] = {
+                    "score": simple["score"],
+                    "label": "利多" if simple["score"] > 0 else "利空" if simple["score"] < 0 else "中性",
+                    "method": "keyword_fallback"
+                }
+            return news_list
 
     def analyze_sentiment_simple(self, title: str, content: str = None) -> Dict:
         """

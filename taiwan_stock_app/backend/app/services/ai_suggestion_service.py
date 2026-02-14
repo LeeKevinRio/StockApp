@@ -11,7 +11,7 @@ import json
 import asyncio
 import pandas as pd
 
-from app.data_fetchers import FinMindFetcher, USStockFetcher
+from app.data_fetchers import FinMindFetcher, USStockFetcher, MacroDataFetcher
 from app.data_fetchers.news_fetcher import NewsFetcher
 from app.config import settings
 from app.services.technical_indicators import TechnicalIndicators
@@ -40,6 +40,7 @@ class AISuggestionService:
         self.finmind = FinMindFetcher(settings.FINMIND_TOKEN)
         self.us_fetcher = USStockFetcher()
         self.news_fetcher = NewsFetcher()
+        self.macro_fetcher = MacroDataFetcher()
         genai.configure(api_key=settings.GOOGLE_API_KEY)
 
         # Select model based on subscription tier
@@ -98,6 +99,9 @@ class AISuggestionService:
         # ========== 消息面數據 ==========
         news_sentiment = self._analyze_us_news_sentiment(stock_id)
 
+        # ========== 宏觀面數據 ==========
+        macro_analysis = self._analyze_macro_data()
+
         # 美股無籌碼面數據
         chip_analysis = {"data_available": False, "note": "籌碼面數據不適用於美股"}
 
@@ -116,6 +120,7 @@ class AISuggestionService:
             "chip": chip_analysis,
             "fundamental": fundamental,
             "news_sentiment": news_sentiment,
+            "macro": macro_analysis,
             "prices_summary": prices.tail(10).to_dict("records") if len(prices) > 0 else [],
         }
 
@@ -164,6 +169,9 @@ class AISuggestionService:
         # ========== 消息面數據 ==========
         news_sentiment = self._analyze_news_sentiment(stock_id)
 
+        # ========== 宏觀面數據 ==========
+        macro_analysis = self._analyze_macro_data()
+
         return {
             "stock_id": stock_id,
             "market_region": "TW",
@@ -175,6 +183,7 @@ class AISuggestionService:
             "chip": chip_analysis,
             "fundamental": fundamental,
             "news_sentiment": news_sentiment,
+            "macro": macro_analysis,
             "prices_summary": prices.tail(10).to_dict("records") if len(prices) > 0 else [],
         }
 
@@ -971,7 +980,7 @@ class AISuggestionService:
         return result
 
     def _analyze_news_sentiment(self, stock_id: str) -> Dict:
-        """分析消息面（新聞情緒）"""
+        """分析消息面（新聞情緒）- 優先使用 AI 語意分析"""
         result = {"data_available": False, "news_count": 0}
 
         try:
@@ -979,36 +988,65 @@ class AISuggestionService:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             news_list = loop.run_until_complete(self.news_fetcher.fetch_stock_news(stock_id, limit=10))
-            loop.close()
 
             if not news_list:
+                loop.close()
                 return result
 
             result["data_available"] = True
             result["news_count"] = len(news_list)
 
-            # 分析每則新聞的情緒
+            # 優先使用 AI 語意分析
+            analysis_news = news_list[:5]
+            try:
+                analysis_news = loop.run_until_complete(
+                    self.news_fetcher.analyze_sentiment_with_ai(analysis_news)
+                )
+                result["sentiment_method"] = "ai"
+            except Exception as e:
+                print(f"AI 語意分析失敗，使用關鍵字分析: {e}")
+                result["sentiment_method"] = "keyword"
+
+            loop.close()
+
+            # 統計情緒
             positive_count = 0
             negative_count = 0
             neutral_count = 0
             news_summaries = []
 
-            for news in news_list[:5]:  # 只分析前5則
-                sentiment = self.news_fetcher.analyze_sentiment_simple(
-                    news.get('title', ''),
-                    news.get('summary', '')
-                )
-
-                if sentiment['sentiment'] == 'positive':
-                    positive_count += 1
-                elif sentiment['sentiment'] == 'negative':
-                    negative_count += 1
+            for news in analysis_news:
+                # 優先取 AI 分析結果
+                ai_sent = news.get("ai_sentiment")
+                if ai_sent:
+                    score = ai_sent.get("score", 0)
+                    if score > 0.2:
+                        sentiment = "positive"
+                        positive_count += 1
+                    elif score < -0.2:
+                        sentiment = "negative"
+                        negative_count += 1
+                    else:
+                        sentiment = "neutral"
+                        neutral_count += 1
                 else:
-                    neutral_count += 1
+                    # fallback 到關鍵字分析
+                    simple = self.news_fetcher.analyze_sentiment_simple(
+                        news.get('title', ''),
+                        news.get('summary', '')
+                    )
+                    sentiment = simple['sentiment']
+                    if sentiment == 'positive':
+                        positive_count += 1
+                    elif sentiment == 'negative':
+                        negative_count += 1
+                    else:
+                        neutral_count += 1
 
                 news_summaries.append({
                     "title": news.get('title', '')[:50],
-                    "sentiment": sentiment['sentiment'],
+                    "sentiment": sentiment,
+                    "ai_score": ai_sent.get("score") if ai_sent else None,
                     "source": news.get('source', '')
                 })
 
@@ -1037,6 +1075,14 @@ class AISuggestionService:
             result["error"] = str(e)
 
         return result
+
+    def _analyze_macro_data(self) -> Dict:
+        """分析宏觀面數據（VIX、美元指數、美股期貨等）"""
+        try:
+            return self.macro_fetcher.calculate_macro_score()
+        except Exception as e:
+            print(f"宏觀數據分析失敗: {e}")
+            return {"macro_score": 0, "macro_signal": "no_data", "details": {}}
 
     def _calculate_change(self, prices, days: int) -> float:
         """計算N日漲跌幅"""
@@ -1102,6 +1148,7 @@ class AISuggestionService:
                 "chip": None if market == "US" else 0,
                 "fundamental": 0,
                 "news_sentiment": 0,
+                "macro": 0,
                 "total_weighted": 0
             }
         }
@@ -1165,14 +1212,15 @@ class AISuggestionService:
             chip_score = data.get('chip', {}).get('chip_score', 0)
             fund_score = data.get('fundamental', {}).get('fundamental_score', 0)
             news_score = data.get('news_sentiment', {}).get('sentiment_score', 0)
+            macro_score = data.get('macro', {}).get('macro_score', 0)
 
-            # 加權平均 - 美股無籌碼面，調整權重
+            # 加權平均 - 加入宏觀面，調整權重
             if market == "US":
-                # 美股權重: 技術50%, 基本面30%, 消息面20%
-                total_score = (tech_score * 0.5) + (fund_score * 0.3) + (news_score * 0.2)
+                # 美股權重: 技術40%, 基本面25%, 消息面15%, 宏觀面20%
+                total_score = (tech_score * 0.40) + (fund_score * 0.25) + (news_score * 0.15) + (macro_score * 0.20)
             else:
-                # 台股權重: 技術40%, 籌碼30%, 基本面20%, 消息面10%
-                total_score = (tech_score * 0.4) + (chip_score * 0.3) + (fund_score * 0.2) + (news_score * 0.1)
+                # 台股權重: 技術35%, 籌碼25%, 基本面15%, 消息面10%, 宏觀面15%
+                total_score = (tech_score * 0.35) + (chip_score * 0.25) + (fund_score * 0.15) + (news_score * 0.10) + (macro_score * 0.15)
 
             # 組合 Prompt
             system_prompt = self._build_system_prompt(total_score, market)
@@ -1237,6 +1285,7 @@ class AISuggestionService:
                 "chip": chip_score if market == "TW" else None,
                 "fundamental": fund_score,
                 "news_sentiment": news_score,
+                "macro": macro_score,
                 "total_weighted": round(total_score, 1),
                 "latest_price": data.get("latest_price", 0)
             }
@@ -1355,10 +1404,10 @@ class AISuggestionService:
 
         if market == "US":
             market_context = "美股投資分析"
-            analysis_aspects = "技術面、基本面、消息面"
+            analysis_aspects = "技術面、基本面、消息面、宏觀面"
         else:
             market_context = "台股投資分析"
-            analysis_aspects = "技術面、籌碼面、基本面、消息面"
+            analysis_aspects = "技術面、籌碼面、基本面、消息面、宏觀面"
 
         return f"""你是一位激進的高風險投資經紀人，專注於{market_context}。你追求高報酬，敢於果斷做出判斷。
 
@@ -1452,6 +1501,7 @@ class AISuggestionService:
         chip = data.get('chip', {})
         fund = data.get('fundamental', {})
         news = data.get('news_sentiment', {})
+        macro = data.get('macro', {})
 
         currency_symbol = "$" if market == "US" else "NT$"
         market_label = "美股" if market == "US" else "台股"
@@ -1531,7 +1581,17 @@ class AISuggestionService:
 - 近期現金股利：{fund.get('latest_cash_dividend', 'N/A')}元
 - 平均現金股利：{fund.get('avg_cash_dividend', 'N/A')}元（{fund.get('dividend_years', 'N/A')}年）"""
 
+        # 宏觀面數據
+        macro_details = macro.get('details', {})
         base_info += f"""
+
+## 宏觀面數據
+- 宏觀面評分：{macro.get('macro_score', 'N/A')} → {macro.get('macro_signal', 'N/A')}
+- VIX 恐慌指數：{macro_details.get('vix', {}).get('value', 'N/A')} ({macro_details.get('vix', {}).get('signal', 'N/A')})
+- 美元指數變化：{macro_details.get('dxy', {}).get('change_pct', 'N/A')}% ({macro_details.get('dxy', {}).get('signal', 'N/A')})
+- 美股期貨變化：S&P {macro_details.get('us_futures', {}).get('sp500_change_pct', 'N/A')}%, 納指 {macro_details.get('us_futures', {}).get('nasdaq_change_pct', 'N/A')}% ({macro_details.get('us_futures', {}).get('signal', 'N/A')})
+- 10年公債殖利率：{macro_details.get('us10y', {}).get('value', 'N/A')}% ({macro_details.get('us10y', {}).get('signal', 'N/A')})
+- 黃金變化：{macro_details.get('gold', {}).get('change_pct', 'N/A')}% ({macro_details.get('gold', {}).get('signal', 'N/A')})
 
 ## 消息面詳細數據
 - 近期新聞數：{news.get('news_count', 0)}

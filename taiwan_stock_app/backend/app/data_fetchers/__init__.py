@@ -8,6 +8,7 @@ from .us_stock_fetcher import USStockFetcher
 from .reddit_fetcher import RedditFetcher
 from .global_news_fetcher import GlobalNewsFetcher
 from .taiwan_social_fetcher import TaiwanSocialFetcher
+from .macro_data_fetcher import MacroDataFetcher
 
 __all__ = [
     "FinMindFetcher",
@@ -17,4 +18,5 @@ __all__ = [
     "RedditFetcher",
     "GlobalNewsFetcher",
     "TaiwanSocialFetcher",
+    "MacroDataFetcher",
 ]
