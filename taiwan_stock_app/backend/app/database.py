@@ -43,10 +43,11 @@ def create_tables():
 def _run_migrations():
     """執行資料庫遷移：為已存在的表新增缺少的欄位"""
     inspector = inspect(engine)
+    table_names = inspector.get_table_names()
 
     with engine.connect() as conn:
         # 遷移 1: watchlist 表新增 group_id 欄位
-        if 'watchlist' in inspector.get_table_names():
+        if 'watchlist' in table_names:
             columns = [c['name'] for c in inspector.get_columns('watchlist')]
             if 'group_id' not in columns:
                 logger.info("Migration: Adding group_id column to watchlist table")
@@ -55,5 +56,25 @@ def _run_migrations():
                     "REFERENCES watchlist_groups(id) ON DELETE SET NULL"
                 ))
                 conn.commit()
+
+        # 遷移 2: ai_reports 表新增缺少的欄位
+        if 'ai_reports' in table_names:
+            columns = [c['name'] for c in inspector.get_columns('ai_reports')]
+            new_columns = {
+                'entry_price_min': 'NUMERIC(10, 2)',
+                'entry_price_max': 'NUMERIC(10, 2)',
+                'take_profit_targets': 'TEXT',
+                'risk_level': 'VARCHAR(20)',
+                'time_horizon': 'VARCHAR(50)',
+                'predicted_change_percent': 'NUMERIC(5, 2)',
+                'next_day_prediction': 'TEXT',
+            }
+            for col_name, col_type in new_columns.items():
+                if col_name not in columns:
+                    logger.info(f"Migration: Adding {col_name} column to ai_reports table")
+                    conn.execute(text(
+                        f"ALTER TABLE ai_reports ADD COLUMN {col_name} {col_type}"
+                    ))
+            conn.commit()
 
         logger.info("Database migrations completed")
