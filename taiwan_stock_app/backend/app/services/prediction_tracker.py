@@ -9,6 +9,7 @@ from sqlalchemy import func, and_
 
 from app.models import PredictionRecord, Stock, Watchlist
 from app.services import StockDataService
+from app.services.trading_calendar import get_next_trading_date
 
 
 class PredictionTracker:
@@ -40,13 +41,7 @@ class PredictionTracker:
             ai_provider: AI 提供者 (Gemini/Groq/Mock)
         """
         today = date.today()
-        tomorrow = today + timedelta(days=1)
-
-        # 跳過週末
-        if tomorrow.weekday() == 5:  # Saturday
-            tomorrow = today + timedelta(days=3)  # Monday
-        elif tomorrow.weekday() == 6:  # Sunday
-            tomorrow = today + timedelta(days=2)  # Monday
+        tomorrow = get_next_trading_date(today)
 
         # 檢查是否已存在今日預測
         existing = db.query(PredictionRecord).filter(
@@ -101,9 +96,10 @@ class PredictionTracker:
         """
         today = date.today()
 
-        # 查詢需要更新的預測記錄（目標日期是今天，且還沒有實際結果）
+        # 查詢需要更新的預測記錄（目標日期 <= 今天，且還沒有實際結果）
+        # 這樣可以補回過去遺漏更新的記錄
         query = db.query(PredictionRecord).filter(
-            PredictionRecord.target_date == today,
+            PredictionRecord.target_date <= today,
             PredictionRecord.actual_close_price.is_(None)
         )
 
@@ -115,18 +111,60 @@ class PredictionTracker:
 
         for record in records:
             try:
-                # 獲取實際收盤價
-                price_data = self.stock_service.get_realtime_price(
-                    record.stock_id,
-                    market=record.market_region
-                )
+                target = record.target_date
+                actual_close = 0
+                actual_high = 0
+                actual_low = 0
 
-                if not price_data:
-                    continue
+                if target == today:
+                    # 今天的預測：用即時報價
+                    price_data = self.stock_service.get_realtime_price(
+                        record.stock_id,
+                        market=record.market_region
+                    )
+                    if price_data:
+                        actual_close = float(price_data.get("current_price", 0))
+                        actual_high = float(price_data.get("high", 0))
+                        actual_low = float(price_data.get("low", 0))
+                else:
+                    # 過去的預測：用歷史收盤價
+                    from app.database import SessionLocal
+                    from app.models import StockPrice as StockPriceModel
+                    history_price = db.query(StockPriceModel).filter(
+                        StockPriceModel.stock_id == record.stock_id,
+                        StockPriceModel.date == target
+                    ).first()
 
-                actual_close = float(price_data.get("current_price", 0))
-                actual_high = float(price_data.get("high", 0))
-                actual_low = float(price_data.get("low", 0))
+                    if history_price:
+                        actual_close = float(history_price.close or 0)
+                        actual_high = float(history_price.high or 0)
+                        actual_low = float(history_price.low or 0)
+                    else:
+                        # 資料庫沒有歷史價，嘗試用 FinMind 取得
+                        try:
+                            target_str = target.strftime("%Y-%m-%d")
+                            df = self.stock_service.finmind.get_stock_price(
+                                record.stock_id, target_str, target_str
+                            )
+                            if len(df) > 0:
+                                row = df.iloc[-1]
+                                actual_close = float(row.get('close', 0))
+                                actual_high = float(row.get('max', row.get('high', 0)))
+                                actual_low = float(row.get('min', row.get('low', 0)))
+                        except Exception:
+                            pass
+
+                    if actual_close <= 0:
+                        # 過去的日期仍拿不到資料，嘗試即時報價（可能是今天剛收盤）
+                        price_data = self.stock_service.get_realtime_price(
+                            record.stock_id,
+                            market=record.market_region
+                        )
+                        if price_data:
+                            actual_close = float(price_data.get("current_price", 0))
+                            actual_high = float(price_data.get("high", 0))
+                            actual_low = float(price_data.get("low", 0))
+
                 base_price = float(record.base_close_price or 0)
 
                 if base_price <= 0 or actual_close <= 0:

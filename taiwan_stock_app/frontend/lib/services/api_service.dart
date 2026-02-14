@@ -148,8 +148,11 @@ class ApiService {
 
   // ==================== 自選股相關 ====================
 
-  Future<List<WatchlistItem>> getWatchlist({String? market}) async {
-    final query = market != null ? '?market=$market' : '';
+  Future<List<WatchlistItem>> getWatchlist({String? market, bool forceRefresh = false}) async {
+    final params = <String>[];
+    if (market != null) params.add('market=$market');
+    if (forceRefresh) params.add('force_refresh=true');
+    final query = params.isNotEmpty ? '?${params.join('&')}' : '';
     final response = await http.get(
       Uri.parse('$baseUrl/api/watchlist$query'),
       headers: _headers,

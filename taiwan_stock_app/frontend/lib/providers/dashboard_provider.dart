@@ -56,10 +56,10 @@ class DashboardProvider with ChangeNotifier {
 
   /// 加載 Dashboard 數據
   Future<void> loadDashboard({bool forceRefresh = false}) async {
-    // 檢查是否需要刷新（30秒內不重複加載）
+    // 檢查是否需要刷新（10秒內不重複加載）
     if (!forceRefresh && _lastRefresh != null) {
       final elapsed = DateTime.now().difference(_lastRefresh!);
-      if (elapsed.inSeconds < 30 && _dashboardData != null) {
+      if (elapsed.inSeconds < 10 && _dashboardData != null) {
         return;
       }
     }

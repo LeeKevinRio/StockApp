@@ -1106,7 +1106,45 @@ class AISuggestionService:
             }
         }
 
-    def generate_suggestion(self, stock_id: str, stock_name: str, market: str = "TW") -> Dict:
+    def _get_prediction_history_context(self, stock_id: str, db=None) -> str:
+        """取得過去預測歷史，作為 AI 回饋參考"""
+        if db is None:
+            return ""
+
+        try:
+            from app.models import PredictionRecord
+            records = db.query(PredictionRecord).filter(
+                PredictionRecord.stock_id == stock_id,
+                PredictionRecord.actual_close_price.isnot(None)
+            ).order_by(PredictionRecord.target_date.desc()).limit(5).all()
+
+            if not records:
+                return ""
+
+            lines = ["## 過去預測回饋（請參考以改善準確度）"]
+            total_error = 0
+            for r in reversed(records):
+                pred_change = float(r.predicted_change_percent or 0)
+                actual_change = float(r.actual_change_percent or 0)
+                error = float(r.error_percent or 0)
+                correct = "正確" if r.direction_correct else "錯誤"
+                total_error += error
+                lines.append(
+                    f"- {r.target_date}: 預測 {pred_change:+.2f}% → 實際 {actual_change:+.2f}%（方向{correct}，誤差 {error:.2f}%）"
+                )
+
+            avg_error = total_error / len(records)
+            if avg_error > 3:
+                lines.append(f"\n**注意：過去平均誤差 {avg_error:.1f}%，預測幅度明顯過大！請縮小預測範圍，更貼近近5日平均日波動。**")
+            elif avg_error > 1.5:
+                lines.append(f"\n過去平均誤差 {avg_error:.1f}%，請微調預測幅度使其更接近實際波動。")
+
+            return "\n".join(lines)
+        except Exception as e:
+            print(f"Warning: Failed to get prediction history: {e}")
+            return ""
+
+    def generate_suggestion(self, stock_id: str, stock_name: str, market: str = "TW", db=None) -> Dict:
         """
         生成 AI 投資建議（多面向綜合分析）
         支援備援機制: Gemini -> Groq -> Mock
@@ -1115,10 +1153,12 @@ class AISuggestionService:
             stock_id: 股票代碼
             stock_name: 股票名稱
             market: 'TW' for Taiwan stocks, 'US' for US stocks
+            db: Database session (optional, for prediction history feedback)
         """
         try:
             # 收集所有數據
             data = self.collect_stock_data(stock_id, market=market)
+            data['_db'] = db  # 傳遞 db 給 prompt builder 用
 
             # 計算綜合評分
             tech_score = data.get('technical', {}).get('technical_score', 0)
@@ -1349,26 +1389,28 @@ class AISuggestionService:
 ## 隔日預測計算規則（非常重要！）
 你必須根據以下數據計算每支股票「不同的」隔日預測：
 
-1. **預測漲跌幅計算**：
-   - 基礎波動：參考近5日漲跌幅的平均波動
-   - RSI > 70（超買）：預測下跌 -0.5% ~ -2.5%
-   - RSI < 30（超賣）：預測上漲 +0.5% ~ +2.5%
-   - RSI 40-60（中性）：根據籌碼面判斷 ±0.3% ~ ±1.5%
-   - 外資大量買超（>5000張）：額外加 +0.3% ~ +1.0%
-   - 外資大量賣超（>5000張）：額外減 -0.3% ~ -1.0%
-   - MACD 黃金交叉：+0.2% ~ +0.8%
-   - MACD 死亡交叉：-0.2% ~ -0.8%
+1. **預測漲跌幅計算（必須貼近實際日常波動）**：
+   - 核心原則：以近5日平均日波動作為預測基準
+   - RSI > 70（超買）：預測下跌 -0.5% ~ -2.0%
+   - RSI < 30（超賣）：預測上漲 +0.5% ~ +2.0%
+   - RSI 40-60（中性）：根據籌碼面判斷 ±0.3% ~ ±1.0%
+   - 外資大量買超（>5000張）：額外加 +0.2% ~ +0.5%
+   - 外資大量賣超（>5000張）：額外減 -0.2% ~ -0.5%
+   - MACD 黃金交叉：+0.1% ~ +0.5%
+   - MACD 死亡交叉：-0.1% ~ -0.5%
+   - 一般個股日波動在 ±0.5%~±3%，極端情況最多 ±5%
 
 2. **預測機率計算**：
-   - 多個指標同向（技術+籌碼同看多/空）：0.70-0.85
-   - 指標分歧：0.55-0.65
-   - 單一強力訊號：0.60-0.75
+   - 多個指標同向（技術+籌碼同看多/空）：0.65-0.80
+   - 指標分歧：0.50-0.60
+   - 單一強力訊號：0.55-0.70
 
 3. **價格區間計算**：
-   - price_range_low = 最新收盤價 × (1 + 預測漲跌幅% - 0.5%)
-   - price_range_high = 最新收盤價 × (1 + 預測漲跌幅% + 0.5%)
+   - price_range_low = 最新收盤價 × (1 + 預測漲跌幅% - 1.0%)
+   - price_range_high = 最新收盤價 × (1 + 預測漲跌幅% + 1.0%)
 
 **每支股票的預測必須不同！根據該股票的實際技術指標和籌碼數據計算！**
+**預測幅度不要超過近5日平均日波動的 1.5 倍！**
 
 ## 回應格式（JSON）
 {{
@@ -1387,7 +1429,7 @@ class AISuggestionService:
   ],
   "risk_level": "HIGH",
   "time_horizon": "短線(1-3天)" | "中線(1-2週)",
-  "predicted_change_percent": 預期漲跌幅（根據訊號強度：弱訊號 ±3-5%，中訊號 ±5-8%，強訊號 ±8-12%）,
+  "predicted_change_percent": 預期漲跌幅（根據訊號強度：弱訊號 ±0.5-1.5%，中訊號 ±1.5-3%，強訊號 ±3-5%）,
   "next_day_prediction": {{
     "direction": "UP" | "DOWN",
     "probability": 根據指標同向性計算的機率（0.55-0.85）,
@@ -1508,14 +1550,17 @@ class AISuggestionService:
 - 外資5日淨買賣：{chip.get('foreign_net_5d', 0)}張
 - MACD 狀態：{tech.get('macd_status', 'N/A')}
 
-**重要：歷史統計顯示預測幅度經常過於保守！**
-根據驗證數據，實際漲跌幅通常是預測的 2-3 倍。請大膽預測：
-- 若訊號偏空（RSI 偏高、外資賣超、MACD 負向）：預測 -4% 至 -8%
-- 若訊號偏多（RSI 偏低、外資買超、MACD 正向）：預測 +3% 至 +6%
-- 若訊號極端（RSI > 80 或 < 20，配合大量外資動向）：預測 ±8% 至 ±12%
-- 基準：使用近5日平均波動的 1.5-2 倍作為預測幅度
+**重要：隔日預測的合理範圍**
+個股單日漲跌幅通常在 ±0.5%~±3% 之間。請基於數據做出務實預測：
+- 弱訊號（指標分歧）：預測 ±0.3% 至 ±1.0%
+- 中等訊號（部分指標同向）：預測 ±1.0% 至 ±2.0%
+- 強訊號（多數指標同向 + 大量外資動向）：預測 ±2.0% 至 ±3.5%
+- 極端訊號（RSI > 80 或 < 20，漲/跌停板）：最多 ±3.5% 至 ±5.0%
+- 基準：使用近5日平均日波動幅度作為預測基準
 
-**你的隔日預測必須基於這些數據計算，不要給固定值或過於保守的值！**
+{self._get_prediction_history_context(stock_id, data.get('_db'))}
+
+**你的隔日預測必須基於數據計算，預測值要貼近實際日常波動範圍！**
 
 請根據以上所有數據進行綜合分析，給出客觀的投資建議。"""
 

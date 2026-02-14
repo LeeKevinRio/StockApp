@@ -14,15 +14,51 @@ from app.config import settings
 
 
 class PriceCache:
-    """簡單的價格緩存，60秒過期"""
+    """價格緩存，依市場交易時段動態調整 TTL"""
 
-    def __init__(self, ttl_seconds: int = 60):
+    # 台股交易時間 09:00 ~ 13:30
+    TW_MARKET_OPEN_HOUR = 9
+    TW_MARKET_OPEN_MINUTE = 0
+    TW_MARKET_CLOSE_HOUR = 13
+    TW_MARKET_CLOSE_MINUTE = 30
+
+    def __init__(self, ttl_trading: int = 30, ttl_closed: int = 300):
         self._cache: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
-        self._ttl = ttl_seconds
+        self._ttl_trading = ttl_trading    # 盤中 TTL（秒）
+        self._ttl_closed = ttl_closed      # 收盤後 TTL（秒）
+        self._last_clear_date: Optional[date] = None
+
+    def _get_ttl(self) -> int:
+        """根據台股交易時段回傳適當的 TTL"""
+        now = datetime.now()
+        weekday = now.weekday()  # 0=Monday, 6=Sunday
+
+        # 週末直接用長 TTL
+        if weekday >= 5:
+            return self._ttl_closed
+
+        market_open = now.replace(
+            hour=self.TW_MARKET_OPEN_HOUR, minute=self.TW_MARKET_OPEN_MINUTE, second=0
+        )
+        market_close = now.replace(
+            hour=self.TW_MARKET_CLOSE_HOUR, minute=self.TW_MARKET_CLOSE_MINUTE, second=0
+        )
+
+        if market_open <= now <= market_close:
+            return self._ttl_trading
+        return self._ttl_closed
+
+    def _auto_clear_on_new_day(self):
+        """每天第一次存取時清除前一天快取，確保開盤拿到最新資料"""
+        today = date.today()
+        if self._last_clear_date != today:
+            self._cache.clear()
+            self._last_clear_date = today
 
     def get(self, key: str) -> Optional[Dict[str, Any]]:
         with self._lock:
+            self._auto_clear_on_new_day()
             if key in self._cache:
                 entry = self._cache[key]
                 if datetime.now() < entry["expires_at"]:
@@ -33,14 +69,17 @@ class PriceCache:
 
     def set(self, key: str, data: Dict[str, Any]):
         with self._lock:
+            self._auto_clear_on_new_day()
+            ttl = self._get_ttl()
             self._cache[key] = {
                 "data": data,
-                "expires_at": datetime.now() + timedelta(seconds=self._ttl)
+                "expires_at": datetime.now() + timedelta(seconds=ttl)
             }
 
     def get_batch(self, keys: List[str]) -> Dict[str, Dict[str, Any]]:
         result = {}
         with self._lock:
+            self._auto_clear_on_new_day()
             now = datetime.now()
             for key in keys:
                 if key in self._cache:
@@ -51,13 +90,20 @@ class PriceCache:
 
     def set_batch(self, data: Dict[str, Dict[str, Any]]):
         with self._lock:
-            expires_at = datetime.now() + timedelta(seconds=self._ttl)
+            self._auto_clear_on_new_day()
+            ttl = self._get_ttl()
+            expires_at = datetime.now() + timedelta(seconds=ttl)
             for key, value in data.items():
                 self._cache[key] = {"data": value, "expires_at": expires_at}
 
+    def clear(self):
+        """手動清除所有快取"""
+        with self._lock:
+            self._cache.clear()
 
-# 全局價格緩存
-_price_cache = PriceCache(ttl_seconds=60)
+
+# 全局價格緩存：盤中 30 秒、收盤後 5 分鐘
+_price_cache = PriceCache(ttl_trading=30, ttl_closed=300)
 
 
 def generate_mock_stock_history(stock_id: str, days: int = 60) -> List[dict]:
@@ -218,18 +264,27 @@ class StockDataService:
     def _get_tw_realtime_price(self, stock_id: str) -> dict:
         """取得台股即時報價（優先順序：TWSE → Fugle → FinMind）"""
 
+        def _safe_decimal(val, default=0):
+            """安全轉換為 Decimal"""
+            if val is None or val == '' or val == '-' or val == '--':
+                return Decimal(str(default))
+            try:
+                return Decimal(str(val))
+            except Exception:
+                return Decimal(str(default))
+
         # 1. 優先使用 TWSE（免費即時）
         try:
             quote = self.twse.get_realtime_quote(stock_id)
             return {
                 "stock_id": stock_id,
                 "name": quote.get("name", ""),
-                "current_price": Decimal(str(quote.get("price", 0))),
-                "change": Decimal(str(quote.get("change", 0))),
-                "change_percent": Decimal(str(quote.get("change_percent", 0))),
-                "open": Decimal(str(quote.get("open", 0))),
-                "high": Decimal(str(quote.get("high", 0))),
-                "low": Decimal(str(quote.get("low", 0))),
+                "current_price": _safe_decimal(quote.get("price")),
+                "change": _safe_decimal(quote.get("change")),
+                "change_percent": _safe_decimal(quote.get("change_percent")),
+                "open": _safe_decimal(quote.get("open")),
+                "high": _safe_decimal(quote.get("high")),
+                "low": _safe_decimal(quote.get("low")),
                 "volume": quote.get("volume", 0),
                 "market_region": "TW",
                 "currency": "TWD",
@@ -341,7 +396,7 @@ class StockDataService:
                 except Exception as e:
                     print(f"US Stock {stock_id} 報價失敗: {e}")
         else:
-            # TW stocks - 使用 TWSE 批量 API
+            # TW stocks - 使用 TWSE 批量 API（含上市+上櫃）
             try:
                 batch_data = self.twse.get_realtime_price(missing_ids)
                 for item in batch_data:
@@ -351,6 +406,11 @@ class StockDataService:
 
                     price = float(item.get("price", 0) or 0)
                     yesterday_close = float(item.get("yesterday_close", 0) or 0)
+
+                    # 如果即時價為 0，嘗試用昨收
+                    if price == 0 and yesterday_close > 0:
+                        price = yesterday_close
+
                     change = price - yesterday_close if price and yesterday_close else 0
                     change_percent = (change / yesterday_close * 100) if yesterday_close > 0 else 0
 
@@ -372,15 +432,18 @@ class StockDataService:
                     results[stock_id] = price_data
             except Exception as e:
                 print(f"TWSE 批量報價失敗: {e}")
-                # 回退到逐一查詢
-                for stock_id in missing_ids:
+
+            # 對批量查詢未命中的股票，逐一補查
+            still_missing = [sid for sid in missing_ids if sid not in results]
+            if still_missing:
+                for stock_id in still_missing:
                     try:
                         price_data = self._get_tw_realtime_price(stock_id)
                         if price_data:
                             new_prices[stock_id] = price_data
                             results[stock_id] = price_data
                     except Exception as e2:
-                        print(f"TW Stock {stock_id} 報價失敗: {e2}")
+                        print(f"TW Stock {stock_id} 逐一補查失敗: {e2}")
 
         # 快取新獲取的報價
         if new_prices:

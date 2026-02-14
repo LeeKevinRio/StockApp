@@ -46,8 +46,16 @@ class TWSEFetcher:
 
         msg_array = data.get("msgArray", [])
 
-        # 如果上市沒有數據，嘗試上櫃
-        if not msg_array or len(msg_array) == 0:
+        # 檢查回傳的資料是否有效（c 欄位為股票代碼，空代表無效）
+        has_valid_data = (
+            msg_array
+            and len(msg_array) > 0
+            and msg_array[0].get("c", "") != ""
+        )
+
+        # 如果上市沒有有效數據，嘗試上櫃
+        if not has_valid_data:
+            self._rate_limit()
             ex_ch = f"otc_{stock_id}.tw"
             response = requests.get(
                 self.REALTIME_URL,
@@ -57,12 +65,16 @@ class TWSEFetcher:
             data = response.json()
             msg_array = data.get("msgArray", [])
 
-        if not msg_array or len(msg_array) == 0:
+        if not msg_array or len(msg_array) == 0 or msg_array[0].get("c", "") == "":
             raise Exception(f"找不到股票 {stock_id} 的即時報價數據")
 
         item = msg_array[0]
-        current_price = float(item.get("z", 0) or 0)
-        yesterday_close = float(item.get("y", 0) or 0)
+        current_price = self._safe_float(item.get("z"))
+        yesterday_close = self._safe_float(item.get("y"))
+
+        # 如果即時價為 0（未成交），嘗試用昨收
+        if current_price == 0 and yesterday_close > 0:
+            current_price = yesterday_close
 
         # 計算漲跌
         change = current_price - yesterday_close if current_price and yesterday_close else 0
@@ -74,19 +86,32 @@ class TWSEFetcher:
             "price": current_price,
             "change": change,
             "change_percent": change_percent,
-            "open": float(item.get("o", 0) or 0),
-            "high": float(item.get("h", 0) or 0),
-            "low": float(item.get("l", 0) or 0),
-            "volume": int(item.get("v", 0) or 0),
+            "open": self._safe_float(item.get("o")),
+            "high": self._safe_float(item.get("h")),
+            "low": self._safe_float(item.get("l")),
+            "volume": int(self._safe_float(item.get("v"))),
             "updated_at": item.get("t", ""),  # 時間戳
         }
 
+    def _safe_float(self, value, default=0) -> float:
+        """安全轉換為 float，處理 '-' 等無效值"""
+        if value is None or value == '' or value == '-' or value == '--':
+            return default
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return default
+
     def get_realtime_price(self, stock_ids: List[str]) -> List[Dict]:
-        """取得即時報價（證交所 MIS API）- 批量查詢"""
+        """取得即時報價（證交所 MIS API）- 批量查詢，同時查上市與上櫃"""
         self._rate_limit()
 
-        # 格式: tse_2330.tw|tse_2317.tw
-        ex_ch = "|".join([f"tse_{sid}.tw" for sid in stock_ids])
+        # 同時查詢上市(tse)與上櫃(otc)
+        ex_ch_parts = []
+        for sid in stock_ids:
+            ex_ch_parts.append(f"tse_{sid}.tw")
+            ex_ch_parts.append(f"otc_{sid}.tw")
+        ex_ch = "|".join(ex_ch_parts)
 
         response = requests.get(
             self.REALTIME_URL,
@@ -95,21 +120,28 @@ class TWSEFetcher:
         response.raise_for_status()
         data = response.json()
 
-        results = []
+        # 用 dict 去重（同一股票可能 tse 和 otc 都有回傳，取有效的那個）
+        seen = {}
         for item in data.get("msgArray", []):
-            results.append(
-                {
-                    "stock_id": item.get("c", ""),
-                    "name": item.get("n", ""),
-                    "price": float(item.get("z", 0) or 0),
-                    "open": float(item.get("o", 0) or 0),
-                    "high": float(item.get("h", 0) or 0),
-                    "low": float(item.get("l", 0) or 0),
-                    "volume": int(item.get("v", 0) or 0),
-                    "yesterday_close": float(item.get("y", 0) or 0),
-                }
-            )
-        return results
+            stock_id = item.get("c", "")
+            if not stock_id:
+                continue
+            price = self._safe_float(item.get("z"))
+            # 如果已有有效價格的記錄，跳過無效的
+            if stock_id in seen and price == 0:
+                continue
+            seen[stock_id] = {
+                "stock_id": stock_id,
+                "name": item.get("n", ""),
+                "price": price,
+                "open": self._safe_float(item.get("o")),
+                "high": self._safe_float(item.get("h")),
+                "low": self._safe_float(item.get("l")),
+                "volume": int(self._safe_float(item.get("v"))),
+                "yesterday_close": self._safe_float(item.get("y")),
+            }
+
+        return list(seen.values())
 
     def get_daily_trading(self, stock_id: str, year: int, month: int) -> List[Dict]:
         """取得個股月成交資訊"""

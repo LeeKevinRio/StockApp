@@ -42,7 +42,7 @@ class WatchlistProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadWatchlist({String? market, bool silent = false}) async {
+  Future<void> loadWatchlist({String? market, bool silent = false, bool forceRefresh = false}) async {
     if (!silent) {
       _isLoading = true;
       _error = null;
@@ -50,7 +50,7 @@ class WatchlistProvider with ChangeNotifier {
     }
 
     try {
-      _items = await _apiService.getWatchlist(market: market ?? _marketFilter);
+      _items = await _apiService.getWatchlist(market: market ?? _marketFilter, forceRefresh: forceRefresh);
       _applySortAndFilter();
       _error = null;  // 清除任何之前的錯誤
       _isLoading = false;
@@ -74,7 +74,7 @@ class WatchlistProvider with ChangeNotifier {
   }
 
   Future<void> refresh() async {
-    await loadWatchlist(market: _marketFilter);
+    await loadWatchlist(market: _marketFilter, forceRefresh: true);
   }
 
   Future<void> addStock(String stockId, {String? notes, String market = 'TW'}) async {

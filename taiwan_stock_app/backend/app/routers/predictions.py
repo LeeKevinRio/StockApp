@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from app.database import get_db
 from app.models import User
 from app.services.prediction_tracker import PredictionTracker
+from app.services.trading_calendar import get_previous_trading_date
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/api/predictions", tags=["predictions"])
@@ -33,6 +34,12 @@ def get_prediction_statistics(
         - avg_error_percent: 平均預測誤差 %
         - records: 最近預測詳情
     """
+    # 自動更新尚未驗證的預測結果
+    try:
+        tracker.update_actual_results(db=db, market=market)
+    except Exception as e:
+        print(f"Auto-update prediction results failed: {e}")
+
     return tracker.get_accuracy_statistics(
         db=db,
         days=days,
@@ -69,12 +76,13 @@ def get_yesterday_predictions(
     """
     獲取昨日預測與實際結果比較
     """
-    yesterday = date.today() - timedelta(days=1)
-    # 跳過週末
-    if yesterday.weekday() == 6:  # Sunday
-        yesterday = yesterday - timedelta(days=2)  # Friday
-    elif yesterday.weekday() == 5:  # Saturday
-        yesterday = yesterday - timedelta(days=1)  # Friday
+    # 自動更新尚未驗證的預測結果
+    try:
+        tracker.update_actual_results(db=db)
+    except Exception as e:
+        print(f"Auto-update prediction results failed: {e}")
+
+    yesterday = get_previous_trading_date()
 
     return tracker.get_daily_summary(db=db, target_date=yesterday)
 
@@ -128,6 +136,12 @@ def get_all_stocks_statistics(
         - overall_avg_error: 整體平均誤差
         - stocks: 各股票詳細統計
     """
+    # 自動更新尚未驗證的預測結果
+    try:
+        tracker.update_actual_results(db=db)
+    except Exception as e:
+        print(f"Auto-update prediction results failed: {e}")
+
     return tracker.get_all_stocks_statistics(db=db, days=days)
 
 
@@ -137,32 +151,12 @@ def get_today_predictions(
     current_user: User = Depends(get_current_user),
 ):
     """
-    獲取今日預測（待驗證）
+    獲取今日預測結果（目標日期為今天的預測，自動更新實際結果）
     """
-    from app.models import PredictionRecord
-    today = date.today()
+    # 自動更新尚未驗證的預測結果
+    try:
+        tracker.update_actual_results(db=db)
+    except Exception as e:
+        print(f"Auto-update prediction results failed: {e}")
 
-    records = db.query(PredictionRecord).filter(
-        PredictionRecord.prediction_date == today
-    ).all()
-
-    predictions = []
-    for r in records:
-        predictions.append({
-            "stock_id": r.stock_id,
-            "stock_name": r.stock_name,
-            "market": r.market_region,
-            "predicted_direction": r.predicted_direction,
-            "predicted_change": float(r.predicted_change_percent or 0),
-            "predicted_probability": float(r.predicted_probability or 0),
-            "base_price": float(r.base_close_price or 0),
-            "target_date": r.target_date.isoformat() if r.target_date else None,
-            "ai_provider": r.ai_provider,
-            "status": "pending"  # 待驗證
-        })
-
-    return {
-        "date": today.isoformat(),
-        "total": len(predictions),
-        "predictions": predictions
-    }
+    return tracker.get_daily_summary(db=db, target_date=date.today())

@@ -4,18 +4,33 @@ AI router - AI 建議與問答（支援台股與美股）
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import date
+from datetime import date, timedelta
 
 from app.database import get_db
 from app.models import User, Watchlist, Stock, AIReport, AIChatHistory
 from app.schemas import AISuggestion, AIChatRequest, AIChatResponse, ChatMessage
 from app.services import AISuggestionService, AIChatService, StockDataService
 from app.services.prediction_tracker import PredictionTracker
+from app.services.trading_calendar import get_next_trading_date
 from app.routers.auth import get_current_user
 
 prediction_tracker = PredictionTracker()
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
+
+
+def _get_next_trading_date_str() -> str:
+    """計算下一個交易日日期（含跳過國定假日）"""
+    return get_next_trading_date().isoformat()
+
+
+def _inject_target_date(suggestion_obj):
+    """在 next_day_prediction 中注入 target_date"""
+    if hasattr(suggestion_obj, 'next_day_prediction') and suggestion_obj.next_day_prediction:
+        pred = suggestion_obj.next_day_prediction
+        if isinstance(pred, dict) and 'target_date' not in pred:
+            pred['target_date'] = _get_next_trading_date_str()
+    return suggestion_obj
 stock_service = StockDataService()
 
 
@@ -190,6 +205,11 @@ def get_stock_suggestion(
             if key_factors and isinstance(key_factors[0], str):
                 key_factors = [{"category": "分析", "factor": f, "impact": "neutral"} for f in key_factors]
 
+            # 注入 target_date 到 next_day_prediction
+            next_pred = existing_report.next_day_prediction
+            if next_pred and isinstance(next_pred, dict) and 'target_date' not in next_pred:
+                next_pred = {**next_pred, 'target_date': _get_next_trading_date_str()}
+
             return AISuggestion(
                 stock_id=existing_report.stock_id,
                 name=stock_name,
@@ -207,13 +227,13 @@ def get_stock_suggestion(
                 risk_level=existing_report.risk_level,
                 time_horizon=existing_report.time_horizon,
                 predicted_change_percent=existing_report.predicted_change_percent,
-                next_day_prediction=existing_report.next_day_prediction,
+                next_day_prediction=next_pred,
             )
 
         # Generate new suggestion with market parameter
         # Create service instance based on user's subscription tier
         suggestion_service = AISuggestionService.for_user(current_user)
-        suggestion_data = suggestion_service.generate_suggestion(stock_id, stock_name, market=market)
+        suggestion_data = suggestion_service.generate_suggestion(stock_id, stock_name, market=market, db=db)
 
         # Save to database with error handling
         try:
@@ -277,6 +297,11 @@ def get_stock_suggestion(
         # Fix report_date format - convert string to date if needed
         if isinstance(suggestion_data.get("report_date"), str):
             suggestion_data["report_date"] = today
+
+        # 注入 target_date 到 next_day_prediction
+        next_pred = suggestion_data.get("next_day_prediction")
+        if next_pred and isinstance(next_pred, dict) and 'target_date' not in next_pred:
+            next_pred['target_date'] = _get_next_trading_date_str()
 
         return AISuggestion(**suggestion_data)
     except HTTPException:

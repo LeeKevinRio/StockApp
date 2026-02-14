@@ -28,6 +28,7 @@ class NextDayPrediction {
   final double? priceRangeLow; // 預測最低價
   final double? priceRangeHigh; // 預測最高價
   final String reasoning; // 預測依據
+  final String? targetDate; // 預測目標日期 (YYYY-MM-DD)
 
   NextDayPrediction({
     required this.direction,
@@ -36,6 +37,7 @@ class NextDayPrediction {
     this.priceRangeLow,
     this.priceRangeHigh,
     required this.reasoning,
+    this.targetDate,
   });
 
   factory NextDayPrediction.fromJson(Map<String, dynamic> json) {
@@ -50,6 +52,7 @@ class NextDayPrediction {
           ? (json['price_range_high'] as num).toDouble()
           : null,
       reasoning: json['reasoning'] ?? '',
+      targetDate: json['target_date'],
     );
   }
 

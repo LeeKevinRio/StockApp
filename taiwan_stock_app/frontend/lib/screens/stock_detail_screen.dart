@@ -125,7 +125,10 @@ class _StockDetailScreenState extends State<StockDetailScreen>
               : TabBarView(
                   controller: _tabController,
                   children: [
-                    _buildOverviewTab(),
+                    RefreshIndicator(
+                      onRefresh: _loadStockData,
+                      child: _buildOverviewTab(),
+                    ),
                     _buildKLineTab(),
                     _buildTechnicalAnalysisTab(),
                     _buildFundamentalTab(),
@@ -817,12 +820,24 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
     final priceRangeLow = prediction.priceRangeLow;
     final priceRangeHigh = prediction.priceRangeHigh;
     final reasoning = prediction.reasoning;
+    final targetDate = prediction.targetDate;
 
     final isUp = direction == 'UP';
     final directionColor = isUp ? Colors.red : Colors.green;
     final directionIcon = isUp ? Icons.arrow_upward : Icons.arrow_downward;
     final directionText = isUp ? '預測上漲' : '預測下跌';
     final changeSign = predictedChange >= 0 ? '+' : '';
+
+    // 格式化目標日期
+    String targetDateDisplay = '';
+    if (targetDate != null && targetDate.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(targetDate);
+        targetDateDisplay = '${dt.month}/${dt.day}';
+      } catch (_) {
+        targetDateDisplay = targetDate;
+      }
+    }
 
     return Card(
       child: Container(
@@ -844,15 +859,32 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
               children: [
                 Icon(Icons.schedule, size: 20, color: directionColor),
                 const SizedBox(width: 8),
-                Text(
-                  '明日漲跌預測',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: directionColor,
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: targetDateDisplay.isNotEmpty
+                              ? '$targetDateDisplay 漲跌預測'
+                              : '隔日漲跌預測',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: directionColor,
+                          ),
+                        ),
+                        if (targetDate != null && targetDate.isNotEmpty)
+                          TextSpan(
+                            text: ' ($targetDate)',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-                const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(

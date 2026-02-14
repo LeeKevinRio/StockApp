@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../services/api_service.dart';
 
 class PredictionStatsScreen extends StatefulWidget {
@@ -177,11 +178,15 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildTodaySection(),
+          _buildTodayResultsSection(),
           const SizedBox(height: 24),
           _buildPeriodSelector(),
           const SizedBox(height: 16),
           _buildOverallStats(),
+          const SizedBox(height: 24),
+          _buildAccuracyTrendChart(),
+          const SizedBox(height: 24),
+          _buildPredictedVsActualChart(),
           const SizedBox(height: 24),
           _buildYesterdaySection(),
           const SizedBox(height: 24),
@@ -445,12 +450,353 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
     );
   }
 
-  Widget _buildTodaySection() {
+  /// 從 statistics records 中取得排序好的記錄
+  List<Map<String, dynamic>> _getSortedRecords() {
+    final stats = _statistics;
+    if (stats == null) return [];
+    final records = (stats['records'] as List?) ?? [];
+    final sorted = records
+        .map((r) => Map<String, dynamic>.from(r))
+        .where((r) => r['actual_change'] != null)
+        .toList();
+    sorted.sort((a, b) =>
+        (a['target_date'] ?? '').compareTo(b['target_date'] ?? ''));
+    return sorted;
+  }
+
+  /// 累計準確率趨勢折線圖
+  Widget _buildAccuracyTrendChart() {
+    final records = _getSortedRecords();
+    if (records.length < 2) return const SizedBox.shrink();
+
+    // 計算累計準確率
+    int correct = 0;
+    final spots = <FlSpot>[];
+    final dates = <String>[];
+
+    for (int i = 0; i < records.length; i++) {
+      if (records[i]['direction_correct'] == true) correct++;
+      final accuracy = (correct / (i + 1)) * 100;
+      spots.add(FlSpot(i.toDouble(), accuracy));
+      dates.add(records[i]['target_date'] ?? '');
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.show_chart, color: Colors.blue),
+                const SizedBox(width: 8),
+                Text(
+                  '累計準確率趨勢',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ],
+            ),
+            const Divider(),
+            SizedBox(
+              height: 200,
+              child: LineChart(
+                LineChartData(
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    horizontalInterval: 25,
+                    getDrawingHorizontalLine: (value) => FlLine(
+                      color: Colors.grey.shade200,
+                      strokeWidth: 1,
+                    ),
+                  ),
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 40,
+                        interval: 25,
+                        getTitlesWidget: (value, _) => Text(
+                          '${value.toInt()}%',
+                          style: const TextStyle(fontSize: 10, color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 30,
+                        interval: (records.length / 4).ceilToDouble().clamp(1, double.infinity),
+                        getTitlesWidget: (value, _) {
+                          final idx = value.toInt();
+                          if (idx < 0 || idx >= dates.length) return const SizedBox.shrink();
+                          final d = dates[idx];
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              d.length >= 10 ? d.substring(5) : d,
+                              style: const TextStyle(fontSize: 9, color: Colors.grey),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  minY: 0,
+                  maxY: 100,
+                  borderData: FlBorderData(show: false),
+                  extraLinesData: ExtraLinesData(
+                    horizontalLines: [
+                      HorizontalLine(
+                        y: 50,
+                        color: Colors.red.shade200,
+                        strokeWidth: 1,
+                        dashArray: [5, 5],
+                        label: HorizontalLineLabel(
+                          show: true,
+                          alignment: Alignment.topRight,
+                          style: TextStyle(fontSize: 9, color: Colors.red.shade300),
+                          labelResolver: (_) => '50%',
+                        ),
+                      ),
+                    ],
+                  ),
+                  lineTouchData: LineTouchData(
+                    touchTooltipData: LineTouchTooltipData(
+                      getTooltipItems: (spots) => spots.map((s) {
+                        final idx = s.spotIndex;
+                        final d = idx < dates.length ? dates[idx] : '';
+                        return LineTooltipItem(
+                          '$d\n準確率 ${s.y.toStringAsFixed(1)}%',
+                          const TextStyle(fontSize: 12, color: Colors.white),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: spots,
+                      isCurved: true,
+                      curveSmoothness: 0.2,
+                      color: Colors.blue,
+                      barWidth: 2.5,
+                      dotData: FlDotData(
+                        show: true,
+                        getDotPainter: (spot, _, __, ___) => FlDotCirclePainter(
+                          radius: records.length > 15 ? 0 : 3,
+                          color: Colors.blue,
+                          strokeColor: Colors.white,
+                          strokeWidth: 1,
+                        ),
+                      ),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        color: Colors.blue.withValues(alpha: 0.1),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 預測 vs 實際漲跌幅折線圖
+  Widget _buildPredictedVsActualChart() {
+    final records = _getSortedRecords();
+    if (records.length < 2) return const SizedBox.shrink();
+
+    final predictedSpots = <FlSpot>[];
+    final actualSpots = <FlSpot>[];
+    final dates = <String>[];
+    double minY = 0, maxY = 0;
+
+    for (int i = 0; i < records.length; i++) {
+      final predicted = (records[i]['predicted_change'] ?? 0.0).toDouble();
+      final actual = (records[i]['actual_change'] ?? 0.0).toDouble();
+      predictedSpots.add(FlSpot(i.toDouble(), predicted));
+      actualSpots.add(FlSpot(i.toDouble(), actual));
+      dates.add(records[i]['target_date'] ?? '');
+
+      if (predicted < minY) minY = predicted;
+      if (actual < minY) minY = actual;
+      if (predicted > maxY) maxY = predicted;
+      if (actual > maxY) maxY = actual;
+    }
+
+    // 加一點 padding
+    minY = (minY - 1).floorToDouble();
+    maxY = (maxY + 1).ceilToDouble();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.compare_arrows, color: Colors.deepPurple),
+                const SizedBox(width: 8),
+                Text(
+                  '預測 vs 實際漲跌',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // 圖例
+            Row(
+              children: [
+                Container(width: 16, height: 3, color: Colors.orange),
+                const SizedBox(width: 4),
+                const Text('預測', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(width: 16),
+                Container(width: 16, height: 3, color: Colors.blue),
+                const SizedBox(width: 4),
+                const Text('實際', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+            const Divider(),
+            SizedBox(
+              height: 200,
+              child: LineChart(
+                LineChartData(
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    getDrawingHorizontalLine: (value) => FlLine(
+                      color: Colors.grey.shade200,
+                      strokeWidth: 1,
+                    ),
+                  ),
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 40,
+                        getTitlesWidget: (value, _) => Text(
+                          '${value.toStringAsFixed(1)}%',
+                          style: const TextStyle(fontSize: 9, color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 30,
+                        interval: (records.length / 4).ceilToDouble().clamp(1, double.infinity),
+                        getTitlesWidget: (value, _) {
+                          final idx = value.toInt();
+                          if (idx < 0 || idx >= dates.length) return const SizedBox.shrink();
+                          final d = dates[idx];
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              d.length >= 10 ? d.substring(5) : d,
+                              style: const TextStyle(fontSize: 9, color: Colors.grey),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  minY: minY,
+                  maxY: maxY,
+                  borderData: FlBorderData(show: false),
+                  extraLinesData: ExtraLinesData(
+                    horizontalLines: [
+                      HorizontalLine(
+                        y: 0,
+                        color: Colors.grey.shade400,
+                        strokeWidth: 1,
+                      ),
+                    ],
+                  ),
+                  lineTouchData: LineTouchData(
+                    touchTooltipData: LineTouchTooltipData(
+                      getTooltipItems: (spots) => spots.map((s) {
+                        final idx = s.spotIndex;
+                        final d = idx < dates.length ? dates[idx] : '';
+                        final label = s.barIndex == 0 ? '預測' : '實際';
+                        final color = s.barIndex == 0 ? Colors.orange : Colors.blue;
+                        return LineTooltipItem(
+                          '$d\n$label ${s.y >= 0 ? '+' : ''}${s.y.toStringAsFixed(2)}%',
+                          TextStyle(fontSize: 11, color: color),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  lineBarsData: [
+                    // 預測線
+                    LineChartBarData(
+                      spots: predictedSpots,
+                      isCurved: true,
+                      curveSmoothness: 0.2,
+                      color: Colors.orange,
+                      barWidth: 2,
+                      dotData: FlDotData(
+                        show: true,
+                        getDotPainter: (spot, _, __, ___) => FlDotCirclePainter(
+                          radius: records.length > 15 ? 0 : 2.5,
+                          color: Colors.orange,
+                          strokeColor: Colors.white,
+                          strokeWidth: 1,
+                        ),
+                      ),
+                    ),
+                    // 實際線
+                    LineChartBarData(
+                      spots: actualSpots,
+                      isCurved: true,
+                      curveSmoothness: 0.2,
+                      color: Colors.blue,
+                      barWidth: 2,
+                      dotData: FlDotData(
+                        show: true,
+                        getDotPainter: (spot, _, __, ___) => FlDotCirclePainter(
+                          radius: records.length > 15 ? 0 : 2.5,
+                          color: Colors.blue,
+                          strokeColor: Colors.white,
+                          strokeWidth: 1,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTodayResultsSection() {
     final data = _todayData;
     if (data == null) return const SizedBox.shrink();
 
     final predictions = (data['predictions'] as List?) ?? [];
     final total = data['total'] ?? 0;
+    final accuracy = data['direction_accuracy'];
+    final dateStr = data['date'] ?? '';
+
+    // 格式化日期顯示
+    String displayDate = dateStr;
+    if (dateStr.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(dateStr);
+        displayDate = '${dt.month}/${dt.day}';
+      } catch (_) {}
+    }
 
     return Card(
       color: Colors.blue.shade50,
@@ -461,26 +807,39 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.schedule, color: Colors.blue),
+                const Icon(Icons.today, color: Colors.blue),
                 const SizedBox(width: 8),
                 Text(
-                  '今日預測（待驗證）',
+                  '今日預測結果 ($displayDate)',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Colors.blue.shade700,
                   ),
                 ),
                 const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.blue,
-                    borderRadius: BorderRadius.circular(12),
+                if (accuracy != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: accuracy >= 50 ? Colors.green : Colors.red,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '準確率 ${accuracy.toStringAsFixed(1)}%',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                  )
+                else if (total > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '$total 筆',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
                   ),
-                  child: Text(
-                    '$total 筆',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                ),
               ],
             ),
             const Divider(),
@@ -492,7 +851,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
                     children: [
                       Icon(Icons.info_outline, color: Colors.grey, size: 32),
                       SizedBox(height: 8),
-                      Text('今日尚無預測記錄'),
+                      Text('今日無預測記錄'),
                       SizedBox(height: 4),
                       Text(
                         '請先查看股票的 AI 建議，系統會自動記錄預測',
@@ -509,128 +868,11 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
                 itemCount: predictions.length,
                 itemBuilder: (context, index) {
                   final pred = predictions[index];
-                  return _buildTodayPredictionItem(pred);
+                  return _buildPredictionItem(pred);
                 },
               ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildTodayPredictionItem(Map<String, dynamic> pred) {
-    final stockId = pred['stock_id'] ?? '';
-    final stockName = pred['stock_name'] ?? '';
-    final predictedDir = pred['predicted_direction'] ?? '';
-    final predictedChange = (pred['predicted_change'] ?? 0.0).toDouble();
-    final probability = (pred['predicted_probability'] ?? 0.0).toDouble();
-    final basePrice = (pred['base_price'] ?? 0.0).toDouble();
-    final targetDate = pred['target_date'] ?? '';
-    final aiProvider = pred['ai_provider'] ?? '';
-
-    final isPredictUp = predictedDir == 'UP';
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                '$stockId $stockName',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  '待驗證',
-                  style: TextStyle(fontSize: 10, color: Colors.orange),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('預測方向', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    Row(
-                      children: [
-                        Icon(
-                          isPredictUp ? Icons.trending_up : Icons.trending_down,
-                          color: isPredictUp ? Colors.red : Colors.green,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${predictedChange >= 0 ? '+' : ''}${predictedChange.toStringAsFixed(2)}%',
-                          style: TextStyle(
-                            color: isPredictUp ? Colors.red : Colors.green,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('預測機率', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    Text(
-                      '${(probability * 100).toStringAsFixed(0)}%',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    const Text('基準價', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    Text(
-                      basePrice.toStringAsFixed(2),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '驗證日期：$targetDate',
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
-              ),
-              Text(
-                'AI: $aiProvider',
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -820,7 +1062,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey.withOpacity(0.1),
+        color: Colors.grey.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
         border: hasActual
             ? Border.all(

@@ -19,6 +19,7 @@ stock_service = StockDataService()
 @router.get("")
 def get_watchlist(
     market: Optional[str] = Query(None, description="Filter by market: TW or US"),
+    force_refresh: bool = Query(False, description="Force refresh cache"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -27,7 +28,11 @@ def get_watchlist(
 
     Args:
         market: 市場過濾 - "TW"(台股), "US"(美股), None(全部)
+        force_refresh: 是否強制清除快取
     """
+    if force_refresh:
+        from app.services.stock_data_service import _price_cache
+        _price_cache.clear()
     # Build query
     query = db.query(Watchlist, Stock).join(
         Stock, Watchlist.stock_id == Stock.stock_id
