@@ -11,6 +11,7 @@ import 'providers/theme_provider.dart';
 import 'providers/market_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/dashboard_provider.dart';
+import 'providers/portfolio_provider.dart';
 import 'screens/notification_center_screen.dart';
 import 'config/app_theme.dart';
 import 'utils/page_transitions.dart';
@@ -69,6 +70,9 @@ class MyApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (_) => DashboardProvider(apiService),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => PortfolioProvider(apiService),
         ),
       ],
       child: Consumer<ThemeProvider>(
