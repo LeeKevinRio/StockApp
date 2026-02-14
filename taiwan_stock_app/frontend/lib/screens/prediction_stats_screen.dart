@@ -253,7 +253,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
                             showTitle: false,
                           ),
                           PieChartSectionData(
-                            value: 100 - accuracy,
+                            value: (100 - accuracy).toDouble(),
                             color: Colors.grey.shade200,
                             radius: 20,
                             showTitle: false,
