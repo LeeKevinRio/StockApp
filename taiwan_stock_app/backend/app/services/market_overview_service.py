@@ -6,8 +6,12 @@ from typing import Dict, List
 from datetime import date, timedelta
 import logging
 
+from sqlalchemy.orm import Session
+
 from app.data_fetchers import FinMindFetcher, TWSEFetcher, USStockFetcher
 from app.config import settings
+from app.database import SessionLocal
+from app.models.stock import Stock
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +49,21 @@ class MarketOverviewService:
     def __init__(self):
         self.finmind = FinMindFetcher(settings.FINMIND_TOKEN)
         self.us_fetcher = USStockFetcher()
+        self._stock_name_cache: Dict[str, str] = {}
+
+    def _get_stock_name(self, stock_id: str) -> str:
+        """從資料庫查詢台股公司名稱"""
+        if stock_id in self._stock_name_cache:
+            return self._stock_name_cache[stock_id]
+        try:
+            db = SessionLocal()
+            stock = db.query(Stock).filter(Stock.stock_id == stock_id).first()
+            db.close()
+            name = stock.name if stock and stock.name else stock_id
+            self._stock_name_cache[stock_id] = name
+            return name
+        except Exception:
+            return stock_id
 
     def get_heatmap_data(self, market: str = "TW") -> Dict:
         """取得熱力圖數據（按產業分組）"""
@@ -156,7 +175,7 @@ class MarketOverviewService:
                 change_pct = (change / prev_close * 100) if prev_close > 0 else 0
                 return {
                     "stock_id": stock_id,
-                    "name": stock_id,
+                    "name": self._get_stock_name(stock_id),
                     "price": round(price, 2),
                     "change": round(change, 2),
                     "change_percent": round(change_pct, 2),
@@ -166,7 +185,7 @@ class MarketOverviewService:
                 latest = prices.iloc[0]
                 return {
                     "stock_id": stock_id,
-                    "name": stock_id,
+                    "name": self._get_stock_name(stock_id),
                     "price": round(float(latest["close"]), 2),
                     "change": 0,
                     "change_percent": 0,

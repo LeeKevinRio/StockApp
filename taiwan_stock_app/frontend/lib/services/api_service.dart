@@ -572,17 +572,18 @@ class ApiService {
 
   Future<List<Portfolio>> getPortfolios() async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/portfolio'),
+      Uri.parse('$baseUrl/api/portfolios'),
       headers: _headers,
     );
     _checkResponse(response);
-    final List<dynamic> data = jsonDecode(response.body);
+    final Map<String, dynamic> body = jsonDecode(response.body);
+    final List<dynamic> data = body['portfolios'] ?? [];
     return data.map((e) => Portfolio.fromJson(e)).toList();
   }
 
   Future<Portfolio> createPortfolio(CreatePortfolioRequest request) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/api/portfolio'),
+      Uri.parse('$baseUrl/api/portfolios'),
       headers: _headers,
       body: jsonEncode(request.toJson()),
     );
@@ -592,7 +593,7 @@ class ApiService {
 
   Future<Portfolio> getPortfolio(int portfolioId) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/portfolio/$portfolioId'),
+      Uri.parse('$baseUrl/api/portfolios/$portfolioId'),
       headers: _headers,
     );
     _checkResponse(response);
@@ -601,7 +602,7 @@ class ApiService {
 
   Future<Portfolio> updatePortfolio(int portfolioId, {String? name, String? description}) async {
     final response = await http.put(
-      Uri.parse('$baseUrl/api/portfolio/$portfolioId'),
+      Uri.parse('$baseUrl/api/portfolios/$portfolioId'),
       headers: _headers,
       body: jsonEncode({
         if (name != null) 'name': name,
@@ -614,7 +615,7 @@ class ApiService {
 
   Future<void> deletePortfolio(int portfolioId) async {
     final response = await http.delete(
-      Uri.parse('$baseUrl/api/portfolio/$portfolioId'),
+      Uri.parse('$baseUrl/api/portfolios/$portfolioId'),
       headers: _headers,
     );
     _checkResponse(response);
@@ -622,17 +623,18 @@ class ApiService {
 
   Future<List<Position>> getPositions(int portfolioId) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/portfolio/$portfolioId/positions'),
+      Uri.parse('$baseUrl/api/portfolios/$portfolioId/positions'),
       headers: _headers,
     );
     _checkResponse(response);
-    final List<dynamic> data = jsonDecode(response.body);
+    final Map<String, dynamic> body = jsonDecode(response.body);
+    final List<dynamic> data = body['positions'] ?? [];
     return data.map((e) => Position.fromJson(e)).toList();
   }
 
   Future<PortfolioSummary> getPortfolioSummary(int portfolioId) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/portfolio/$portfolioId/summary'),
+      Uri.parse('$baseUrl/api/portfolios/$portfolioId/summary'),
       headers: _headers,
     );
     _checkResponse(response);
@@ -641,7 +643,7 @@ class ApiService {
 
   Future<List<PositionAllocation>> getPositionAllocation(int portfolioId) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/portfolio/$portfolioId/allocation'),
+      Uri.parse('$baseUrl/api/portfolios/$portfolioId/allocation'),
       headers: _headers,
     );
     _checkResponse(response);
@@ -651,17 +653,18 @@ class ApiService {
 
   Future<List<Transaction>> getTransactions(int portfolioId, {int limit = 50}) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/portfolio/$portfolioId/transactions?limit=$limit'),
+      Uri.parse('$baseUrl/api/portfolios/$portfolioId/transactions?limit=$limit'),
       headers: _headers,
     );
     _checkResponse(response);
-    final List<dynamic> data = jsonDecode(response.body);
+    final Map<String, dynamic> body = jsonDecode(response.body);
+    final List<dynamic> data = body['transactions'] ?? [];
     return data.map((e) => Transaction.fromJson(e)).toList();
   }
 
   Future<Transaction> addTransaction(int portfolioId, CreateTransactionRequest request) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/api/portfolio/$portfolioId/transactions'),
+      Uri.parse('$baseUrl/api/portfolios/$portfolioId/transactions'),
       headers: _headers,
       body: jsonEncode(request.toJson()),
     );
@@ -671,7 +674,7 @@ class ApiService {
 
   Future<Map<String, dynamic>> getPortfolioPerformance(int portfolioId, {int days = 30}) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/api/portfolio/$portfolioId/performance?days=$days'),
+      Uri.parse('$baseUrl/api/portfolios/$portfolioId/performance?days=$days'),
       headers: _headers,
     );
     _checkResponse(response);
