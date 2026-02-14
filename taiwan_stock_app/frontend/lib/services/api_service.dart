@@ -785,6 +785,40 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
+  // ==================== 日曆相關 ====================
+
+  Future<Map<String, dynamic>> getEarningsCalendar({
+    String market = 'TW',
+    int? month,
+    int? year,
+  }) async {
+    final params = <String>['market=$market'];
+    if (month != null) params.add('month=$month');
+    if (year != null) params.add('year=$year');
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/calendar/earnings?${params.join("&")}'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
+  Future<Map<String, dynamic>> getDividendCalendar({
+    String market = 'TW',
+    int? month,
+    int? year,
+  }) async {
+    final params = <String>['market=$market'];
+    if (month != null) params.add('month=$month');
+    if (year != null) params.add('year=$year');
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/calendar/dividends?${params.join("&")}'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
   // ==================== 市場概覽相關 ====================
 
   Future<Map<String, dynamic>> getMarketHeatmap({String market = 'TW'}) async {

@@ -272,6 +272,22 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                     ListTile(
+                      leading: const Icon(Icons.compare_arrows),
+                      title: Text(isUS ? 'Stock Compare' : '個股比較'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/stock-compare');
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.calendar_month),
+                      title: Text(isUS ? 'Calendar' : '財報/除息日曆'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/calendar');
+                      },
+                    ),
+                    ListTile(
                       leading: const Icon(Icons.analytics),
                       title: Text(isUS ? 'AI Prediction Stats' : 'AI 預測準確度'),
                       onTap: () {
