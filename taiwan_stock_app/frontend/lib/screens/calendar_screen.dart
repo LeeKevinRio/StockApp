@@ -88,6 +88,10 @@ class _CalendarScreenState extends State<CalendarScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: const Text('財報 / 除息日曆'),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),

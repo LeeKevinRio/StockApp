@@ -112,6 +112,10 @@ class _StockCompareScreenState extends State<StockCompareScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: const Text('個股比較'),
       ),
       body: Column(

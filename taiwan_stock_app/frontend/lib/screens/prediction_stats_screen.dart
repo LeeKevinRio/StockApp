@@ -64,6 +64,10 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: const Text('AI 預測準確度'),
         actions: [
           IconButton(

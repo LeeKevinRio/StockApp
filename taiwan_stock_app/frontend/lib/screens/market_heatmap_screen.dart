@@ -73,6 +73,10 @@ class _MarketHeatmapScreenState extends State<MarketHeatmapScreen>
     final isUS = context.watch<MarketProvider>().isUSMarket;
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: Text(isUS ? 'Market Heatmap' : '市場熱力圖'),
         actions: [
           Padding(
