@@ -315,6 +315,16 @@ class ApiService {
     return AISuggestion.fromJson(jsonDecode(response.body));
   }
 
+  /// 綜合 AI 分析（6維度雷達圖 + 健康等級）
+  Future<Map<String, dynamic>> getComprehensiveAnalysis(String stockId, {String market = 'TW'}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/ai/comprehensive-analysis/$stockId?market=$market'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
   Future<Map<String, dynamic>> chat(String message, {String? stockId}) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/ai/chat'),

@@ -313,6 +313,203 @@ def get_stock_suggestion(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/comprehensive-analysis/{stock_id}")
+def get_comprehensive_analysis(
+    stock_id: str,
+    market: str = Query("TW", description="Market region: TW or US"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    綜合 AI 分析 — 6維度（技術/籌碼/基本面/新聞/社群/宏觀）
+    回傳雷達圖數據 + 健康等級(A-F) + AI 摘要
+    """
+    try:
+        suggestion_service = AISuggestionService.for_user(current_user)
+        data = suggestion_service.collect_stock_data(stock_id, market=market)
+
+        tech_score = data.get('technical', {}).get('technical_score', 0)
+        chip_score = data.get('chip', {}).get('chip_score', 0)
+        fund_score = data.get('fundamental', {}).get('fundamental_score', 0)
+        news_score = data.get('news_sentiment', {}).get('sentiment_score', 0)
+        social_score = data.get('social', {}).get('social_score', 0)
+        macro_score = data.get('macro', {}).get('macro_score', 0)
+
+        # 加權計算
+        if market == "US":
+            total_score = (tech_score * 0.35) + (fund_score * 0.25) + (news_score * 0.12) + (social_score * 0.08) + (macro_score * 0.20)
+        else:
+            total_score = (tech_score * 0.30) + (chip_score * 0.20) + (fund_score * 0.15) + (news_score * 0.10) + (social_score * 0.10) + (macro_score * 0.15)
+
+        # 健康等級 A-F（total_score 範圍約 -100 ~ +100）
+        if total_score >= 50:
+            health_grade = 'A'
+        elif total_score >= 25:
+            health_grade = 'B'
+        elif total_score >= 0:
+            health_grade = 'C'
+        elif total_score >= -25:
+            health_grade = 'D'
+        elif total_score >= -50:
+            health_grade = 'E'
+        else:
+            health_grade = 'F'
+
+        # 正規化分數到 0-100（雷達圖用）
+        def normalize(score):
+            return max(0, min(100, round((score + 100) / 2)))
+
+        # 維度明細
+        dimensions = {
+            'technical': {
+                'score': tech_score,
+                'normalized': normalize(tech_score),
+                'signal': data.get('technical', {}).get('technical_signal', 'N/A'),
+                'weight': 0.30 if market == 'TW' else 0.35,
+                'label': '技術面',
+                'details': {
+                    'rsi': data.get('technical', {}).get('rsi'),
+                    'macd_status': data.get('technical', {}).get('macd_status'),
+                    'ma_trend': data.get('technical', {}).get('ma_trend'),
+                    'bb_position': data.get('technical', {}).get('bb_position'),
+                },
+            },
+            'chip': {
+                'score': chip_score if market == 'TW' else None,
+                'normalized': normalize(chip_score) if market == 'TW' else None,
+                'signal': data.get('chip', {}).get('chip_signal', 'N/A') if market == 'TW' else 'N/A',
+                'weight': 0.20 if market == 'TW' else 0,
+                'label': '籌碼面',
+                'details': {
+                    'foreign_trend': data.get('chip', {}).get('foreign_trend'),
+                    'trust_trend': data.get('chip', {}).get('trust_trend'),
+                    'margin_trend': data.get('chip', {}).get('margin_trend'),
+                } if market == 'TW' else {},
+            },
+            'fundamental': {
+                'score': fund_score,
+                'normalized': normalize(fund_score),
+                'signal': data.get('fundamental', {}).get('fundamental_signal', 'N/A'),
+                'weight': 0.15 if market == 'TW' else 0.25,
+                'label': '基本面',
+                'details': {
+                    'per': data.get('fundamental', {}).get('per'),
+                    'eps': data.get('fundamental', {}).get('eps'),
+                    'roe': data.get('fundamental', {}).get('roe'),
+                    'dividend_yield': data.get('fundamental', {}).get('dividend_yield'),
+                },
+            },
+            'news': {
+                'score': news_score,
+                'normalized': normalize(news_score),
+                'signal': data.get('news_sentiment', {}).get('sentiment_signal', 'N/A'),
+                'weight': 0.10 if market == 'TW' else 0.12,
+                'label': '新聞面',
+                'details': {
+                    'news_count': data.get('news_sentiment', {}).get('news_count', 0),
+                    'positive_news': data.get('news_sentiment', {}).get('positive_news', 0),
+                    'negative_news': data.get('news_sentiment', {}).get('negative_news', 0),
+                },
+            },
+            'social': {
+                'score': social_score,
+                'normalized': normalize(social_score),
+                'signal': data.get('social', {}).get('social_signal', 'N/A'),
+                'weight': 0.10 if market == 'TW' else 0.08,
+                'label': '社群面',
+                'details': {
+                    'total_mentions': data.get('social', {}).get('total_mentions', 0),
+                    'positive': data.get('social', {}).get('positive', 0),
+                    'negative': data.get('social', {}).get('negative', 0),
+                    'platforms': data.get('social', {}).get('platforms', []),
+                },
+            },
+            'macro': {
+                'score': macro_score,
+                'normalized': normalize(macro_score),
+                'signal': data.get('macro', {}).get('macro_signal', 'N/A'),
+                'weight': 0.15 if market == 'TW' else 0.20,
+                'label': '總經面',
+                'details': data.get('macro', {}).get('details', {}),
+            },
+        }
+
+        # 雷達圖數據（正規化 0-100）
+        if market == 'TW':
+            radar_labels = ['技術面', '籌碼面', '基本面', '新聞面', '社群面', '總經面']
+            radar_values = [
+                normalize(tech_score), normalize(chip_score), normalize(fund_score),
+                normalize(news_score), normalize(social_score), normalize(macro_score),
+            ]
+        else:
+            radar_labels = ['技術面', '基本面', '新聞面', '社群面', '總經面']
+            radar_values = [
+                normalize(tech_score), normalize(fund_score),
+                normalize(news_score), normalize(social_score), normalize(macro_score),
+            ]
+
+        # AI 摘要
+        summary_parts = []
+        if tech_score > 20:
+            summary_parts.append('技術面偏多')
+        elif tech_score < -20:
+            summary_parts.append('技術面偏空')
+
+        if market == 'TW':
+            if chip_score > 20:
+                summary_parts.append('法人買超')
+            elif chip_score < -20:
+                summary_parts.append('法人賣超')
+
+        if fund_score > 20:
+            summary_parts.append('基本面良好')
+        elif fund_score < -20:
+            summary_parts.append('基本面疲弱')
+
+        if social_score > 15:
+            summary_parts.append('社群看好')
+        elif social_score < -15:
+            summary_parts.append('社群看空')
+
+        if not summary_parts:
+            summary_parts.append('多空分歧')
+
+        ai_summary = '，'.join(summary_parts) + f'。綜合評分 {round(total_score, 1)}，健康等級 {health_grade}。'
+
+        # 股票基本資訊
+        stock_name = stock_id
+        if market == 'TW':
+            stock = db.query(Stock).filter(Stock.stock_id == stock_id).first()
+            if stock:
+                stock_name = stock.name
+        else:
+            stock_info = stock_service.get_stock(db, stock_id, market="US")
+            if stock_info:
+                stock_name = stock_info.get("name", stock_id)
+
+        return {
+            'stock_id': stock_id,
+            'stock_name': stock_name,
+            'market': market,
+            'total_score': round(total_score, 1),
+            'health_grade': health_grade,
+            'dimensions': dimensions,
+            'radar': {
+                'labels': radar_labels,
+                'values': radar_values,
+            },
+            'ai_summary': ai_summary,
+            'latest_price': data.get('latest_price', 0),
+            'price_change_5d': data.get('price_change_5d', 0),
+            'price_change_20d': data.get('price_change_20d', 0),
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"綜合分析失敗: {str(e)}")
+
+
 @router.post("/chat", response_model=AIChatResponse)
 def ai_chat(
     request: AIChatRequest,

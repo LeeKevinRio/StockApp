@@ -105,6 +105,9 @@ class AISuggestionService:
         # 美股無籌碼面數據
         chip_analysis = {"data_available": False, "note": "籌碼面數據不適用於美股"}
 
+        # ========== 社群情緒數據 ==========
+        social_analysis = self._analyze_social_sentiment(stock_id)
+
         latest_price = 0
         if len(prices) > 0:
             latest_price = float(prices.iloc[-1]["close"])
@@ -120,6 +123,7 @@ class AISuggestionService:
             "chip": chip_analysis,
             "fundamental": fundamental,
             "news_sentiment": news_sentiment,
+            "social": social_analysis,
             "macro": macro_analysis,
             "prices_summary": prices.tail(10).to_dict("records") if len(prices) > 0 else [],
         }
@@ -172,6 +176,9 @@ class AISuggestionService:
         # ========== 宏觀面數據 ==========
         macro_analysis = self._analyze_macro_data()
 
+        # ========== 社群情緒數據 ==========
+        social_analysis = self._analyze_social_sentiment(stock_id)
+
         return {
             "stock_id": stock_id,
             "market_region": "TW",
@@ -183,6 +190,7 @@ class AISuggestionService:
             "chip": chip_analysis,
             "fundamental": fundamental,
             "news_sentiment": news_sentiment,
+            "social": social_analysis,
             "macro": macro_analysis,
             "prices_summary": prices.tail(10).to_dict("records") if len(prices) > 0 else [],
         }
@@ -1084,6 +1092,76 @@ class AISuggestionService:
             print(f"宏觀數據分析失敗: {e}")
             return {"macro_score": 0, "macro_signal": "no_data", "details": {}}
 
+    def _analyze_social_sentiment(self, stock_id: str, db=None) -> Dict:
+        """分析社群情緒數據（PTT, Dcard, Mobile01）"""
+        result = {
+            "social_score": 0,
+            "social_signal": "no_data",
+            "total_mentions": 0,
+            "positive": 0,
+            "negative": 0,
+            "neutral": 0,
+            "avg_score": 0.0,
+            "platforms": [],
+            "top_topics": [],
+        }
+
+        try:
+            if db is not None:
+                from app.services.sentiment_service import sentiment_service
+                import asyncio
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as pool:
+                        social_data = pool.submit(
+                            asyncio.run,
+                            sentiment_service.get_social_sentiment_for_ai(db, stock_id)
+                        ).result(timeout=15)
+                else:
+                    social_data = asyncio.run(
+                        sentiment_service.get_social_sentiment_for_ai(db, stock_id)
+                    )
+
+                if social_data and social_data.get('total_mentions', 0) > 0:
+                    result.update(social_data)
+                    avg = social_data.get('avg_score', 0)
+                    # 將 -1~1 的情緒分數轉換為 -100~100 的評分
+                    result['social_score'] = round(avg * 100, 1)
+                    if avg > 0.3:
+                        result['social_signal'] = 'very_positive'
+                    elif avg > 0.1:
+                        result['social_signal'] = 'positive'
+                    elif avg < -0.3:
+                        result['social_signal'] = 'very_negative'
+                    elif avg < -0.1:
+                        result['social_signal'] = 'negative'
+                    else:
+                        result['social_signal'] = 'neutral'
+            else:
+                # 無 DB 時直接從爬蟲取資料
+                from app.data_fetchers.taiwan_social_fetcher import taiwan_social_fetcher
+                posts = taiwan_social_fetcher.fetch_stock_discussions(stock_id, limit=20)
+                if posts:
+                    pos = sum(1 for p in posts if p.get('sentiment') == 'positive')
+                    neg = sum(1 for p in posts if p.get('sentiment') == 'negative')
+                    total = len(posts)
+                    scores = [p.get('sentiment_score', 0) for p in posts if p.get('sentiment_score') is not None]
+                    avg = sum(scores) / len(scores) if scores else 0
+
+                    result['total_mentions'] = total
+                    result['positive'] = pos
+                    result['negative'] = neg
+                    result['neutral'] = total - pos - neg
+                    result['avg_score'] = round(avg, 2)
+                    result['social_score'] = round(avg * 100, 1)
+                    result['social_signal'] = 'positive' if avg > 0.1 else ('negative' if avg < -0.1 else 'neutral')
+
+        except Exception as e:
+            print(f"社群情緒分析失敗: {e}")
+
+        return result
+
     def _calculate_change(self, prices, days: int) -> float:
         """計算N日漲跌幅"""
         if len(prices) < days + 1:
@@ -1148,6 +1226,7 @@ class AISuggestionService:
                 "chip": None if market == "US" else 0,
                 "fundamental": 0,
                 "news_sentiment": 0,
+                "social_sentiment": 0,
                 "macro": 0,
                 "total_weighted": 0
             }
@@ -1212,15 +1291,16 @@ class AISuggestionService:
             chip_score = data.get('chip', {}).get('chip_score', 0)
             fund_score = data.get('fundamental', {}).get('fundamental_score', 0)
             news_score = data.get('news_sentiment', {}).get('sentiment_score', 0)
+            social_score = data.get('social', {}).get('social_score', 0)
             macro_score = data.get('macro', {}).get('macro_score', 0)
 
-            # 加權平均 - 加入宏觀面，調整權重
+            # 加權平均 - 6維度（含社群情緒）
             if market == "US":
-                # 美股權重: 技術40%, 基本面25%, 消息面15%, 宏觀面20%
-                total_score = (tech_score * 0.40) + (fund_score * 0.25) + (news_score * 0.15) + (macro_score * 0.20)
+                # 美股權重: 技術35%, 基本面25%, 消息面12%, 社群8%, 宏觀面20%
+                total_score = (tech_score * 0.35) + (fund_score * 0.25) + (news_score * 0.12) + (social_score * 0.08) + (macro_score * 0.20)
             else:
-                # 台股權重: 技術35%, 籌碼25%, 基本面15%, 消息面10%, 宏觀面15%
-                total_score = (tech_score * 0.35) + (chip_score * 0.25) + (fund_score * 0.15) + (news_score * 0.10) + (macro_score * 0.15)
+                # 台股權重: 技術30%, 籌碼20%, 基本面15%, 消息面10%, 社群10%, 宏觀面15%
+                total_score = (tech_score * 0.30) + (chip_score * 0.20) + (fund_score * 0.15) + (news_score * 0.10) + (social_score * 0.10) + (macro_score * 0.15)
 
             # 組合 Prompt
             system_prompt = self._build_system_prompt(total_score, market)
@@ -1279,12 +1359,13 @@ class AISuggestionService:
             # 設定高風險等級
             result["risk_level"] = "HIGH"
 
-            # 添加各面向評分供參考
+            # 添加各面向評分供參考（6維度）
             result["analysis_scores"] = {
                 "technical": tech_score,
                 "chip": chip_score if market == "TW" else None,
                 "fundamental": fund_score,
                 "news_sentiment": news_score,
+                "social_sentiment": social_score,
                 "macro": macro_score,
                 "total_weighted": round(total_score, 1),
                 "latest_price": data.get("latest_price", 0)
@@ -1503,6 +1584,7 @@ class AISuggestionService:
         news = data.get('news_sentiment', {})
         macro = data.get('macro', {})
 
+        social = data.get('social', {})
         currency_symbol = "$" if market == "US" else "NT$"
         market_label = "美股" if market == "US" else "台股"
 
@@ -1598,6 +1680,16 @@ class AISuggestionService:
 - 正面新聞：{news.get('positive_news', 0)}則
 - 負面新聞：{news.get('negative_news', 0)}則
 - 情緒判斷：{news.get('sentiment_signal', 'N/A')}
+
+## 社群輿論數據（PTT/Dcard/Mobile01）
+- 社群評分：{social.get('social_score', 'N/A')} → {social.get('social_signal', 'N/A')}
+- 總提及數：{social.get('total_mentions', 0)}
+- 正面聲量：{social.get('positive', 0)}
+- 負面聲量：{social.get('negative', 0)}
+- 中性聲量：{social.get('neutral', 0)}
+- 平均情緒分數：{social.get('avg_score', 0)}
+- 活躍平台：{', '.join(social.get('platforms', [])) or 'N/A'}
+- 熱門話題：{', '.join(social.get('top_topics', [])[:3]) or 'N/A'}
 
 ## 近期新聞標題
 {json.dumps(news.get('recent_news', []), ensure_ascii=False, indent=2)}

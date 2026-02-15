@@ -13,6 +13,7 @@ import '../widgets/fundamental_card.dart';
 import '../widgets/dividend_history.dart';
 import '../widgets/institutional_chart.dart';
 import '../widgets/margin_chart.dart';
+import 'comprehensive_analysis_screen.dart';
 
 class StockDetailScreen extends StatefulWidget {
   final String stockId;
@@ -41,8 +42,8 @@ class _StockDetailScreenState extends State<StockDetailScreen>
   @override
   void initState() {
     super.initState();
-    // 9 tabs for TW stocks (with 籌碼), 8 tabs for US stocks (without 籌碼)
-    _tabController = TabController(length: isUSStock ? 8 : 9, vsync: this);
+    // 10 tabs for TW stocks (with 籌碼), 9 tabs for US stocks (without 籌碼)
+    _tabController = TabController(length: isUSStock ? 9 : 10, vsync: this);
     _loadStockData();
   }
 
@@ -99,6 +100,7 @@ class _StockDetailScreenState extends State<StockDetailScreen>
             if (!isUSStock) const Tab(text: '籌碼'),
             const Tab(text: '風險'),
             const Tab(text: 'AI建議'),
+            const Tab(text: '綜合分析'),
             const Tab(text: '新聞'),
             const Tab(text: '社群'),
           ],
@@ -136,6 +138,7 @@ class _StockDetailScreenState extends State<StockDetailScreen>
                     if (!isUSStock) _buildChipAnalysisTab(),
                     _buildRiskTab(),
                     _buildAISuggestionTab(),
+                    _buildComprehensiveAnalysisTab(),
                     _buildNewsTab(),
                     _buildSocialTab(),
                   ],
@@ -282,6 +285,10 @@ class _StockDetailScreenState extends State<StockDetailScreen>
 
   Widget _buildAISuggestionTab() {
     return _StockAISuggestionView(stockId: widget.stockId, market: widget.market);
+  }
+
+  Widget _buildComprehensiveAnalysisTab() {
+    return ComprehensiveAnalysisView(stockId: widget.stockId, market: widget.market);
   }
 
   Widget _buildNewsTab() {
