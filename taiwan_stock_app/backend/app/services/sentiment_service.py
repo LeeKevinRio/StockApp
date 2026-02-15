@@ -13,10 +13,11 @@ from app.data_fetchers.taiwan_social_fetcher import taiwan_social_fetcher
 logger = logging.getLogger(__name__)
 
 
+class SentimentService:
+    """社群情緒分析服務 - 支援多平台"""
+
     # 社群快取 TTL（2 小時）
     SOCIAL_CACHE_TTL_HOURS = 2
-
-    """社群情緒分析服務 - 支援多平台"""
 
     async def get_stock_sentiment(
         self,
