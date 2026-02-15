@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/ai_suggestion.dart';
+import '../models/industry_trend.dart';
 import '../services/api_service.dart';
 
 class ChatMessage {
@@ -43,6 +44,14 @@ class AIProvider with ChangeNotifier {
   bool _isLoadingSuggestions = false;
   String? _error;
   String? _suggestionsError;
+
+  IndustryTrendAnalysis? _industryTrends;
+  bool _isLoadingTrends = false;
+  String? _trendsError;
+
+  IndustryTrendAnalysis? get industryTrends => _industryTrends;
+  bool get isLoadingTrends => _isLoadingTrends;
+  String? get trendsError => _trendsError;
 
   AIProvider(this._apiService);
 
@@ -88,9 +97,18 @@ class AIProvider with ChangeNotifier {
   }
 
   Future<void> loadChatHistory({String? stockId}) async {
-    // For now, just clear messages
-    // In a real app, you would fetch history from API
-    _messages.clear();
+    try {
+      final history = await _apiService.getChatHistory(limit: 50);
+      _messages = (history as List).map((msg) => ChatMessage(
+        role: msg['role'] ?? 'user',
+        content: msg['content'] ?? '',
+        timestamp: msg['created_at'] != null
+            ? DateTime.tryParse(msg['created_at']) ?? DateTime.now()
+            : DateTime.now(),
+      )).toList();
+    } catch (e) {
+      _messages.clear();
+    }
     notifyListeners();
   }
 
@@ -135,5 +153,26 @@ class AIProvider with ChangeNotifier {
 
       notifyListeners();
     }
+  }
+
+  Future<void> loadIndustryTrends() async {
+    _isLoadingTrends = true;
+    _trendsError = null;
+    notifyListeners();
+
+    try {
+      final data = await _apiService.getIndustryTrends();
+      _industryTrends = IndustryTrendAnalysis.fromJson(data);
+      _isLoadingTrends = false;
+      notifyListeners();
+    } catch (e) {
+      _trendsError = e.toString();
+      _isLoadingTrends = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshIndustryTrends() async {
+    await loadIndustryTrends();
   }
 }

@@ -5,6 +5,7 @@ import '../models/stock.dart';
 import '../models/stock_history.dart';
 import '../models/chart_settings.dart';
 import '../models/ai_suggestion.dart';
+import '../models/alert.dart' show CreateAlertRequest;
 import '../widgets/chart/enhanced_candlestick_chart.dart';
 import '../widgets/indicator_charts/indicators_tab_view.dart';
 import '../widgets/news_card.dart';
@@ -14,6 +15,7 @@ import '../widgets/dividend_history.dart';
 import '../widgets/institutional_chart.dart';
 import '../widgets/margin_chart.dart';
 import 'comprehensive_analysis_screen.dart';
+import 'trading_screen.dart';
 
 class StockDetailScreen extends StatefulWidget {
   final String stockId;
@@ -143,6 +145,138 @@ class _StockDetailScreenState extends State<StockDetailScreen>
                     _buildSocialTab(),
                   ],
                 ),
+      floatingActionButton: _isLoading || _error != null
+          ? null
+          : _buildQuickActionsFAB(),
+    );
+  }
+
+  Widget _buildQuickActionsFAB() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 設定警報
+        FloatingActionButton.small(
+          heroTag: 'alert',
+          backgroundColor: Colors.orange,
+          onPressed: () => _showQuickAlertDialog(),
+          child: const Icon(Icons.notifications_active, size: 20),
+        ),
+        const SizedBox(height: 8),
+        // 加入自選
+        FloatingActionButton.small(
+          heroTag: 'watchlist',
+          backgroundColor: Colors.amber,
+          onPressed: () => _addToWatchlist(),
+          child: const Icon(Icons.star_border, size: 20),
+        ),
+        const SizedBox(height: 8),
+        // 模擬交易
+        FloatingActionButton(
+          heroTag: 'trade',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const TradingScreen(),
+              ),
+            );
+          },
+          child: const Icon(Icons.swap_horiz),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _addToWatchlist() async {
+    try {
+      final apiService = Provider.of<ApiService>(context, listen: false);
+      await apiService.addToWatchlist(widget.stockId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${widget.stockId} 已加入自選')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加入自選失敗: $e')),
+        );
+      }
+    }
+  }
+
+  void _showQuickAlertDialog() {
+    final priceController = TextEditingController();
+    String alertType = 'above_price';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('為 ${widget.stockId} 設定警報'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'above_price', label: Text('高於')),
+                  ButtonSegment(value: 'below_price', label: Text('低於')),
+                ],
+                selected: {alertType},
+                onSelectionChanged: (set) =>
+                    setDialogState(() => alertType = set.first),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: priceController,
+                decoration: const InputDecoration(
+                  labelText: '目標價格',
+                  prefixText: '\$ ',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final price = double.tryParse(priceController.text);
+                if (price == null) return;
+                try {
+                  final api =
+                      Provider.of<ApiService>(context, listen: false);
+                  await api.createAlert(CreateAlertRequest(
+                    stockId: widget.stockId,
+                    stockName: _stock?.name ?? widget.stockId,
+                    alertType: alertType,
+                    targetPrice: price,
+                  ));
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('警報已建立')),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('建立失敗: $e')),
+                    );
+                  }
+                }
+              },
+              child: const Text('建立'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

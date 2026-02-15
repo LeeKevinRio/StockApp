@@ -4,6 +4,7 @@ import '../providers/auth_provider.dart';
 import '../providers/market_provider.dart';
 import '../providers/watchlist_provider.dart';
 import '../providers/notification_provider.dart';
+import '../providers/theme_provider.dart';
 import '../widgets/market_switcher.dart';
 import '../widgets/notification/notification_badge.dart';
 import 'dashboard_screen.dart';
@@ -15,6 +16,7 @@ import 'trading_screen.dart';
 import 'news_screen.dart';
 import 'social_screen.dart';
 import 'screener_screen.dart';
+import 'industry_trends_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -344,6 +346,39 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         }
                         return const SizedBox.shrink();
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.trending_up),
+                      title: Text(isUS ? 'Industry Trends' : '產業趨勢'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const IndustryTrendsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    Consumer<ThemeProvider>(
+                      builder: (context, themeProvider, child) {
+                        return ListTile(
+                          leading: Icon(themeProvider.themeModeIcon),
+                          title: Text(themeProvider.themeModeLabel),
+                          subtitle: const Text('點擊切換主題'),
+                          onTap: () {
+                            themeProvider.toggleTheme();
+                          },
+                        );
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.settings),
+                      title: Text(isUS ? 'Settings' : '設定'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.pushNamed(context, '/settings');
                       },
                     ),
                     ListTile(

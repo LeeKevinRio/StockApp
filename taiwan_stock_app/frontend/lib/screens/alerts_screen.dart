@@ -456,6 +456,14 @@ class _CreateAlertSheetState extends State<CreateAlertSheet> {
                     value: 'below_price',
                     child: Text('低於目標價'),
                   ),
+                  DropdownMenuItem(
+                    value: 'percent_change_up',
+                    child: Text('漲幅超過 %'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'percent_change_down',
+                    child: Text('跌幅超過 %'),
+                  ),
                 ],
                 onChanged: (value) {
                   setState(() {
@@ -466,11 +474,11 @@ class _CreateAlertSheetState extends State<CreateAlertSheet> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _targetPriceController,
-                decoration: const InputDecoration(
-                  labelText: '目標價格',
-                  hintText: '例如: 580',
-                  border: OutlineInputBorder(),
-                  prefixText: '\$ ',
+                decoration: InputDecoration(
+                  labelText: _alertType.contains('percent') ? '目標百分比 (%)' : '目標價格',
+                  hintText: _alertType.contains('percent') ? '例如: 5' : '例如: 580',
+                  border: const OutlineInputBorder(),
+                  prefixText: _alertType.contains('percent') ? '% ' : '\$ ',
                 ),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 validator: (value) {

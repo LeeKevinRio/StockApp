@@ -1033,6 +1033,29 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
+  // ==================== 聊天歷史相關 ====================
+
+  Future<List<dynamic>> getChatHistory({int limit = 50}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/ai/chat/history?limit=$limit'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    final data = jsonDecode(response.body);
+    return data['messages'] ?? [];
+  }
+
+  // ==================== 產業趨勢相關 ====================
+
+  Future<Map<String, dynamic>> getIndustryTrends({String market = 'TW'}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/ai/industry-trends?market=$market'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return jsonDecode(response.body);
+  }
+
   // ==================== 錯誤處理 ====================
 
   void _checkResponse(http.Response response) {
