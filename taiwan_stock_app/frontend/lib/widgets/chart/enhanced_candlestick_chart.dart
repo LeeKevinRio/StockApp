@@ -19,7 +19,7 @@ class _MACDValue {
 }
 
 /// 增強版 K 線圖表
-/// 支援指標疊加、形態標記、繪圖工具、副圖指標
+/// 使用 CustomPainter 繪製 K 線（高效能），副圖仍用 fl_chart
 class EnhancedCandlestickChart extends StatefulWidget {
   final List<StockHistory> data;
   final ChartSettings settings;
@@ -69,22 +69,68 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
         _buildToolbar(context),
         // 指標圖例
         _buildIndicatorLegend(context),
-        // K線圖表
+        // K線圖表（使用 CustomPainter）
         Expanded(
           flex: _selectedSubChart != SubChartType.none ? 4 : 3,
           child: GestureDetector(
             onScaleUpdate: widget.settings.enableZoom ? _handleScaleUpdate : null,
             onHorizontalDragUpdate: widget.settings.enableZoom ? _handleHorizontalDrag : null,
-            onTapUp: _activeDrawingTool != null ? _handleDrawingTap : null,
+            onTapUp: _activeDrawingTool != null
+                ? _handleDrawingTap
+                : (widget.settings.enableCrosshair ? (details) => _handleChartTap(details, visibleData) : null),
             child: Stack(
               children: [
-                _buildCandlestickChart(context, visibleData, startIndex),
+                // K 線主圖（CustomPainter）
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 50, left: 8, top: 16, bottom: 24),
+                    child: CustomPaint(
+                      painter: _CandlestickChartPainter(
+                        data: visibleData,
+                        settings: widget.settings,
+                        touchedIndex: _touchedIndex,
+                        isDark: Theme.of(context).brightness == Brightness.dark,
+                      ),
+                    ),
+                  ),
+                ),
+                // 右側價格軸
+                Positioned(
+                  right: 0,
+                  top: 16,
+                  bottom: 24,
+                  width: 50,
+                  child: CustomPaint(
+                    painter: _PriceAxisPainter(
+                      data: visibleData,
+                      isDark: Theme.of(context).brightness == Brightness.dark,
+                    ),
+                  ),
+                ),
+                // 底部日期軸
+                Positioned(
+                  left: 8,
+                  right: 50,
+                  bottom: 0,
+                  height: 20,
+                  child: CustomPaint(
+                    painter: _DateAxisPainter(
+                      data: visibleData,
+                      isDark: Theme.of(context).brightness == Brightness.dark,
+                    ),
+                  ),
+                ),
                 // 十字線資訊
                 if (_touchedIndex != null && widget.settings.enableCrosshair)
                   _buildCrosshairOverlay(context, visibleData, startIndex),
                 // 形態標記
                 if (widget.settings.showPatterns && widget.patterns.isNotEmpty)
-                  _buildPatternMarkers(context, visibleData, startIndex),
+                  Positioned.fill(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 50, left: 8, top: 16, bottom: 24),
+                      child: _buildPatternMarkers(context, visibleData, startIndex),
+                    ),
+                  ),
                 // 繪圖層
                 if (widget.settings.drawings.isNotEmpty)
                   _buildDrawingsOverlay(context),
@@ -97,10 +143,15 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
         ),
         // 成交量圖表
         if (widget.settings.showVolume) ...[
-          const SizedBox(height: 8),
-          Expanded(
-            flex: 1,
-            child: _buildVolumeChart(context, visibleData),
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 60,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 50, left: 8),
+              child: CustomPaint(
+                painter: _VolumePainter(data: visibleData),
+              ),
+            ),
           ),
         ],
         // 副圖選擇器
@@ -115,6 +166,19 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
         if (widget.settings.enableZoom) _buildZoomControls(context),
       ],
     );
+  }
+
+  void _handleChartTap(TapUpDetails details, List<StockHistory> visibleData) {
+    // 計算觸碰的 K 棒 index
+    final RenderBox box = context.findRenderObject() as RenderBox;
+    final chartWidth = box.size.width - 50 - 8; // 減去右側軸和左 padding
+    final localX = details.localPosition.dx - 8; // 減去左 padding
+    if (localX < 0 || localX > chartWidth) return;
+
+    final index = (localX / chartWidth * visibleData.length).floor().clamp(0, visibleData.length - 1);
+    setState(() {
+      _touchedIndex = (_touchedIndex == index) ? null : index;
+    });
   }
 
   Widget _buildToolbar(BuildContext context) {
@@ -172,18 +236,8 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildDrawingToolButton(
-          context,
-          DrawingToolType.trendLine,
-          Icons.show_chart,
-          '趨勢線',
-        ),
-        _buildDrawingToolButton(
-          context,
-          DrawingToolType.horizontalLine,
-          Icons.horizontal_rule,
-          '水平線',
-        ),
+        _buildDrawingToolButton(context, DrawingToolType.trendLine, Icons.show_chart, '趨勢線'),
+        _buildDrawingToolButton(context, DrawingToolType.horizontalLine, Icons.horizontal_rule, '水平線'),
         if (_activeDrawingTool != null)
           IconButton(
             icon: const Icon(Icons.close, size: 18, color: Colors.red),
@@ -199,19 +253,10 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
     );
   }
 
-  Widget _buildDrawingToolButton(
-    BuildContext context,
-    DrawingToolType type,
-    IconData icon,
-    String tooltip,
-  ) {
+  Widget _buildDrawingToolButton(BuildContext context, DrawingToolType type, IconData icon, String tooltip) {
     final isActive = _activeDrawingTool == type;
     return IconButton(
-      icon: Icon(
-        icon,
-        size: 18,
-        color: isActive ? Theme.of(context).primaryColor : null,
-      ),
+      icon: Icon(icon, size: 18, color: isActive ? Theme.of(context).primaryColor : null),
       onPressed: () {
         setState(() {
           _activeDrawingTool = isActive ? null : type;
@@ -232,47 +277,27 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            // MA 均線
             ...widget.settings.indicators.entries
                 .where((e) => e.key.name.startsWith('ma'))
                 .map((e) => _buildLegendItem(
-                      e.value.name,
-                      e.value.color,
-                      e.value.isEnabled,
-                      () => _toggleIndicator(e.key),
+                      e.value.name, e.value.color, e.value.isEnabled, () => _toggleIndicator(e.key),
                     )),
             const SizedBox(width: 8),
-            // 布林通道
-            _buildLegendItem(
-              '布林',
-              Colors.cyan,
-              widget.settings.isIndicatorEnabled(ChartIndicatorType.bollinger),
-              () => _toggleIndicator(ChartIndicatorType.bollinger),
-            ),
+            _buildLegendItem('布林', Colors.cyan, widget.settings.isIndicatorEnabled(ChartIndicatorType.bollinger),
+                () => _toggleIndicator(ChartIndicatorType.bollinger)),
             const SizedBox(width: 8),
-            // 形態識別
-            _buildLegendItem(
-              '形態',
-              Colors.amber,
-              widget.settings.showPatterns,
-              () {
-                widget.onSettingsChanged?.call(
-                  widget.settings.copyWith(showPatterns: !widget.settings.showPatterns),
-                );
-              },
-            ),
+            _buildLegendItem('形態', Colors.amber, widget.settings.showPatterns, () {
+              widget.onSettingsChanged?.call(
+                widget.settings.copyWith(showPatterns: !widget.settings.showPatterns),
+              );
+            }),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLegendItem(
-    String label,
-    Color color,
-    bool isVisible,
-    VoidCallback onTap,
-  ) {
+  Widget _buildLegendItem(String label, Color color, bool isVisible, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Opacity(
@@ -282,25 +307,17 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
           margin: const EdgeInsets.only(right: 4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: color.withOpacity(0.5)),
+            border: Border.all(color: color.withAlpha(128)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 16,
-                height: 2,
-                color: color,
-              ),
+              Container(width: 16, height: 2, color: color),
               const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  decoration: isVisible ? null : TextDecoration.lineThrough,
-                ),
-              ),
+              Text(label, style: TextStyle(
+                fontSize: 11, color: color, fontWeight: FontWeight.w500,
+                decoration: isVisible ? null : TextDecoration.lineThrough,
+              )),
             ],
           ),
         ),
@@ -330,14 +347,10 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
   void _handleDrawingTap(TapUpDetails details) {
     setState(() {
       _currentDrawingPoints.add(details.localPosition);
-
-      // 檢查是否完成繪製
       if (_activeDrawingTool == DrawingToolType.horizontalLine ||
           _activeDrawingTool == DrawingToolType.verticalLine) {
-        // 單點完成
         _completeDrawing();
       } else if (_currentDrawingPoints.length >= 2) {
-        // 兩點完成（趨勢線等）
         _completeDrawing();
       }
     });
@@ -345,432 +358,83 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
 
   void _completeDrawing() {
     if (_activeDrawingTool == null || _currentDrawingPoints.isEmpty) return;
-
     final newDrawing = DrawingObject(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       type: _activeDrawingTool!,
       points: List.from(_currentDrawingPoints),
       color: Colors.blue,
     );
-
     final newDrawings = [...widget.settings.drawings, newDrawing];
-    widget.onSettingsChanged?.call(
-      widget.settings.copyWith(drawings: newDrawings),
-    );
-
+    widget.onSettingsChanged?.call(widget.settings.copyWith(drawings: newDrawings));
     setState(() {
       _activeDrawingTool = null;
       _currentDrawingPoints.clear();
     });
   }
 
-  Widget _buildCandlestickChart(
-    BuildContext context,
-    List<StockHistory> visibleData,
-    int startIndex,
-  ) {
-    final minPrice = visibleData.map((e) => e.low).reduce((a, b) => a < b ? a : b);
-    final maxPrice = visibleData.map((e) => e.high).reduce((a, b) => a > b ? a : b);
-    final priceRange = maxPrice - minPrice;
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 16, left: 8, top: 16, bottom: 8),
-      child: LineChart(
-        LineChartData(
-          minX: 0,
-          maxX: visibleData.length.toDouble() - 1,
-          minY: minPrice - priceRange * 0.1,
-          maxY: maxPrice + priceRange * 0.1,
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            horizontalInterval: priceRange / 5,
-            getDrawingHorizontalLine: (value) {
-              return FlLine(
-                color: Theme.of(context).dividerColor.withOpacity(0.3),
-                strokeWidth: 1,
-              );
-            },
-          ),
-          titlesData: _buildTitlesData(context, visibleData),
-          borderData: FlBorderData(
-            show: true,
-            border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.3)),
-          ),
-          lineTouchData: LineTouchData(
-            enabled: widget.settings.enableCrosshair,
-            touchCallback: (event, response) {
-              if (event is FlTapUpEvent || event is FlLongPressEnd) {
-                setState(() => _touchedIndex = null);
-              } else if (response?.lineBarSpots != null &&
-                  response!.lineBarSpots!.isNotEmpty) {
-                final index = response.lineBarSpots!.first.x.toInt();
-                setState(() => _touchedIndex = index);
-                widget.onCandleTap?.call(startIndex + index);
-              }
-            },
-            touchTooltipData: LineTouchTooltipData(
-              getTooltipItems: (touchedSpots) => touchedSpots.map((_) => null).toList(),
-            ),
-          ),
-          lineBarsData: [
-            // K 線
-            ..._buildCandlesticks(visibleData),
-            // 均線
-            if (widget.settings.isIndicatorEnabled(ChartIndicatorType.ma5))
-              _buildMovingAverage(visibleData, 5, Colors.blue),
-            if (widget.settings.isIndicatorEnabled(ChartIndicatorType.ma10))
-              _buildMovingAverage(visibleData, 10, Colors.orange),
-            if (widget.settings.isIndicatorEnabled(ChartIndicatorType.ma20))
-              _buildMovingAverage(visibleData, 20, Colors.purple),
-            if (widget.settings.isIndicatorEnabled(ChartIndicatorType.ma60))
-              _buildMovingAverage(visibleData, 60, Colors.teal),
-            // 布林通道
-            if (widget.settings.isIndicatorEnabled(ChartIndicatorType.bollinger))
-              ..._buildBollingerBands(visibleData),
-          ],
-        ),
-      ),
-    );
-  }
-
-  FlTitlesData _buildTitlesData(BuildContext context, List<StockHistory> visibleData) {
-    return FlTitlesData(
-      leftTitles: AxisTitles(
-        sideTitles: SideTitles(
-          showTitles: true,
-          reservedSize: 50,
-          getTitlesWidget: (value, meta) {
-            return Text(
-              value.toStringAsFixed(1),
-              style: TextStyle(
-                fontSize: 10,
-                color: Theme.of(context).textTheme.bodySmall?.color,
-              ),
-            );
-          },
-        ),
-      ),
-      bottomTitles: AxisTitles(
-        sideTitles: SideTitles(
-          showTitles: true,
-          interval: (visibleData.length / 5).ceilToDouble(),
-          getTitlesWidget: (value, meta) {
-            if (value.toInt() >= visibleData.length || value < 0) {
-              return const SizedBox();
-            }
-            final date = visibleData[value.toInt()].date;
-            return Text(
-              '${date.month}/${date.day}',
-              style: TextStyle(
-                fontSize: 10,
-                color: Theme.of(context).textTheme.bodySmall?.color,
-              ),
-            );
-          },
-        ),
-      ),
-      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-    );
-  }
-
-  List<LineChartBarData> _buildCandlesticks(List<StockHistory> data) {
-    List<LineChartBarData> bars = [];
-
-    for (int i = 0; i < data.length; i++) {
-      final candle = data[i];
-      final isRising = candle.close >= candle.open;
-      final color = isRising ? Colors.red : Colors.green;
-
-      // 上影線
-      bars.add(LineChartBarData(
-        spots: [
-          FlSpot(i.toDouble(), candle.high),
-          FlSpot(i.toDouble(), candle.close > candle.open ? candle.close : candle.open),
-        ],
-        isCurved: false,
-        color: color,
-        barWidth: 1,
-        dotData: const FlDotData(show: false),
-      ));
-
-      // 下影線
-      bars.add(LineChartBarData(
-        spots: [
-          FlSpot(i.toDouble(), candle.close < candle.open ? candle.close : candle.open),
-          FlSpot(i.toDouble(), candle.low),
-        ],
-        isCurved: false,
-        color: color,
-        barWidth: 1,
-        dotData: const FlDotData(show: false),
-      ));
-
-      // 實體
-      bars.add(LineChartBarData(
-        spots: [
-          FlSpot(i.toDouble(), candle.open),
-          FlSpot(i.toDouble(), candle.close),
-        ],
-        isCurved: false,
-        color: color,
-        barWidth: 4,
-        dotData: const FlDotData(show: false),
-      ));
-    }
-
-    return bars;
-  }
-
-  LineChartBarData _buildMovingAverage(
-    List<StockHistory> data,
-    int period,
-    Color color,
-  ) {
-    List<FlSpot> spots = [];
-
-    for (int i = period - 1; i < data.length; i++) {
-      double sum = 0;
-      for (int j = 0; j < period; j++) {
-        sum += data[i - j].close;
-      }
-      spots.add(FlSpot(i.toDouble(), sum / period));
-    }
-
-    return LineChartBarData(
-      spots: spots,
-      isCurved: true,
-      color: color,
-      barWidth: 1.5,
-      dotData: const FlDotData(show: false),
-      belowBarData: BarAreaData(show: false),
-    );
-  }
-
-  List<LineChartBarData> _buildBollingerBands(List<StockHistory> data) {
-    const period = 20;
-    const stdDev = 2.0;
-
-    if (data.length < period) return [];
-
-    List<FlSpot> upperSpots = [];
-    List<FlSpot> middleSpots = [];
-    List<FlSpot> lowerSpots = [];
-
-    for (int i = period - 1; i < data.length; i++) {
-      double sum = 0;
-      for (int j = 0; j < period; j++) {
-        sum += data[i - j].close;
-      }
-      final ma = sum / period;
-
-      double sumSquares = 0;
-      for (int j = 0; j < period; j++) {
-        sumSquares += (data[i - j].close - ma) * (data[i - j].close - ma);
-      }
-      final std = (sumSquares / period).abs();
-      final stdDeviation = std > 0 ? std * 0.5 : 0; // sqrt approximation
-
-      upperSpots.add(FlSpot(i.toDouble(), ma + stdDev * stdDeviation));
-      middleSpots.add(FlSpot(i.toDouble(), ma));
-      lowerSpots.add(FlSpot(i.toDouble(), ma - stdDev * stdDeviation));
-    }
-
-    return [
-      // 上軌
-      LineChartBarData(
-        spots: upperSpots,
-        isCurved: true,
-        color: Colors.cyan.withOpacity(0.7),
-        barWidth: 1,
-        dotData: const FlDotData(show: false),
-      ),
-      // 中軌
-      LineChartBarData(
-        spots: middleSpots,
-        isCurved: true,
-        color: Colors.cyan,
-        barWidth: 1.5,
-        dotData: const FlDotData(show: false),
-      ),
-      // 下軌
-      LineChartBarData(
-        spots: lowerSpots,
-        isCurved: true,
-        color: Colors.cyan.withOpacity(0.7),
-        barWidth: 1,
-        dotData: const FlDotData(show: false),
-      ),
-    ];
-  }
-
-  Widget _buildCrosshairOverlay(
-    BuildContext context,
-    List<StockHistory> visibleData,
-    int startIndex,
-  ) {
-    if (_touchedIndex == null || _touchedIndex! >= visibleData.length) {
-      return const SizedBox();
-    }
+  Widget _buildCrosshairOverlay(BuildContext context, List<StockHistory> visibleData, int startIndex) {
+    if (_touchedIndex == null || _touchedIndex! >= visibleData.length) return const SizedBox();
 
     final candle = visibleData[_touchedIndex!];
     final isRising = candle.close >= candle.open;
     final priceColor = isRising ? Colors.red : Colors.green;
 
     return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
+      top: 0, left: 0, right: 0,
       child: Container(
         padding: const EdgeInsets.all(8),
         margin: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Theme.of(context).cardColor.withOpacity(0.95),
+          color: Theme.of(context).cardColor.withAlpha(242),
           borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 4,
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withAlpha(25), blurRadius: 4)],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            Text(
-              DateFormat('yyyy/MM/dd').format(candle.date),
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-            _buildPriceInfo('開', candle.open, priceColor),
-            _buildPriceInfo('高', candle.high, priceColor),
-            _buildPriceInfo('低', candle.low, priceColor),
-            _buildPriceInfo('收', candle.close, priceColor),
-            Text(
-              '量 ${_formatVolume(candle.volume.toDouble())}',
-              style: const TextStyle(fontSize: 11),
-            ),
+            Text(DateFormat('yyyy/MM/dd').format(candle.date),
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            _buildPriceLabel('開', candle.open, priceColor),
+            _buildPriceLabel('高', candle.high, priceColor),
+            _buildPriceLabel('低', candle.low, priceColor),
+            _buildPriceLabel('收', candle.close, priceColor),
+            Text('量 ${_formatVolume(candle.volume.toDouble())}', style: const TextStyle(fontSize: 11)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPriceInfo(String label, double value, Color color) {
+  Widget _buildPriceLabel(String label, double value, Color color) {
     return RichText(
       text: TextSpan(
         style: DefaultTextStyle.of(context).style.copyWith(fontSize: 11),
         children: [
           TextSpan(text: '$label '),
-          TextSpan(
-            text: value.toStringAsFixed(2),
-            style: TextStyle(color: color, fontWeight: FontWeight.w500),
-          ),
+          TextSpan(text: value.toStringAsFixed(2), style: TextStyle(color: color, fontWeight: FontWeight.w500)),
         ],
       ),
     );
   }
 
-  Widget _buildPatternMarkers(
-    BuildContext context,
-    List<StockHistory> visibleData,
-    int startIndex,
-  ) {
+  Widget _buildPatternMarkers(BuildContext context, List<StockHistory> visibleData, int startIndex) {
     return CustomPaint(
       painter: PatternMarkerPainter(
-        patterns: widget.patterns,
-        visibleData: visibleData,
-        startIndex: startIndex,
-        textStyle: TextStyle(
-          fontSize: 10,
-          color: Theme.of(context).textTheme.bodySmall?.color,
-        ),
+        patterns: widget.patterns, visibleData: visibleData, startIndex: startIndex,
+        textStyle: TextStyle(fontSize: 10, color: Theme.of(context).textTheme.bodySmall?.color),
       ),
       size: Size.infinite,
     );
   }
 
   Widget _buildDrawingsOverlay(BuildContext context) {
-    return CustomPaint(
-      painter: DrawingsPainter(drawings: widget.settings.drawings),
-      size: Size.infinite,
-    );
+    return CustomPaint(painter: DrawingsPainter(drawings: widget.settings.drawings), size: Size.infinite);
   }
 
   Widget _buildActiveDrawing(BuildContext context) {
     return CustomPaint(
-      painter: ActiveDrawingPainter(
-        points: _currentDrawingPoints,
-        toolType: _activeDrawingTool!,
-      ),
+      painter: ActiveDrawingPainter(points: _currentDrawingPoints, toolType: _activeDrawingTool!),
       size: Size.infinite,
-    );
-  }
-
-  Widget _buildVolumeChart(BuildContext context, List<StockHistory> visibleData) {
-    final maxVolume = visibleData.map((e) => e.volume).reduce((a, b) => a > b ? a : b);
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 16, left: 8, bottom: 16),
-      child: BarChart(
-        BarChartData(
-          alignment: BarChartAlignment.spaceAround,
-          maxY: maxVolume.toDouble() * 1.2,
-          barTouchData: BarTouchData(enabled: false),
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            horizontalInterval: maxVolume / 3,
-            getDrawingHorizontalLine: (value) {
-              return FlLine(
-                color: Theme.of(context).dividerColor.withOpacity(0.3),
-                strokeWidth: 1,
-              );
-            },
-          ),
-          titlesData: FlTitlesData(
-            leftTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 50,
-                getTitlesWidget: (value, meta) {
-                  return Text(
-                    _formatVolume(value),
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Theme.of(context).textTheme.bodySmall?.color,
-                    ),
-                  );
-                },
-              ),
-            ),
-            bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          ),
-          borderData: FlBorderData(
-            show: true,
-            border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.3)),
-          ),
-          barGroups: visibleData.asMap().entries.map((entry) {
-            final candle = entry.value;
-            final isRising = candle.close >= candle.open;
-
-            return BarChartGroupData(
-              x: entry.key,
-              barRods: [
-                BarChartRodData(
-                  toY: candle.volume.toDouble(),
-                  color: isRising
-                      ? Colors.red.withOpacity(0.5)
-                      : Colors.green.withOpacity(0.5),
-                  width: 4,
-                ),
-              ],
-            );
-          }).toList(),
-        ),
-      ),
     );
   }
 
@@ -808,132 +472,41 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
 
   String _subChartLabel(SubChartType type) {
     switch (type) {
-      case SubChartType.none:
-        return '無';
-      case SubChartType.macd:
-        return 'MACD';
-      case SubChartType.rsi:
-        return 'RSI';
-      case SubChartType.kd:
-        return 'KD';
+      case SubChartType.none: return '無';
+      case SubChartType.macd: return 'MACD';
+      case SubChartType.rsi: return 'RSI';
+      case SubChartType.kd: return 'KD';
     }
   }
 
   Widget _buildSubChart(BuildContext context, List<StockHistory> visibleData, int startIndex) {
     switch (_selectedSubChart) {
-      case SubChartType.macd:
-        return _buildMACDSubChart(context, visibleData, startIndex);
-      case SubChartType.rsi:
-        return _buildRSISubChart(context, visibleData, startIndex);
-      case SubChartType.kd:
-        return _buildKDSubChart(context, visibleData, startIndex);
-      case SubChartType.none:
-        return const SizedBox();
+      case SubChartType.macd: return _buildMACDSubChart(context, visibleData, startIndex);
+      case SubChartType.rsi: return _buildRSISubChart(context, visibleData, startIndex);
+      case SubChartType.kd: return _buildKDSubChart(context, visibleData, startIndex);
+      case SubChartType.none: return const SizedBox();
     }
   }
 
   Widget _buildNoDataHint(String name) {
-    return Center(
-      child: Text('$name 數據不足', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-    );
+    return Center(child: Text('$name 數據不足', style: const TextStyle(fontSize: 12, color: Colors.grey)));
   }
 
   Widget _buildMACDSubChart(BuildContext context, List<StockHistory> visibleData, int startIndex) {
     final macdData = _computeMACDValues(widget.data);
     if (macdData.isEmpty) return _buildNoDataHint('MACD');
 
-    double minY = 0, maxY = 0;
-    final List<LineChartBarData> histogramBars = [];
-    final List<FlSpot> difSpots = [];
-    final List<FlSpot> deaSpots = [];
-
-    for (int i = 0; i < visibleData.length; i++) {
-      final dataIdx = startIndex + i;
-      if (dataIdx >= macdData.length) continue;
-      final m = macdData[dataIdx];
-
-      difSpots.add(FlSpot(i.toDouble(), m.dif));
-      deaSpots.add(FlSpot(i.toDouble(), m.dea));
-      minY = min(minY, min(m.dif, min(m.dea, m.histogram)));
-      maxY = max(maxY, max(m.dif, max(m.dea, m.histogram)));
-
-      // 柱狀圖用垂直線段模擬
-      histogramBars.add(LineChartBarData(
-        spots: [FlSpot(i.toDouble(), 0), FlSpot(i.toDouble(), m.histogram)],
-        isCurved: false,
-        color: m.histogram >= 0 ? Colors.red.withOpacity(0.5) : Colors.green.withOpacity(0.5),
-        barWidth: 3,
-        dotData: const FlDotData(show: false),
-      ));
-    }
-
-    if (difSpots.isEmpty) return _buildNoDataHint('MACD');
-
-    final range = maxY - minY;
-    if (range == 0) return _buildNoDataHint('MACD');
-    minY -= range * 0.1;
-    maxY += range * 0.1;
-
+    // 使用 CustomPainter 繪製 MACD（避免 histogram 每根一個 LineChartBarData）
     return Padding(
-      padding: const EdgeInsets.only(right: 16, left: 8, top: 4, bottom: 4),
-      child: LineChart(LineChartData(
-        minX: 0,
-        maxX: (visibleData.length - 1).toDouble(),
-        minY: minY,
-        maxY: maxY,
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          getDrawingHorizontalLine: (value) {
-            if (value.abs() < range * 0.01) {
-              return FlLine(color: Theme.of(context).dividerColor, strokeWidth: 1);
-            }
-            return FlLine(
-              color: Theme.of(context).dividerColor.withOpacity(0.2),
-              strokeWidth: 0.5,
-            );
-          },
+      padding: const EdgeInsets.only(right: 50, left: 8, top: 4, bottom: 4),
+      child: CustomPaint(
+        painter: _MACDPainter(
+          allMacdData: macdData,
+          visibleData: visibleData,
+          startIndex: startIndex,
+          isDark: Theme.of(context).brightness == Brightness.dark,
         ),
-        titlesData: FlTitlesData(
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 50,
-              getTitlesWidget: (v, _) => Text(
-                v.toStringAsFixed(1),
-                style: TextStyle(fontSize: 9, color: Theme.of(context).textTheme.bodySmall?.color),
-              ),
-            ),
-          ),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        ),
-        borderData: FlBorderData(
-          show: true,
-          border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.3)),
-        ),
-        lineTouchData: const LineTouchData(enabled: false),
-        lineBarsData: [
-          ...histogramBars,
-          // DIF 線
-          LineChartBarData(
-            spots: difSpots,
-            isCurved: true,
-            color: Colors.blue,
-            barWidth: 1.5,
-            dotData: const FlDotData(show: false),
-          ),
-          // DEA 線
-          LineChartBarData(
-            spots: deaSpots,
-            isCurved: true,
-            color: Colors.orange,
-            barWidth: 1.5,
-            dotData: const FlDotData(show: false),
-          ),
-        ],
-      )),
+      ),
     );
   }
 
@@ -944,70 +517,45 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
     final List<FlSpot> rsiSpots = [];
     for (int i = 0; i < visibleData.length; i++) {
       final idx = startIndex + i;
-      if (idx < rsiData.length) {
-        rsiSpots.add(FlSpot(i.toDouble(), rsiData[idx]));
-      }
+      if (idx < rsiData.length) rsiSpots.add(FlSpot(i.toDouble(), rsiData[idx]));
     }
-
     if (rsiSpots.isEmpty) return _buildNoDataHint('RSI');
 
     return Padding(
       padding: const EdgeInsets.only(right: 16, left: 8, top: 4, bottom: 4),
       child: LineChart(LineChartData(
-        minX: 0,
-        maxX: (visibleData.length - 1).toDouble(),
-        minY: 0,
-        maxY: 100,
+        minX: 0, maxX: (visibleData.length - 1).toDouble(), minY: 0, maxY: 100,
         gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: 10,
+          show: true, drawVerticalLine: false, horizontalInterval: 10,
           getDrawingHorizontalLine: (value) {
-            if (value == 70) {
-              return FlLine(color: Colors.red.withOpacity(0.5), strokeWidth: 1, dashArray: [4, 4]);
-            }
-            if (value == 30) {
-              return FlLine(color: Colors.green.withOpacity(0.5), strokeWidth: 1, dashArray: [4, 4]);
-            }
-            if (value == 50) {
-              return FlLine(color: Colors.grey.withOpacity(0.3), strokeWidth: 0.5, dashArray: [3, 3]);
-            }
-            return FlLine(color: Theme.of(context).dividerColor.withOpacity(0.15), strokeWidth: 0.5);
+            if (value == 70) return FlLine(color: Colors.red.withAlpha(128), strokeWidth: 1, dashArray: [4, 4]);
+            if (value == 30) return FlLine(color: Colors.green.withAlpha(128), strokeWidth: 1, dashArray: [4, 4]);
+            if (value == 50) return FlLine(color: Colors.grey.withAlpha(76), strokeWidth: 0.5, dashArray: [3, 3]);
+            return FlLine(color: Theme.of(context).dividerColor.withAlpha(38), strokeWidth: 0.5);
           },
         ),
         titlesData: FlTitlesData(
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 30,
-              getTitlesWidget: (v, _) {
-                if (v == 0 || v == 30 || v == 50 || v == 70 || v == 100) {
-                  return Text(
-                    v.toInt().toString(),
-                    style: TextStyle(fontSize: 9, color: Theme.of(context).textTheme.bodySmall?.color),
-                  );
-                }
-                return const SizedBox();
-              },
-            ),
-          ),
+          leftTitles: AxisTitles(sideTitles: SideTitles(
+            showTitles: true, reservedSize: 30,
+            getTitlesWidget: (v, _) {
+              if (v == 0 || v == 30 || v == 50 || v == 70 || v == 100) {
+                return Text(v.toInt().toString(),
+                    style: TextStyle(fontSize: 9, color: Theme.of(context).textTheme.bodySmall?.color));
+              }
+              return const SizedBox();
+            },
+          )),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
-        borderData: FlBorderData(
-          show: true,
-          border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.3)),
-        ),
+        borderData: FlBorderData(show: true, border: Border.all(color: Theme.of(context).dividerColor.withAlpha(76))),
         lineTouchData: const LineTouchData(enabled: false),
         lineBarsData: [
           LineChartBarData(
-            spots: rsiSpots,
-            isCurved: true,
-            color: Colors.purple,
-            barWidth: 1.5,
+            spots: rsiSpots, isCurved: true, color: Colors.purple, barWidth: 1.5,
             dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(show: true, color: Colors.purple.withOpacity(0.05)),
+            belowBarData: BarAreaData(show: true, color: Colors.purple.withAlpha(12)),
           ),
         ],
       )),
@@ -1026,73 +574,43 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
         dSpots.add(FlSpot(i.toDouble(), kdData[idx].$2));
       }
     }
-
     if (kSpots.isEmpty) return _buildNoDataHint('KD');
 
     return Padding(
       padding: const EdgeInsets.only(right: 16, left: 8, top: 4, bottom: 4),
       child: LineChart(LineChartData(
-        minX: 0,
-        maxX: (visibleData.length - 1).toDouble(),
-        minY: 0,
-        maxY: 100,
+        minX: 0, maxX: (visibleData.length - 1).toDouble(), minY: 0, maxY: 100,
         gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: 20,
+          show: true, drawVerticalLine: false, horizontalInterval: 20,
           getDrawingHorizontalLine: (value) {
-            if (value == 80) {
-              return FlLine(color: Colors.red.withOpacity(0.5), strokeWidth: 1, dashArray: [4, 4]);
-            }
-            if (value == 20) {
-              return FlLine(color: Colors.green.withOpacity(0.5), strokeWidth: 1, dashArray: [4, 4]);
-            }
-            if (value == 50) {
-              return FlLine(color: Colors.grey.withOpacity(0.3), strokeWidth: 0.5, dashArray: [3, 3]);
-            }
-            return FlLine(color: Theme.of(context).dividerColor.withOpacity(0.15), strokeWidth: 0.5);
+            if (value == 80) return FlLine(color: Colors.red.withAlpha(128), strokeWidth: 1, dashArray: [4, 4]);
+            if (value == 20) return FlLine(color: Colors.green.withAlpha(128), strokeWidth: 1, dashArray: [4, 4]);
+            if (value == 50) return FlLine(color: Colors.grey.withAlpha(76), strokeWidth: 0.5, dashArray: [3, 3]);
+            return FlLine(color: Theme.of(context).dividerColor.withAlpha(38), strokeWidth: 0.5);
           },
         ),
         titlesData: FlTitlesData(
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 30,
-              getTitlesWidget: (v, _) {
-                if (v == 0 || v == 20 || v == 50 || v == 80 || v == 100) {
-                  return Text(
-                    v.toInt().toString(),
-                    style: TextStyle(fontSize: 9, color: Theme.of(context).textTheme.bodySmall?.color),
-                  );
-                }
-                return const SizedBox();
-              },
-            ),
-          ),
+          leftTitles: AxisTitles(sideTitles: SideTitles(
+            showTitles: true, reservedSize: 30,
+            getTitlesWidget: (v, _) {
+              if (v == 0 || v == 20 || v == 50 || v == 80 || v == 100) {
+                return Text(v.toInt().toString(),
+                    style: TextStyle(fontSize: 9, color: Theme.of(context).textTheme.bodySmall?.color));
+              }
+              return const SizedBox();
+            },
+          )),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
-        borderData: FlBorderData(
-          show: true,
-          border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.3)),
-        ),
+        borderData: FlBorderData(show: true, border: Border.all(color: Theme.of(context).dividerColor.withAlpha(76))),
         lineTouchData: const LineTouchData(enabled: false),
         lineBarsData: [
-          LineChartBarData(
-            spots: kSpots,
-            isCurved: true,
-            color: Colors.blue.shade700,
-            barWidth: 1.5,
-            dotData: const FlDotData(show: false),
-          ),
-          LineChartBarData(
-            spots: dSpots,
-            isCurved: true,
-            color: Colors.orange.shade700,
-            barWidth: 1.5,
-            dotData: const FlDotData(show: false),
-          ),
+          LineChartBarData(spots: kSpots, isCurved: true, color: Colors.blue.shade700, barWidth: 1.5,
+              dotData: const FlDotData(show: false)),
+          LineChartBarData(spots: dSpots, isCurved: true, color: Colors.orange.shade700, barWidth: 1.5,
+              dotData: const FlDotData(show: false)),
         ],
       )),
     );
@@ -1105,72 +623,42 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
     if (data.length < period) {
       List<double> result = [];
       double sum = 0;
-      for (int i = 0; i < data.length; i++) {
-        sum += data[i];
-        result.add(sum / (i + 1));
-      }
+      for (int i = 0; i < data.length; i++) { sum += data[i]; result.add(sum / (i + 1)); }
       return result;
     }
-
     List<double> result = List.filled(data.length, 0);
     double sum = 0;
-    for (int i = 0; i < period; i++) {
-      sum += data[i];
-      result[i] = sum / (i + 1);
-    }
+    for (int i = 0; i < period; i++) { sum += data[i]; result[i] = sum / (i + 1); }
     result[period - 1] = sum / period;
-
     double k = 2.0 / (period + 1);
-    for (int i = period; i < data.length; i++) {
-      result[i] = data[i] * k + result[i - 1] * (1 - k);
-    }
+    for (int i = period; i < data.length; i++) { result[i] = data[i] * k + result[i - 1] * (1 - k); }
     return result;
   }
 
   List<_MACDValue> _computeMACDValues(List<StockHistory> data) {
     if (data.length < 2) return [];
-
     final closes = data.map((d) => d.close).toList();
     final ema12 = _computeEMA(closes, 12);
     final ema26 = _computeEMA(closes, 26);
-
     List<double> dif = [];
-    for (int i = 0; i < closes.length; i++) {
-      dif.add(ema12[i] - ema26[i]);
-    }
-
+    for (int i = 0; i < closes.length; i++) { dif.add(ema12[i] - ema26[i]); }
     final dea = _computeEMA(dif, 9);
-
-    return List.generate(closes.length, (i) => _MACDValue(
-      dif: dif[i],
-      dea: dea[i],
-      histogram: dif[i] - dea[i],
-    ));
+    return List.generate(closes.length, (i) => _MACDValue(dif: dif[i], dea: dea[i], histogram: dif[i] - dea[i]));
   }
 
   List<double> _computeRSIValues(List<StockHistory> data, {int period = 14}) {
     if (data.length < period + 1) return List.filled(data.length, 50);
-
     List<double> result = List.filled(data.length, 50);
-
-    List<double> gains = [];
-    List<double> losses = [];
+    List<double> gains = [], losses = [];
     for (int i = 1; i < data.length; i++) {
       double change = data[i].close - data[i - 1].close;
       gains.add(change > 0 ? change : 0);
       losses.add(change < 0 ? -change : 0);
     }
-
     double avgGain = 0, avgLoss = 0;
-    for (int i = 0; i < period; i++) {
-      avgGain += gains[i];
-      avgLoss += losses[i];
-    }
-    avgGain /= period;
-    avgLoss /= period;
-
+    for (int i = 0; i < period; i++) { avgGain += gains[i]; avgLoss += losses[i]; }
+    avgGain /= period; avgLoss /= period;
     result[period] = avgLoss == 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-
     for (int i = period; i < gains.length; i++) {
       avgGain = (avgGain * (period - 1) + gains[i]) / period;
       avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
@@ -1179,37 +667,22 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
     return result;
   }
 
-  /// 回傳 (K值, D值) 的列表
   List<(double, double)> _computeKDValues(List<StockHistory> data, {int period = 9}) {
-    if (data.length < period) {
-      return List.filled(data.length, (50.0, 50.0));
-    }
-
+    if (data.length < period) return List.filled(data.length, (50.0, 50.0));
     List<(double, double)> result = [];
     double prevK = 50, prevD = 50;
-
     for (int i = 0; i < data.length; i++) {
-      if (i < period - 1) {
-        result.add((50.0, 50.0));
-        continue;
-      }
-
-      double highestHigh = data[i].high;
-      double lowestLow = data[i].low;
+      if (i < period - 1) { result.add((50.0, 50.0)); continue; }
+      double highestHigh = data[i].high, lowestLow = data[i].low;
       for (int j = 1; j < period; j++) {
         if (data[i - j].high > highestHigh) highestHigh = data[i - j].high;
         if (data[i - j].low < lowestLow) lowestLow = data[i - j].low;
       }
-
-      double rsv = (highestHigh == lowestLow)
-          ? 50
-          : (data[i].close - lowestLow) / (highestHigh - lowestLow) * 100;
+      double rsv = (highestHigh == lowestLow) ? 50 : (data[i].close - lowestLow) / (highestHigh - lowestLow) * 100;
       double k = 2.0 / 3.0 * prevK + 1.0 / 3.0 * rsv;
       double d = 2.0 / 3.0 * prevD + 1.0 / 3.0 * k;
-
       result.add((k, d));
-      prevK = k;
-      prevD = d;
+      prevK = k; prevD = d;
     }
     return result;
   }
@@ -1220,226 +693,447 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          IconButton(
-            icon: const Icon(Icons.zoom_in, size: 20),
-            onPressed: () {
-              setState(() {
-                _visibleDataRange = (_visibleDataRange - 0.1).clamp(0.1, 1.0);
-              });
-            },
-            tooltip: '放大',
-          ),
-          IconButton(
-            icon: const Icon(Icons.zoom_out, size: 20),
-            onPressed: () {
-              setState(() {
-                _visibleDataRange = (_visibleDataRange + 0.1).clamp(0.1, 1.0);
-              });
-            },
-            tooltip: '縮小',
-          ),
-          IconButton(
-            icon: const Icon(Icons.fit_screen, size: 20),
-            onPressed: () {
-              setState(() {
-                _visibleDataRange = 1.0;
-                _scrollOffset = 0.0;
-              });
-            },
-            tooltip: '重置',
-          ),
+          IconButton(icon: const Icon(Icons.zoom_in, size: 20), onPressed: () {
+            setState(() { _visibleDataRange = (_visibleDataRange - 0.1).clamp(0.1, 1.0); });
+          }, tooltip: '放大'),
+          IconButton(icon: const Icon(Icons.zoom_out, size: 20), onPressed: () {
+            setState(() { _visibleDataRange = (_visibleDataRange + 0.1).clamp(0.1, 1.0); });
+          }, tooltip: '縮小'),
+          IconButton(icon: const Icon(Icons.fit_screen, size: 20), onPressed: () {
+            setState(() { _visibleDataRange = 1.0; _scrollOffset = 0.0; });
+          }, tooltip: '重置'),
           const Spacer(),
-          Text(
-            '顯示 ${(_visibleDataRange * 100).toStringAsFixed(0)}%',
-            style: TextStyle(
-              fontSize: 12,
-              color: Theme.of(context).textTheme.bodySmall?.color,
-            ),
-          ),
+          Text('顯示 ${(_visibleDataRange * 100).toStringAsFixed(0)}%',
+              style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color)),
         ],
       ),
     );
   }
 
   void _showSettingsDialog(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => _ChartSettingsSheet(
-        settings: widget.settings,
-        onSettingsChanged: widget.onSettingsChanged,
-      ),
-    );
+    showModalBottomSheet(context: context, builder: (context) =>
+        _ChartSettingsSheet(settings: widget.settings, onSettingsChanged: widget.onSettingsChanged));
   }
 
   String _formatVolume(double volume) {
-    if (volume >= 100000000) {
-      return '${(volume / 100000000).toStringAsFixed(0)}億';
-    } else if (volume >= 10000) {
-      return '${(volume / 10000).toStringAsFixed(0)}萬';
-    } else {
-      return volume.toStringAsFixed(0);
-    }
+    if (volume >= 100000000) return '${(volume / 100000000).toStringAsFixed(0)}億';
+    if (volume >= 10000) return '${(volume / 10000).toStringAsFixed(0)}萬';
+    return volume.toStringAsFixed(0);
   }
 }
 
-/// 形態標記繪製器
+// ==================== CustomPainters ====================
+
+/// K 線主圖 Painter（高效能：單次 paint 繪製所有 K 棒 + 均線 + 布林）
+class _CandlestickChartPainter extends CustomPainter {
+  final List<StockHistory> data;
+  final ChartSettings settings;
+  final int? touchedIndex;
+  final bool isDark;
+
+  _CandlestickChartPainter({
+    required this.data,
+    required this.settings,
+    this.touchedIndex,
+    this.isDark = false,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
+
+    final n = data.length;
+    final minPrice = data.map((e) => e.low).reduce(min);
+    final maxPrice = data.map((e) => e.high).reduce(max);
+    final priceRange = maxPrice - minPrice;
+    final paddedMin = minPrice - priceRange * 0.1;
+    final paddedMax = maxPrice + priceRange * 0.1;
+    final paddedRange = paddedMax - paddedMin;
+    if (paddedRange == 0) return;
+
+    final candleWidth = (size.width / n).clamp(3.0, 16.0);
+    final bodyWidth = candleWidth * 0.7;
+
+    double priceToY(double price) => size.height - ((price - paddedMin) / paddedRange * size.height);
+
+    // 繪製網格線
+    final gridPaint = Paint()..color = (isDark ? Colors.grey.shade800 : Colors.grey.shade300).withAlpha(128)..strokeWidth = 0.5;
+    for (int i = 1; i < 5; i++) {
+      final y = size.height * i / 5;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    // 繪製布林通道
+    if (settings.isIndicatorEnabled(ChartIndicatorType.bollinger)) {
+      _drawBollingerBands(canvas, size, data, priceToY);
+    }
+
+    // 繪製均線
+    _drawMovingAverages(canvas, size, data, priceToY, n);
+
+    // 繪製 K 棒
+    for (int i = 0; i < n; i++) {
+      final candle = data[i];
+      final isRising = candle.close >= candle.open;
+      final color = isRising ? Colors.red : Colors.green;
+      final x = (i + 0.5) * candleWidth;
+
+      // 影線
+      final wickPaint = Paint()..color = color..strokeWidth = 1;
+      canvas.drawLine(Offset(x, priceToY(candle.high)), Offset(x, priceToY(candle.low)), wickPaint);
+
+      // 實體
+      final bodyTop = priceToY(isRising ? candle.close : candle.open);
+      final bodyBottom = priceToY(isRising ? candle.open : candle.close);
+      final bodyHeight = (bodyBottom - bodyTop).abs().clamp(1.0, size.height);
+
+      final bodyPaint = Paint()
+        ..color = color
+        ..style = isRising ? PaintingStyle.stroke : PaintingStyle.fill
+        ..strokeWidth = 1;
+
+      canvas.drawRect(
+        Rect.fromCenter(center: Offset(x, (bodyTop + bodyBottom) / 2), width: bodyWidth, height: bodyHeight),
+        bodyPaint,
+      );
+    }
+
+    // 繪製十字線
+    if (touchedIndex != null && touchedIndex! < n) {
+      final x = (touchedIndex! + 0.5) * candleWidth;
+      final crossPaint = Paint()..color = Colors.grey..strokeWidth = 0.5..style = PaintingStyle.stroke;
+      // 垂直線
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), crossPaint);
+      // 水平線（收盤價位置）
+      final closeY = priceToY(data[touchedIndex!].close);
+      canvas.drawLine(Offset(0, closeY), Offset(size.width, closeY), crossPaint);
+    }
+  }
+
+  void _drawMovingAverages(Canvas canvas, Size size, List<StockHistory> data, double Function(double) priceToY, int n) {
+    final candleWidth = size.width / n;
+
+    void drawMA(int period, Color color, ChartIndicatorType type) {
+      if (!settings.isIndicatorEnabled(type) || data.length < period) return;
+      final path = Path();
+      bool started = false;
+      for (int i = period - 1; i < data.length; i++) {
+        double sum = 0;
+        for (int j = 0; j < period; j++) sum += data[i - j].close;
+        final y = priceToY(sum / period);
+        final x = (i + 0.5) * candleWidth;
+        if (!started) { path.moveTo(x, y); started = true; } else { path.lineTo(x, y); }
+      }
+      canvas.drawPath(path, Paint()..color = color..strokeWidth = 1.5..style = PaintingStyle.stroke);
+    }
+
+    drawMA(5, Colors.blue, ChartIndicatorType.ma5);
+    drawMA(10, Colors.orange, ChartIndicatorType.ma10);
+    drawMA(20, Colors.purple, ChartIndicatorType.ma20);
+    drawMA(60, Colors.teal, ChartIndicatorType.ma60);
+  }
+
+  void _drawBollingerBands(Canvas canvas, Size size, List<StockHistory> data, double Function(double) priceToY) {
+    const period = 20;
+    const stdDevMultiplier = 2.0;
+    if (data.length < period) return;
+
+    final candleWidth = size.width / data.length;
+    final upperPath = Path();
+    final middlePath = Path();
+    final lowerPath = Path();
+    bool started = false;
+
+    for (int i = period - 1; i < data.length; i++) {
+      double sum = 0;
+      for (int j = 0; j < period; j++) sum += data[i - j].close;
+      final ma = sum / period;
+
+      double sumSq = 0;
+      for (int j = 0; j < period; j++) sumSq += (data[i - j].close - ma) * (data[i - j].close - ma);
+      final stdDev = sqrt(sumSq / period);
+
+      final x = (i + 0.5) * candleWidth;
+      if (!started) {
+        upperPath.moveTo(x, priceToY(ma + stdDevMultiplier * stdDev));
+        middlePath.moveTo(x, priceToY(ma));
+        lowerPath.moveTo(x, priceToY(ma - stdDevMultiplier * stdDev));
+        started = true;
+      } else {
+        upperPath.lineTo(x, priceToY(ma + stdDevMultiplier * stdDev));
+        middlePath.lineTo(x, priceToY(ma));
+        lowerPath.lineTo(x, priceToY(ma - stdDevMultiplier * stdDev));
+      }
+    }
+
+    final bandPaint = Paint()..strokeWidth = 1..style = PaintingStyle.stroke;
+    canvas.drawPath(upperPath, bandPaint..color = Colors.cyan.withAlpha(178));
+    canvas.drawPath(middlePath, bandPaint..color = Colors.cyan..strokeWidth = 1.5);
+    canvas.drawPath(lowerPath, bandPaint..color = Colors.cyan.withAlpha(178)..strokeWidth = 1);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CandlestickChartPainter oldDelegate) {
+    return data != oldDelegate.data || settings != oldDelegate.settings ||
+        touchedIndex != oldDelegate.touchedIndex || isDark != oldDelegate.isDark;
+  }
+}
+
+/// 右側價格軸
+class _PriceAxisPainter extends CustomPainter {
+  final List<StockHistory> data;
+  final bool isDark;
+
+  _PriceAxisPainter({required this.data, this.isDark = false});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
+    final minPrice = data.map((e) => e.low).reduce(min);
+    final maxPrice = data.map((e) => e.high).reduce(max);
+    final range = maxPrice - minPrice;
+    final paddedMin = minPrice - range * 0.1;
+    final paddedMax = maxPrice + range * 0.1;
+
+    final textColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+
+    for (int i = 0; i <= 5; i++) {
+      final price = paddedMin + (paddedMax - paddedMin) * (1 - i / 5);
+      final y = size.height * i / 5;
+      final tp = TextPainter(
+        text: TextSpan(text: price.toStringAsFixed(1), style: TextStyle(fontSize: 9, color: textColor)),
+        textDirection: ui.TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(4, y - tp.height / 2));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PriceAxisPainter old) => data != old.data;
+}
+
+/// 底部日期軸
+class _DateAxisPainter extends CustomPainter {
+  final List<StockHistory> data;
+  final bool isDark;
+
+  _DateAxisPainter({required this.data, this.isDark = false});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
+    final n = data.length;
+    final step = max(1, n ~/ 5);
+    final textColor = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
+
+    for (int i = 0; i < n; i += step) {
+      final d = data[i].date;
+      final x = (i + 0.5) / n * size.width;
+      final tp = TextPainter(
+        text: TextSpan(text: '${d.month}/${d.day}', style: TextStyle(fontSize: 9, color: textColor)),
+        textDirection: ui.TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(x - tp.width / 2, 2));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DateAxisPainter old) => data != old.data;
+}
+
+/// 成交量 Painter
+class _VolumePainter extends CustomPainter {
+  final List<StockHistory> data;
+
+  _VolumePainter({required this.data});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
+    final n = data.length;
+    final maxVol = data.map((e) => e.volume).reduce(max).toDouble();
+    if (maxVol == 0) return;
+
+    final barWidth = (size.width / n).clamp(2.0, 14.0) * 0.7;
+
+    for (int i = 0; i < n; i++) {
+      final candle = data[i];
+      final isRising = candle.close >= candle.open;
+      final barHeight = (candle.volume / maxVol) * size.height;
+      final x = (i + 0.5) * size.width / n;
+
+      final paint = Paint()..color = (isRising ? Colors.red : Colors.green).withAlpha(128);
+      canvas.drawRect(
+        Rect.fromLTWH(x - barWidth / 2, size.height - barHeight, barWidth, barHeight),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _VolumePainter old) => data != old.data;
+}
+
+/// MACD 副圖 Painter
+class _MACDPainter extends CustomPainter {
+  final List<_MACDValue> allMacdData;
+  final List<StockHistory> visibleData;
+  final int startIndex;
+  final bool isDark;
+
+  _MACDPainter({required this.allMacdData, required this.visibleData, required this.startIndex, this.isDark = false});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = visibleData.length;
+    if (n == 0) return;
+
+    double minY = 0, maxY = 0;
+    final List<_MACDValue> visible = [];
+    for (int i = 0; i < n; i++) {
+      final idx = startIndex + i;
+      if (idx >= allMacdData.length) break;
+      final m = allMacdData[idx];
+      visible.add(m);
+      minY = min(minY, min(m.dif, min(m.dea, m.histogram)));
+      maxY = max(maxY, max(m.dif, max(m.dea, m.histogram)));
+    }
+    if (visible.isEmpty) return;
+
+    final range = maxY - minY;
+    if (range == 0) return;
+    final paddedMin = minY - range * 0.1;
+    final paddedMax = maxY + range * 0.1;
+    final paddedRange = paddedMax - paddedMin;
+
+    double toY(double v) => size.height - ((v - paddedMin) / paddedRange * size.height);
+    final barWidth = (size.width / n).clamp(2.0, 12.0) * 0.6;
+
+    // 零線
+    final zeroY = toY(0);
+    canvas.drawLine(Offset(0, zeroY), Offset(size.width, zeroY),
+        Paint()..color = (isDark ? Colors.grey.shade700 : Colors.grey.shade400)..strokeWidth = 0.5);
+
+    // Histogram
+    for (int i = 0; i < visible.length; i++) {
+      final x = (i + 0.5) * size.width / n;
+      final h = visible[i].histogram;
+      final paint = Paint()..color = (h >= 0 ? Colors.red : Colors.green).withAlpha(128);
+      canvas.drawRect(Rect.fromLTWH(x - barWidth / 2, min(zeroY, toY(h)), barWidth, (toY(h) - zeroY).abs()), paint);
+    }
+
+    // DIF 線
+    final difPath = Path();
+    final deaPath = Path();
+    for (int i = 0; i < visible.length; i++) {
+      final x = (i + 0.5) * size.width / n;
+      if (i == 0) {
+        difPath.moveTo(x, toY(visible[i].dif));
+        deaPath.moveTo(x, toY(visible[i].dea));
+      } else {
+        difPath.lineTo(x, toY(visible[i].dif));
+        deaPath.lineTo(x, toY(visible[i].dea));
+      }
+    }
+    canvas.drawPath(difPath, Paint()..color = Colors.blue..strokeWidth = 1.5..style = PaintingStyle.stroke);
+    canvas.drawPath(deaPath, Paint()..color = Colors.orange..strokeWidth = 1.5..style = PaintingStyle.stroke);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MACDPainter old) =>
+      visibleData != old.visibleData || startIndex != old.startIndex;
+}
+
+// ==================== 其他 Painters ====================
+
 class PatternMarkerPainter extends CustomPainter {
   final List<PatternMarker> patterns;
   final List<StockHistory> visibleData;
   final int startIndex;
   final TextStyle textStyle;
 
-  PatternMarkerPainter({
-    required this.patterns,
-    required this.visibleData,
-    required this.startIndex,
-    required this.textStyle,
-  });
+  PatternMarkerPainter({required this.patterns, required this.visibleData, required this.startIndex, required this.textStyle});
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final pattern in patterns) {
-      // 計算可見範圍內的形態
       final relativeStart = pattern.startIndex - startIndex;
       final relativeEnd = pattern.endIndex - startIndex;
-
       if (relativeEnd < 0 || relativeStart >= visibleData.length) continue;
 
-      final paint = Paint()
-        ..color = pattern.markerColor.withOpacity(0.3)
-        ..style = PaintingStyle.fill;
-
-      // 繪製形態區域背景
       final startX = (relativeStart.clamp(0, visibleData.length - 1)) / visibleData.length * size.width;
       final endX = (relativeEnd.clamp(0, visibleData.length - 1)) / visibleData.length * size.width;
 
-      canvas.drawRect(
-        Rect.fromLTRB(startX, 0, endX, size.height),
-        paint,
-      );
+      canvas.drawRect(Rect.fromLTRB(startX, 0, endX, size.height),
+          Paint()..color = pattern.markerColor.withAlpha(76)..style = PaintingStyle.fill);
 
-      // 繪製形態標籤
-      final textPainter = TextPainter(
+      final tp = TextPainter(
         text: TextSpan(
-          text: '${pattern.typeName} ${(pattern.confidence).toStringAsFixed(0)}%',
-          style: textStyle.copyWith(
-            color: pattern.markerColor,
-            fontWeight: FontWeight.bold,
-          ),
+          text: '${pattern.typeName} ${pattern.confidence.toStringAsFixed(0)}%',
+          style: textStyle.copyWith(color: pattern.markerColor, fontWeight: FontWeight.bold),
         ),
         textDirection: ui.TextDirection.ltr,
       )..layout();
-
-      textPainter.paint(canvas, Offset(startX + 4, 4));
+      tp.paint(canvas, Offset(startX + 4, 4));
     }
   }
 
   @override
-  bool shouldRepaint(covariant PatternMarkerPainter oldDelegate) {
-    return patterns != oldDelegate.patterns ||
-        visibleData != oldDelegate.visibleData;
-  }
+  bool shouldRepaint(covariant PatternMarkerPainter old) => patterns != old.patterns || visibleData != old.visibleData;
 }
 
-/// 繪圖對象繪製器
 class DrawingsPainter extends CustomPainter {
   final List<DrawingObject> drawings;
-
   DrawingsPainter({required this.drawings});
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final drawing in drawings) {
-      final paint = Paint()
-        ..color = drawing.color
-        ..strokeWidth = drawing.strokeWidth
-        ..style = PaintingStyle.stroke;
-
+      final paint = Paint()..color = drawing.color..strokeWidth = drawing.strokeWidth..style = PaintingStyle.stroke;
       switch (drawing.type) {
         case DrawingToolType.trendLine:
-          if (drawing.points.length >= 2) {
-            canvas.drawLine(drawing.points[0], drawing.points[1], paint);
-          }
+          if (drawing.points.length >= 2) canvas.drawLine(drawing.points[0], drawing.points[1], paint);
           break;
         case DrawingToolType.horizontalLine:
-          if (drawing.points.isNotEmpty) {
-            canvas.drawLine(
-              Offset(0, drawing.points[0].dy),
-              Offset(size.width, drawing.points[0].dy),
-              paint,
-            );
-          }
+          if (drawing.points.isNotEmpty) canvas.drawLine(Offset(0, drawing.points[0].dy), Offset(size.width, drawing.points[0].dy), paint);
           break;
         case DrawingToolType.verticalLine:
-          if (drawing.points.isNotEmpty) {
-            canvas.drawLine(
-              Offset(drawing.points[0].dx, 0),
-              Offset(drawing.points[0].dx, size.height),
-              paint,
-            );
-          }
+          if (drawing.points.isNotEmpty) canvas.drawLine(Offset(drawing.points[0].dx, 0), Offset(drawing.points[0].dx, size.height), paint);
           break;
-        default:
-          break;
+        default: break;
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant DrawingsPainter oldDelegate) {
-    return drawings != oldDelegate.drawings;
-  }
+  bool shouldRepaint(covariant DrawingsPainter old) => drawings != old.drawings;
 }
 
-/// 正在繪製的對象繪製器
 class ActiveDrawingPainter extends CustomPainter {
   final List<Offset> points;
   final DrawingToolType toolType;
-
-  ActiveDrawingPainter({
-    required this.points,
-    required this.toolType,
-  });
+  ActiveDrawingPainter({required this.points, required this.toolType});
 
   @override
   void paint(Canvas canvas, Size size) {
     if (points.isEmpty) return;
-
-    final paint = Paint()
-      ..color = Colors.blue.withOpacity(0.5)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    // 繪製已選擇的點
+    final paint = Paint()..color = Colors.blue.withAlpha(128)..strokeWidth = 2..style = PaintingStyle.stroke;
     for (final point in points) {
       canvas.drawCircle(point, 4, paint..style = PaintingStyle.fill);
     }
-
-    // 繪製預覽線
     if (toolType == DrawingToolType.horizontalLine && points.isNotEmpty) {
-      canvas.drawLine(
-        Offset(0, points[0].dy),
-        Offset(size.width, points[0].dy),
-        paint..style = PaintingStyle.stroke,
-      );
+      canvas.drawLine(Offset(0, points[0].dy), Offset(size.width, points[0].dy), paint..style = PaintingStyle.stroke);
     }
   }
 
   @override
-  bool shouldRepaint(covariant ActiveDrawingPainter oldDelegate) {
-    return points != oldDelegate.points || toolType != oldDelegate.toolType;
-  }
+  bool shouldRepaint(covariant ActiveDrawingPainter old) => points != old.points || toolType != old.toolType;
 }
 
-/// 圖表設置面板
 class _ChartSettingsSheet extends StatelessWidget {
   final ChartSettings settings;
   final ValueChanged<ChartSettings>? onSettingsChanged;
-
-  const _ChartSettingsSheet({
-    required this.settings,
-    this.onSettingsChanged,
-  });
+  const _ChartSettingsSheet({required this.settings, this.onSettingsChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -1449,60 +1143,29 @@ class _ChartSettingsSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Text(
-                '圖表設置',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ],
-          ),
+          Row(children: [
+            const Text('圖表設置', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Spacer(),
+            IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+          ]),
           const Divider(),
-          // 指標開關
           const Text('技術指標', style: TextStyle(fontWeight: FontWeight.w500)),
           const SizedBox(height: 8),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: 8, runSpacing: 8,
             children: settings.indicators.entries.map((e) {
-              return FilterChip(
-                label: Text(e.value.name),
-                selected: e.value.isEnabled,
-                onSelected: (_) {
-                  onSettingsChanged?.call(settings.toggleIndicator(e.key));
-                },
-              );
+              return FilterChip(label: Text(e.value.name), selected: e.value.isEnabled,
+                  onSelected: (_) { onSettingsChanged?.call(settings.toggleIndicator(e.key)); });
             }).toList(),
           ),
           const SizedBox(height: 16),
-          // 顯示選項
           const Text('顯示選項', style: TextStyle(fontWeight: FontWeight.w500)),
-          SwitchListTile(
-            title: const Text('顯示成交量'),
-            value: settings.showVolume,
-            onChanged: (value) {
-              onSettingsChanged?.call(settings.copyWith(showVolume: value));
-            },
-          ),
-          SwitchListTile(
-            title: const Text('顯示形態標記'),
-            value: settings.showPatterns,
-            onChanged: (value) {
-              onSettingsChanged?.call(settings.copyWith(showPatterns: value));
-            },
-          ),
-          SwitchListTile(
-            title: const Text('啟用十字線'),
-            value: settings.enableCrosshair,
-            onChanged: (value) {
-              onSettingsChanged?.call(settings.copyWith(enableCrosshair: value));
-            },
-          ),
+          SwitchListTile(title: const Text('顯示成交量'), value: settings.showVolume,
+              onChanged: (v) { onSettingsChanged?.call(settings.copyWith(showVolume: v)); }),
+          SwitchListTile(title: const Text('顯示形態標記'), value: settings.showPatterns,
+              onChanged: (v) { onSettingsChanged?.call(settings.copyWith(showPatterns: v)); }),
+          SwitchListTile(title: const Text('啟用十字線'), value: settings.enableCrosshair,
+              onChanged: (v) { onSettingsChanged?.call(settings.copyWith(enableCrosshair: v)); }),
           const SizedBox(height: 16),
         ],
       ),
