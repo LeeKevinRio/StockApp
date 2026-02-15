@@ -64,6 +64,7 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
     final visibleData = widget.data.sublist(startIndex, endIndex);
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // 工具欄
         _buildToolbar(context),
@@ -811,7 +812,7 @@ class _CandlestickChartPainter extends CustomPainter {
   }
 
   void _drawMovingAverages(Canvas canvas, Size size, List<StockHistory> data, double Function(double) priceToY, int n) {
-    final candleWidth = size.width / n;
+    final candleWidth = (size.width / n).clamp(3.0, 16.0);
 
     void drawMA(int period, Color color, ChartIndicatorType type) {
       if (!settings.isIndicatorEnabled(type) || data.length < period) return;
@@ -866,10 +867,9 @@ class _CandlestickChartPainter extends CustomPainter {
       }
     }
 
-    final bandPaint = Paint()..strokeWidth = 1..style = PaintingStyle.stroke;
-    canvas.drawPath(upperPath, bandPaint..color = Colors.cyan.withAlpha(178));
-    canvas.drawPath(middlePath, bandPaint..color = Colors.cyan..strokeWidth = 1.5);
-    canvas.drawPath(lowerPath, bandPaint..color = Colors.cyan.withAlpha(178)..strokeWidth = 1);
+    canvas.drawPath(upperPath, Paint()..color = Colors.cyan.withAlpha(178)..strokeWidth = 1..style = PaintingStyle.stroke);
+    canvas.drawPath(middlePath, Paint()..color = Colors.cyan..strokeWidth = 1.5..style = PaintingStyle.stroke);
+    canvas.drawPath(lowerPath, Paint()..color = Colors.cyan.withAlpha(178)..strokeWidth = 1..style = PaintingStyle.stroke);
   }
 
   @override
