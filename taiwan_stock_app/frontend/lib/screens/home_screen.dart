@@ -34,7 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _screens = [
-      DashboardScreen(onTabChange: () => _switchToTab(1)),
+      DashboardScreen(onTabChange: (index) => _switchToTab(index)),
       const WatchlistScreen(),
       const AISuggestionsScreen(),
       const AIChatScreen(),

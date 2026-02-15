@@ -11,7 +11,7 @@ import '../widgets/common/skeleton_loader.dart';
 
 /// Dashboard 儀表板頁面
 class DashboardScreen extends StatefulWidget {
-  final VoidCallback? onTabChange;
+  final void Function(int tabIndex)? onTabChange;
 
   const DashboardScreen({
     super.key,
@@ -244,21 +244,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _handleQuickAction(BuildContext context, QuickActionItem action) {
     if (action.route == '/home' && action.arguments?['tab'] != null) {
-      // 切換到指定 Tab
-      widget.onTabChange?.call();
+      widget.onTabChange?.call(action.arguments!['tab'] as int);
     } else {
       Navigator.pushNamed(context, action.route, arguments: action.arguments);
     }
   }
 
   void _navigateToWatchlist(BuildContext context) {
-    // 假設自選股是首頁的第一個 Tab，這裡可以通知父組件切換
-    widget.onTabChange?.call();
+    widget.onTabChange?.call(1); // Tab 1: 自選股
   }
 
   void _navigateToAISuggestions(BuildContext context) {
-    // 假設 AI 建議是首頁的第二個 Tab
-    widget.onTabChange?.call();
+    widget.onTabChange?.call(2); // Tab 2: AI 建議
   }
 
   void _navigateToAlerts(BuildContext context) {
