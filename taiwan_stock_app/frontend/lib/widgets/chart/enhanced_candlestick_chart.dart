@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -6,8 +7,19 @@ import '../../models/stock_history.dart';
 import '../../models/chart_settings.dart';
 import '../../models/indicator_data.dart';
 
+/// 副圖類型
+enum SubChartType { none, macd, rsi, kd }
+
+/// MACD 計算結果
+class _MACDValue {
+  final double dif;
+  final double dea;
+  final double histogram;
+  _MACDValue({required this.dif, required this.dea, required this.histogram});
+}
+
 /// 增強版 K 線圖表
-/// 支援指標疊加、形態標記、繪圖工具
+/// 支援指標疊加、形態標記、繪圖工具、副圖指標
 class EnhancedCandlestickChart extends StatefulWidget {
   final List<StockHistory> data;
   final ChartSettings settings;
@@ -36,6 +48,7 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
   int? _touchedIndex;
   DrawingToolType? _activeDrawingTool;
   List<Offset> _currentDrawingPoints = [];
+  SubChartType _selectedSubChart = SubChartType.none;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +71,7 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
         _buildIndicatorLegend(context),
         // K線圖表
         Expanded(
-          flex: 3,
+          flex: _selectedSubChart != SubChartType.none ? 4 : 3,
           child: GestureDetector(
             onScaleUpdate: widget.settings.enableZoom ? _handleScaleUpdate : null,
             onHorizontalDragUpdate: widget.settings.enableZoom ? _handleHorizontalDrag : null,
@@ -90,6 +103,14 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
             child: _buildVolumeChart(context, visibleData),
           ),
         ],
+        // 副圖選擇器
+        _buildSubChartSelector(context),
+        // 副圖指標
+        if (_selectedSubChart != SubChartType.none)
+          Expanded(
+            flex: 2,
+            child: _buildSubChart(context, visibleData, startIndex),
+          ),
         // 縮放控制
         if (widget.settings.enableZoom) _buildZoomControls(context),
       ],
@@ -751,6 +772,446 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
         ),
       ),
     );
+  }
+
+  // ==================== 副圖相關 ====================
+
+  Widget _buildSubChartSelector(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
+      ),
+      child: Row(
+        children: [
+          const Text('副圖', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+          const SizedBox(width: 8),
+          ...SubChartType.values.map((type) {
+            final isSelected = _selectedSubChart == type;
+            return Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: ChoiceChip(
+                label: Text(_subChartLabel(type), style: const TextStyle(fontSize: 11)),
+                selected: isSelected,
+                onSelected: (_) => setState(() => _selectedSubChart = type),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  String _subChartLabel(SubChartType type) {
+    switch (type) {
+      case SubChartType.none:
+        return '無';
+      case SubChartType.macd:
+        return 'MACD';
+      case SubChartType.rsi:
+        return 'RSI';
+      case SubChartType.kd:
+        return 'KD';
+    }
+  }
+
+  Widget _buildSubChart(BuildContext context, List<StockHistory> visibleData, int startIndex) {
+    switch (_selectedSubChart) {
+      case SubChartType.macd:
+        return _buildMACDSubChart(context, visibleData, startIndex);
+      case SubChartType.rsi:
+        return _buildRSISubChart(context, visibleData, startIndex);
+      case SubChartType.kd:
+        return _buildKDSubChart(context, visibleData, startIndex);
+      case SubChartType.none:
+        return const SizedBox();
+    }
+  }
+
+  Widget _buildNoDataHint(String name) {
+    return Center(
+      child: Text('$name 數據不足', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+    );
+  }
+
+  Widget _buildMACDSubChart(BuildContext context, List<StockHistory> visibleData, int startIndex) {
+    final macdData = _computeMACDValues(widget.data);
+    if (macdData.isEmpty) return _buildNoDataHint('MACD');
+
+    double minY = 0, maxY = 0;
+    final List<LineChartBarData> histogramBars = [];
+    final List<FlSpot> difSpots = [];
+    final List<FlSpot> deaSpots = [];
+
+    for (int i = 0; i < visibleData.length; i++) {
+      final dataIdx = startIndex + i;
+      if (dataIdx >= macdData.length) continue;
+      final m = macdData[dataIdx];
+
+      difSpots.add(FlSpot(i.toDouble(), m.dif));
+      deaSpots.add(FlSpot(i.toDouble(), m.dea));
+      minY = min(minY, min(m.dif, min(m.dea, m.histogram)));
+      maxY = max(maxY, max(m.dif, max(m.dea, m.histogram)));
+
+      // 柱狀圖用垂直線段模擬
+      histogramBars.add(LineChartBarData(
+        spots: [FlSpot(i.toDouble(), 0), FlSpot(i.toDouble(), m.histogram)],
+        isCurved: false,
+        color: m.histogram >= 0 ? Colors.red.withOpacity(0.5) : Colors.green.withOpacity(0.5),
+        barWidth: 3,
+        dotData: const FlDotData(show: false),
+      ));
+    }
+
+    if (difSpots.isEmpty) return _buildNoDataHint('MACD');
+
+    final range = maxY - minY;
+    if (range == 0) return _buildNoDataHint('MACD');
+    minY -= range * 0.1;
+    maxY += range * 0.1;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 16, left: 8, top: 4, bottom: 4),
+      child: LineChart(LineChartData(
+        minX: 0,
+        maxX: (visibleData.length - 1).toDouble(),
+        minY: minY,
+        maxY: maxY,
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (value) {
+            if (value.abs() < range * 0.01) {
+              return FlLine(color: Theme.of(context).dividerColor, strokeWidth: 1);
+            }
+            return FlLine(
+              color: Theme.of(context).dividerColor.withOpacity(0.2),
+              strokeWidth: 0.5,
+            );
+          },
+        ),
+        titlesData: FlTitlesData(
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 50,
+              getTitlesWidget: (v, _) => Text(
+                v.toStringAsFixed(1),
+                style: TextStyle(fontSize: 9, color: Theme.of(context).textTheme.bodySmall?.color),
+              ),
+            ),
+          ),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(
+          show: true,
+          border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.3)),
+        ),
+        lineTouchData: const LineTouchData(enabled: false),
+        lineBarsData: [
+          ...histogramBars,
+          // DIF 線
+          LineChartBarData(
+            spots: difSpots,
+            isCurved: true,
+            color: Colors.blue,
+            barWidth: 1.5,
+            dotData: const FlDotData(show: false),
+          ),
+          // DEA 線
+          LineChartBarData(
+            spots: deaSpots,
+            isCurved: true,
+            color: Colors.orange,
+            barWidth: 1.5,
+            dotData: const FlDotData(show: false),
+          ),
+        ],
+      )),
+    );
+  }
+
+  Widget _buildRSISubChart(BuildContext context, List<StockHistory> visibleData, int startIndex) {
+    final rsiData = _computeRSIValues(widget.data);
+    if (rsiData.isEmpty) return _buildNoDataHint('RSI');
+
+    final List<FlSpot> rsiSpots = [];
+    for (int i = 0; i < visibleData.length; i++) {
+      final idx = startIndex + i;
+      if (idx < rsiData.length) {
+        rsiSpots.add(FlSpot(i.toDouble(), rsiData[idx]));
+      }
+    }
+
+    if (rsiSpots.isEmpty) return _buildNoDataHint('RSI');
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 16, left: 8, top: 4, bottom: 4),
+      child: LineChart(LineChartData(
+        minX: 0,
+        maxX: (visibleData.length - 1).toDouble(),
+        minY: 0,
+        maxY: 100,
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: 10,
+          getDrawingHorizontalLine: (value) {
+            if (value == 70) {
+              return FlLine(color: Colors.red.withOpacity(0.5), strokeWidth: 1, dashArray: [4, 4]);
+            }
+            if (value == 30) {
+              return FlLine(color: Colors.green.withOpacity(0.5), strokeWidth: 1, dashArray: [4, 4]);
+            }
+            if (value == 50) {
+              return FlLine(color: Colors.grey.withOpacity(0.3), strokeWidth: 0.5, dashArray: [3, 3]);
+            }
+            return FlLine(color: Theme.of(context).dividerColor.withOpacity(0.15), strokeWidth: 0.5);
+          },
+        ),
+        titlesData: FlTitlesData(
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 30,
+              getTitlesWidget: (v, _) {
+                if (v == 0 || v == 30 || v == 50 || v == 70 || v == 100) {
+                  return Text(
+                    v.toInt().toString(),
+                    style: TextStyle(fontSize: 9, color: Theme.of(context).textTheme.bodySmall?.color),
+                  );
+                }
+                return const SizedBox();
+              },
+            ),
+          ),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(
+          show: true,
+          border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.3)),
+        ),
+        lineTouchData: const LineTouchData(enabled: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: rsiSpots,
+            isCurved: true,
+            color: Colors.purple,
+            barWidth: 1.5,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(show: true, color: Colors.purple.withOpacity(0.05)),
+          ),
+        ],
+      )),
+    );
+  }
+
+  Widget _buildKDSubChart(BuildContext context, List<StockHistory> visibleData, int startIndex) {
+    final kdData = _computeKDValues(widget.data);
+    if (kdData.isEmpty) return _buildNoDataHint('KD');
+
+    final List<FlSpot> kSpots = [], dSpots = [];
+    for (int i = 0; i < visibleData.length; i++) {
+      final idx = startIndex + i;
+      if (idx < kdData.length) {
+        kSpots.add(FlSpot(i.toDouble(), kdData[idx].$1));
+        dSpots.add(FlSpot(i.toDouble(), kdData[idx].$2));
+      }
+    }
+
+    if (kSpots.isEmpty) return _buildNoDataHint('KD');
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 16, left: 8, top: 4, bottom: 4),
+      child: LineChart(LineChartData(
+        minX: 0,
+        maxX: (visibleData.length - 1).toDouble(),
+        minY: 0,
+        maxY: 100,
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: 20,
+          getDrawingHorizontalLine: (value) {
+            if (value == 80) {
+              return FlLine(color: Colors.red.withOpacity(0.5), strokeWidth: 1, dashArray: [4, 4]);
+            }
+            if (value == 20) {
+              return FlLine(color: Colors.green.withOpacity(0.5), strokeWidth: 1, dashArray: [4, 4]);
+            }
+            if (value == 50) {
+              return FlLine(color: Colors.grey.withOpacity(0.3), strokeWidth: 0.5, dashArray: [3, 3]);
+            }
+            return FlLine(color: Theme.of(context).dividerColor.withOpacity(0.15), strokeWidth: 0.5);
+          },
+        ),
+        titlesData: FlTitlesData(
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 30,
+              getTitlesWidget: (v, _) {
+                if (v == 0 || v == 20 || v == 50 || v == 80 || v == 100) {
+                  return Text(
+                    v.toInt().toString(),
+                    style: TextStyle(fontSize: 9, color: Theme.of(context).textTheme.bodySmall?.color),
+                  );
+                }
+                return const SizedBox();
+              },
+            ),
+          ),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(
+          show: true,
+          border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.3)),
+        ),
+        lineTouchData: const LineTouchData(enabled: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: kSpots,
+            isCurved: true,
+            color: Colors.blue.shade700,
+            barWidth: 1.5,
+            dotData: const FlDotData(show: false),
+          ),
+          LineChartBarData(
+            spots: dSpots,
+            isCurved: true,
+            color: Colors.orange.shade700,
+            barWidth: 1.5,
+            dotData: const FlDotData(show: false),
+          ),
+        ],
+      )),
+    );
+  }
+
+  // ==================== 指標計算 ====================
+
+  List<double> _computeEMA(List<double> data, int period) {
+    if (data.isEmpty) return [];
+    if (data.length < period) {
+      List<double> result = [];
+      double sum = 0;
+      for (int i = 0; i < data.length; i++) {
+        sum += data[i];
+        result.add(sum / (i + 1));
+      }
+      return result;
+    }
+
+    List<double> result = List.filled(data.length, 0);
+    double sum = 0;
+    for (int i = 0; i < period; i++) {
+      sum += data[i];
+      result[i] = sum / (i + 1);
+    }
+    result[period - 1] = sum / period;
+
+    double k = 2.0 / (period + 1);
+    for (int i = period; i < data.length; i++) {
+      result[i] = data[i] * k + result[i - 1] * (1 - k);
+    }
+    return result;
+  }
+
+  List<_MACDValue> _computeMACDValues(List<StockHistory> data) {
+    if (data.length < 2) return [];
+
+    final closes = data.map((d) => d.close).toList();
+    final ema12 = _computeEMA(closes, 12);
+    final ema26 = _computeEMA(closes, 26);
+
+    List<double> dif = [];
+    for (int i = 0; i < closes.length; i++) {
+      dif.add(ema12[i] - ema26[i]);
+    }
+
+    final dea = _computeEMA(dif, 9);
+
+    return List.generate(closes.length, (i) => _MACDValue(
+      dif: dif[i],
+      dea: dea[i],
+      histogram: dif[i] - dea[i],
+    ));
+  }
+
+  List<double> _computeRSIValues(List<StockHistory> data, {int period = 14}) {
+    if (data.length < period + 1) return List.filled(data.length, 50);
+
+    List<double> result = List.filled(data.length, 50);
+
+    List<double> gains = [];
+    List<double> losses = [];
+    for (int i = 1; i < data.length; i++) {
+      double change = data[i].close - data[i - 1].close;
+      gains.add(change > 0 ? change : 0);
+      losses.add(change < 0 ? -change : 0);
+    }
+
+    double avgGain = 0, avgLoss = 0;
+    for (int i = 0; i < period; i++) {
+      avgGain += gains[i];
+      avgLoss += losses[i];
+    }
+    avgGain /= period;
+    avgLoss /= period;
+
+    result[period] = avgLoss == 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+
+    for (int i = period; i < gains.length; i++) {
+      avgGain = (avgGain * (period - 1) + gains[i]) / period;
+      avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
+      result[i + 1] = avgLoss == 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    }
+    return result;
+  }
+
+  /// 回傳 (K值, D值) 的列表
+  List<(double, double)> _computeKDValues(List<StockHistory> data, {int period = 9}) {
+    if (data.length < period) {
+      return List.filled(data.length, (50.0, 50.0));
+    }
+
+    List<(double, double)> result = [];
+    double prevK = 50, prevD = 50;
+
+    for (int i = 0; i < data.length; i++) {
+      if (i < period - 1) {
+        result.add((50.0, 50.0));
+        continue;
+      }
+
+      double highestHigh = data[i].high;
+      double lowestLow = data[i].low;
+      for (int j = 1; j < period; j++) {
+        if (data[i - j].high > highestHigh) highestHigh = data[i - j].high;
+        if (data[i - j].low < lowestLow) lowestLow = data[i - j].low;
+      }
+
+      double rsv = (highestHigh == lowestLow)
+          ? 50
+          : (data[i].close - lowestLow) / (highestHigh - lowestLow) * 100;
+      double k = 2.0 / 3.0 * prevK + 1.0 / 3.0 * rsv;
+      double d = 2.0 / 3.0 * prevD + 1.0 / 3.0 * k;
+
+      result.add((k, d));
+      prevK = k;
+      prevD = d;
+    }
+    return result;
   }
 
   Widget _buildZoomControls(BuildContext context) {
