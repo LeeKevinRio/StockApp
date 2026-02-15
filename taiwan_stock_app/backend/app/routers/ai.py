@@ -19,6 +19,64 @@ prediction_tracker = PredictionTracker()
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 
+def _validate_prices(data: dict, current_price: float) -> dict:
+    """驗證並修正 AI 建議中偏離過大的價格欄位"""
+    if not current_price or current_price <= 0:
+        return data
+
+    max_dev = 0.20  # 短線最多偏離 20%
+
+    for key in ("target_price", "stop_loss_price", "entry_price_min", "entry_price_max"):
+        val = data.get(key)
+        if val is not None:
+            try:
+                val = float(val)
+                if val <= 0 or abs(val - current_price) / current_price > max_dev:
+                    pct = abs(float(data.get("predicted_change_percent", 3) or 3))
+                    if key == "target_price":
+                        data[key] = round(current_price * (1 + pct / 100), 2)
+                    elif key == "stop_loss_price":
+                        data[key] = round(current_price * (1 - pct / 100), 2)
+                    elif key == "entry_price_min":
+                        data[key] = round(current_price * 0.98, 2)
+                    elif key == "entry_price_max":
+                        data[key] = round(current_price * 1.02, 2)
+            except (TypeError, ValueError):
+                pass
+
+    # 修正 take_profit_targets
+    tpt = data.get("take_profit_targets")
+    if isinstance(tpt, list):
+        for i, item in enumerate(tpt):
+            if isinstance(item, dict):
+                p = item.get("price")
+                if p is not None:
+                    try:
+                        p = float(p)
+                        if p <= 0 or abs(p - current_price) / current_price > max_dev:
+                            mult = 1.03 + i * 0.02
+                            item["price"] = round(current_price * mult, 2)
+                    except (TypeError, ValueError):
+                        pass
+
+    # 修正 next_day_prediction
+    ndp = data.get("next_day_prediction")
+    if isinstance(ndp, dict):
+        pct = float(ndp.get("predicted_change_percent", 0) or 0)
+        for pk in ("price_range_low", "price_range_high"):
+            pv = ndp.get(pk)
+            if pv is not None:
+                try:
+                    pv = float(pv)
+                    if pv <= 0 or abs(pv - current_price) / current_price > max_dev:
+                        offset = -0.015 if pk == "price_range_low" else 0.015
+                        ndp[pk] = round(current_price * (1 + pct / 100 + offset), 2)
+                except (TypeError, ValueError):
+                    pass
+
+    return data
+
+
 def _get_next_trading_date_str(market: str = "TW") -> str:
     """計算下一個交易日日期（含跳過國定假日，支援台股/美股）"""
     return get_next_trading_date(market=market).isoformat()
@@ -83,21 +141,24 @@ def get_ai_suggestions(
                 # Convert old format to new format
                 key_factors = [{"category": "分析", "factor": f, "impact": "neutral"} for f in key_factors]
 
-            results.append(
-                AISuggestion(
-                    stock_id=existing_report.stock_id,
-                    name=stock.name,
-                    suggestion=existing_report.suggestion,
-                    confidence=confidence,
-                    bullish_probability=bullish_prob,
-                    current_price=existing_report.current_price,
-                    target_price=existing_report.target_price,
-                    stop_loss_price=existing_report.stop_loss_price,
-                    reasoning=existing_report.reasoning,
-                    key_factors=key_factors,
-                    report_date=existing_report.report_date,
-                )
-            )
+            # 從 DB 讀取時也做價格合理性驗證
+            suggestion_dict = {
+                "stock_id": existing_report.stock_id,
+                "name": stock.name,
+                "suggestion": existing_report.suggestion,
+                "confidence": confidence,
+                "bullish_probability": bullish_prob,
+                "current_price": existing_report.current_price,
+                "target_price": existing_report.target_price,
+                "stop_loss_price": existing_report.stop_loss_price,
+                "reasoning": existing_report.reasoning,
+                "key_factors": key_factors,
+                "report_date": existing_report.report_date,
+            }
+            cp = float(existing_report.current_price or 0)
+            if cp > 0:
+                suggestion_dict = _validate_prices(suggestion_dict, cp)
+            results.append(AISuggestion(**suggestion_dict))
         elif generate_missing:
             # Only generate new suggestion if explicitly requested
             try:
@@ -212,26 +273,31 @@ def get_stock_suggestion(
             if next_pred and isinstance(next_pred, dict) and 'target_date' not in next_pred:
                 next_pred = {**next_pred, 'target_date': _get_next_trading_date_str(market)}
 
-            return AISuggestion(
-                stock_id=existing_report.stock_id,
-                name=stock_name,
-                suggestion=existing_report.suggestion,
-                confidence=confidence,
-                bullish_probability=bullish_prob,
-                current_price=existing_report.current_price,
-                target_price=existing_report.target_price,
-                stop_loss_price=existing_report.stop_loss_price,
-                reasoning=existing_report.reasoning,
-                key_factors=key_factors,
-                report_date=existing_report.report_date,
-                entry_price_min=existing_report.entry_price_min,
-                entry_price_max=existing_report.entry_price_max,
-                take_profit_targets=existing_report.take_profit_targets,
-                risk_level=existing_report.risk_level,
-                time_horizon=existing_report.time_horizon,
-                predicted_change_percent=existing_report.predicted_change_percent,
-                next_day_prediction=next_pred,
-            )
+            # 從 DB 讀取時也做價格合理性驗證
+            suggestion_dict = {
+                "stock_id": existing_report.stock_id,
+                "name": stock_name,
+                "suggestion": existing_report.suggestion,
+                "confidence": confidence,
+                "bullish_probability": bullish_prob,
+                "current_price": existing_report.current_price,
+                "target_price": existing_report.target_price,
+                "stop_loss_price": existing_report.stop_loss_price,
+                "reasoning": existing_report.reasoning,
+                "key_factors": key_factors,
+                "report_date": existing_report.report_date,
+                "entry_price_min": existing_report.entry_price_min,
+                "entry_price_max": existing_report.entry_price_max,
+                "take_profit_targets": existing_report.take_profit_targets,
+                "risk_level": existing_report.risk_level,
+                "time_horizon": existing_report.time_horizon,
+                "predicted_change_percent": existing_report.predicted_change_percent,
+                "next_day_prediction": next_pred,
+            }
+            cp = float(existing_report.current_price or 0)
+            if cp > 0:
+                suggestion_dict = _validate_prices(suggestion_dict, cp)
+            return AISuggestion(**suggestion_dict)
 
         # Generate new suggestion with market parameter
         # Create service instance based on user's subscription tier
