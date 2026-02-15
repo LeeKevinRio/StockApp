@@ -111,6 +111,46 @@ class _ChatBubbleState extends State<ChatBubble> {
                       ],
                     ),
             ),
+            // Thumbs up/down rating row for AI messages
+            if (!widget.isUser && !widget.isLoading)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.thumb_up_outlined, size: 16),
+                    onPressed: () {},
+                    constraints: const BoxConstraints(),
+                    padding: const EdgeInsets.all(4),
+                    color: Colors.grey,
+                    tooltip: '有幫助',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.thumb_down_outlined, size: 16),
+                    onPressed: () {},
+                    constraints: const BoxConstraints(),
+                    padding: const EdgeInsets.all(4),
+                    color: Colors.grey,
+                    tooltip: '沒幫助',
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.copy, size: 16),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: widget.message));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('已複製到剪貼簿'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                    constraints: const BoxConstraints(),
+                    padding: const EdgeInsets.all(4),
+                    color: Colors.grey,
+                    tooltip: '複製',
+                  ),
+                ],
+              ),
             // Timestamp and actions row
             if (!widget.isLoading)
               Padding(

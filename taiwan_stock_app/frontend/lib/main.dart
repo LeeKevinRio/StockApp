@@ -30,6 +30,7 @@ import 'screens/trading_diary_screen.dart';
 import 'screens/privacy_policy_screen.dart';
 import 'screens/terms_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/onboarding_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -111,6 +112,7 @@ class MyApp extends StatelessWidget {
               '/privacy': (context) => const PrivacyPolicyScreen(),
               '/terms': (context) => const TermsScreen(),
               '/settings': (context) => const SettingsScreen(),
+              '/onboarding': (context) => const OnboardingScreen(),
             },
             onGenerateRoute: (settings) {
               if (settings.name == '/stock-detail') {
