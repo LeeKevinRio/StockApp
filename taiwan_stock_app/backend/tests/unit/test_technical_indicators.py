@@ -195,15 +195,16 @@ class TestKD:
         assert (valid_d <= 100).all()
 
     def test_kd_at_extremes(self):
-        """Test KD at price extremes"""
-        # Price at highest point
-        high = pd.Series([100, 100, 100, 100, 100, 100, 100, 100, 100, 100])
-        low = pd.Series([90, 90, 90, 90, 90, 90, 90, 90, 90, 90])
-        close = pd.Series([90, 90, 90, 90, 90, 90, 90, 90, 90, 100])  # Close at high
+        """Test KD at price extremes — 連續收在最高價，K 應趨近 100"""
+        # 給足夠多期讓 K 值收斂到高位
+        n = 20
+        high = pd.Series([100] * n)
+        low = pd.Series([90] * n)
+        close = pd.Series([100] * n)  # 所有收盤都在最高價
 
         result = TechnicalIndicators.calculate_kd(high, low, close, period=9)
 
-        # K should be very high when close is at the high
+        # K should be very high when close is consistently at the high
         assert result["k"].iloc[-1] > 90
 
 

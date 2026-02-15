@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.database import Base, get_db
 from app.models import User, Stock
-from app.services import get_password_hash
+from app.routers.auth import hash_password
 
 # Use SQLite for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
@@ -52,8 +52,7 @@ def test_user(db: Session) -> User:
     """Create a test user"""
     user = User(
         email="test@example.com",
-        hashed_password=get_password_hash("testpassword123"),
-        is_active=True,
+        password_hash=hash_password("testpassword123"),
     )
     db.add(user)
     db.commit()
