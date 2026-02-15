@@ -48,8 +48,8 @@ class _TradingDiaryScreenState extends State<TradingDiaryScreen>
 
       if (mounted) {
         setState(() {
-          final diaryData = results[0] as Map<String, dynamic>;
-          _entries = (diaryData['entries'] as List?)
+          final diaryData = results[0];
+          _entries = ((diaryData as Map<String, dynamic>)['entries'] as List?)
                   ?.cast<Map<String, dynamic>>() ??
               [];
           _stats = results[1] as Map<String, dynamic>;

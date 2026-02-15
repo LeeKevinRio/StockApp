@@ -99,7 +99,7 @@ class AIProvider with ChangeNotifier {
   Future<void> loadChatHistory({String? stockId}) async {
     try {
       final history = await _apiService.getChatHistory(limit: 50);
-      _messages = (history as List).map((msg) => ChatMessage(
+      _messages = history.map((msg) => ChatMessage(
         role: msg['role'] ?? 'user',
         content: msg['content'] ?? '',
         timestamp: msg['created_at'] != null
