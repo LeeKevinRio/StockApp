@@ -41,7 +41,7 @@ class PredictionTracker:
             ai_provider: AI 提供者 (Gemini/Groq/Mock)
         """
         today = date.today()
-        tomorrow = get_next_trading_date(today)
+        tomorrow = get_next_trading_date(today, market=market)
 
         # 檢查是否已存在今日預測
         existing = db.query(PredictionRecord).filter(

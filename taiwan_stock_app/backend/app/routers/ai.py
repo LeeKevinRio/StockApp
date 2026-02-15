@@ -19,17 +19,17 @@ prediction_tracker = PredictionTracker()
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 
-def _get_next_trading_date_str() -> str:
-    """計算下一個交易日日期（含跳過國定假日）"""
-    return get_next_trading_date().isoformat()
+def _get_next_trading_date_str(market: str = "TW") -> str:
+    """計算下一個交易日日期（含跳過國定假日，支援台股/美股）"""
+    return get_next_trading_date(market=market).isoformat()
 
 
-def _inject_target_date(suggestion_obj):
+def _inject_target_date(suggestion_obj, market: str = "TW"):
     """在 next_day_prediction 中注入 target_date"""
     if hasattr(suggestion_obj, 'next_day_prediction') and suggestion_obj.next_day_prediction:
         pred = suggestion_obj.next_day_prediction
         if isinstance(pred, dict) and 'target_date' not in pred:
-            pred['target_date'] = _get_next_trading_date_str()
+            pred['target_date'] = _get_next_trading_date_str(market)
     return suggestion_obj
 stock_service = StockDataService()
 
@@ -210,7 +210,7 @@ def get_stock_suggestion(
             # 注入 target_date 到 next_day_prediction
             next_pred = existing_report.next_day_prediction
             if next_pred and isinstance(next_pred, dict) and 'target_date' not in next_pred:
-                next_pred = {**next_pred, 'target_date': _get_next_trading_date_str()}
+                next_pred = {**next_pred, 'target_date': _get_next_trading_date_str(market)}
 
             return AISuggestion(
                 stock_id=existing_report.stock_id,
@@ -305,7 +305,7 @@ def get_stock_suggestion(
         # 注入 target_date 到 next_day_prediction
         next_pred = suggestion_data.get("next_day_prediction")
         if next_pred and isinstance(next_pred, dict) and 'target_date' not in next_pred:
-            next_pred['target_date'] = _get_next_trading_date_str()
+            next_pred['target_date'] = _get_next_trading_date_str(market)
 
         return AISuggestion(**suggestion_data)
     except HTTPException:

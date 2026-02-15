@@ -1,8 +1,9 @@
 """
-台灣股市交易日曆工具
+股市交易日曆工具（支援台股 TW 與美股 US）
 
-提供台股休市日判斷、下一個/上一個交易日計算功能。
-休市日清單來源：台灣證券交易所公告。
+提供台股/美股休市日判斷、下一個/上一個交易日計算功能。
+- 台股休市日來源：台灣證券交易所公告
+- 美股休市日來源：NYSE/NASDAQ 固定假日
 """
 from datetime import date, timedelta
 from typing import Set
@@ -70,25 +71,84 @@ TAIWAN_HOLIDAYS: Set[date] = {
 }
 
 
-def is_trading_day(d: date) -> bool:
-    """
-    判斷指定日期是否為台股交易日。
+# ============================================================
+# 美國股市休市日（2025-2027）
+# 來源：NYSE/NASDAQ 官方假日行事曆
+# 固定假日：New Year's, MLK Day, Presidents' Day, Good Friday,
+#           Memorial Day, Juneteenth, Independence Day, Labor Day,
+#           Thanksgiving, Christmas
+# ============================================================
 
-    非交易日包含：週六、週日、國定假日。
+US_HOLIDAYS: Set[date] = {
+    # ========== 2025 年 ==========
+    date(2025, 1, 1),   # New Year's Day
+    date(2025, 1, 20),  # Martin Luther King Jr. Day
+    date(2025, 2, 17),  # Presidents' Day
+    date(2025, 4, 18),  # Good Friday
+    date(2025, 5, 26),  # Memorial Day
+    date(2025, 6, 19),  # Juneteenth
+    date(2025, 7, 4),   # Independence Day
+    date(2025, 9, 1),   # Labor Day
+    date(2025, 11, 27), # Thanksgiving Day
+    date(2025, 12, 25), # Christmas Day
+
+    # ========== 2026 年 ==========
+    date(2026, 1, 1),   # New Year's Day
+    date(2026, 1, 19),  # Martin Luther King Jr. Day
+    date(2026, 2, 16),  # Presidents' Day
+    date(2026, 4, 3),   # Good Friday
+    date(2026, 5, 25),  # Memorial Day
+    date(2026, 6, 19),  # Juneteenth
+    date(2026, 7, 3),   # Independence Day (observed, 7/4 is Saturday)
+    date(2026, 9, 7),   # Labor Day
+    date(2026, 11, 26), # Thanksgiving Day
+    date(2026, 12, 25), # Christmas Day
+
+    # ========== 2027 年 ==========
+    date(2027, 1, 1),   # New Year's Day
+    date(2027, 1, 18),  # Martin Luther King Jr. Day
+    date(2027, 2, 15),  # Presidents' Day
+    date(2027, 3, 26),  # Good Friday
+    date(2027, 5, 31),  # Memorial Day
+    date(2027, 6, 18),  # Juneteenth (observed, 6/19 is Saturday)
+    date(2027, 7, 5),   # Independence Day (observed, 7/4 is Sunday)
+    date(2027, 9, 6),   # Labor Day
+    date(2027, 11, 25), # Thanksgiving Day
+    date(2027, 12, 24), # Christmas Day (observed, 12/25 is Saturday)
+}
+
+
+def _get_holidays(market: str = "TW") -> Set[date]:
+    """取得指定市場的休市日集合"""
+    if market == "US":
+        return US_HOLIDAYS
+    return TAIWAN_HOLIDAYS
+
+
+def is_trading_day(d: date, market: str = "TW") -> bool:
+    """
+    判斷指定日期是否為交易日。
+
+    Args:
+        d: 要判斷的日期
+        market: 市場 "TW"(台股) 或 "US"(美股)
+
+    非交易日包含：週六、週日、該市場國定假日。
     """
     if d.weekday() >= 5:  # 週六(5) 或 週日(6)
         return False
-    if d in TAIWAN_HOLIDAYS:
+    if d in _get_holidays(market):
         return False
     return True
 
 
-def get_next_trading_date(from_date: date = None) -> date:
+def get_next_trading_date(from_date: date = None, market: str = "TW") -> date:
     """
     取得下一個交易日（不含 from_date 當天）。
 
     Args:
         from_date: 起算日期，預設為今天。
+        market: 市場 "TW"(台股) 或 "US"(美股)
 
     Returns:
         下一個交易日的 date 物件。
@@ -97,17 +157,18 @@ def get_next_trading_date(from_date: date = None) -> date:
         from_date = date.today()
 
     d = from_date + timedelta(days=1)
-    while not is_trading_day(d):
+    while not is_trading_day(d, market):
         d += timedelta(days=1)
     return d
 
 
-def get_previous_trading_date(from_date: date = None) -> date:
+def get_previous_trading_date(from_date: date = None, market: str = "TW") -> date:
     """
     取得上一個交易日（不含 from_date 當天）。
 
     Args:
         from_date: 起算日期，預設為今天。
+        market: 市場 "TW"(台股) 或 "US"(美股)
 
     Returns:
         上一個交易日的 date 物件。
@@ -116,6 +177,6 @@ def get_previous_trading_date(from_date: date = None) -> date:
         from_date = date.today()
 
     d = from_date - timedelta(days=1)
-    while not is_trading_day(d):
+    while not is_trading_day(d, market):
         d -= timedelta(days=1)
     return d

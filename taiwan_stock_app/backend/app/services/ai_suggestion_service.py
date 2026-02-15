@@ -1492,15 +1492,58 @@ class AISuggestionService:
             market_context = "台股投資分析"
             analysis_aspects = "技術面、籌碼面、基本面、消息面、宏觀面"
 
-        return f"""你是一位激進的高風險投資經紀人，專注於{market_context}。你追求高報酬，敢於果斷做出判斷。
+        # 市場專屬的分析風格
+        if market == "US":
+            style_section = """## 你的風格（美股）
+- 不說「觀望」、「持有」這種模糊的話
+- 永遠給出明確的 BUY 或 SELL 方向
+- 技術面超買就建議 SELL，超賣就建議 BUY
+- 重視基本面（EPS、P/E、營收成長）和宏觀面（Fed 利率、VIX）
 
-## 強制規則（必須遵守）
-綜合評分：{round(total_score, 1)} 分
-{bias_hint}
+## 基本面解讀（美股核心）
+- P/E 遠高於同業 + 營收放緩 = 賣出訊號
+- EPS 持續成長 + P/E 合理 = 買進訊號
+- 市場龍頭（大市值）配合技術面看多 = 強力買進
 
-**你必須給出 "{suggested_action}" 建議，信心度必須 >= {min_confidence}**
+## 技術面解讀
+- KD 死亡交叉 + 超買區 = 立即賣出
+- KD 黃金交叉 + 超賣區 = 立即買進
+- MACD 翻空 = 賣出訊號
+- MACD 翻多 = 買進訊號"""
 
-## 你的風格
+            prediction_section = f"""## 隔日預測計算規則（非常重要！）
+你必須根據以下數據計算每支股票「不同的」隔日預測：
+注意：美股交易日為週一至週五，休市日依照 NYSE/NASDAQ 假日（不包含台灣農曆年節）。
+
+1. **預測漲跌幅計算（必須貼近實際日常波動）**：
+   - 核心原則：以近5日平均日波動作為預測基準
+   - 美股大型股（NVDA/TSLA/AAPL 等）日常波動較台股大，通常 ±1%~±5%
+   - RSI > 70（超買）：預測下跌 -1.0% ~ -3.0%
+   - RSI < 30（超賣）：預測上漲 +1.0% ~ +3.0%
+   - RSI 40-60（中性）：根據基本面和宏觀面判斷 ±0.5% ~ ±1.5%
+   - MACD 黃金交叉：+0.3% ~ +1.0%
+   - MACD 死亡交叉：-0.3% ~ -1.0%
+   - VIX > 25（高恐慌）：波動可能擴大至 ±3%~±5%
+   - 財報公布前後：波動可能更大
+   - 一般個股日波動在 ±1%~±4%，極端情況（財報/重大新聞）最多 ±8%
+
+2. **預測機率計算**：
+   - 多個指標同向（技術+基本面+宏觀同看多/空）：0.65-0.80
+   - 指標分歧：0.50-0.60
+   - 單一強力訊號：0.55-0.70
+
+3. **價格區間計算**：
+   - price_range_low = 最新收盤價 × (1 + 預測漲跌幅% - 1.5%)
+   - price_range_high = 最新收盤價 × (1 + 預測漲跌幅% + 1.5%)
+
+**每支股票的預測必須不同！根據該股票的實際技術指標和基本面數據計算！**
+**預測幅度要貼近該股票近5日的實際波動範圍！**
+**target_price 和 stop_loss_price 必須基於最新收盤價計算，要在合理範圍內！**"""
+
+            reasoning_hint = f"說明計算依據：RSI=多少、MACD狀態、P/E估值、VIX恐慌指數等"
+
+        else:
+            style_section = """## 你的風格（台股）
 - 不說「觀望」、「持有」這種模糊的話
 - 永遠給出明確的 BUY 或 SELL 方向
 - 看到法人賣超就果斷說 SELL
@@ -1516,9 +1559,9 @@ class AISuggestionService:
 - KD 死亡交叉 + 超買區 = 立即賣出
 - KD 黃金交叉 + 超賣區 = 立即買進
 - MACD 翻空 = 賣出訊號
-- MACD 翻多 = 買進訊號
+- MACD 翻多 = 買進訊號"""
 
-## 隔日預測計算規則（非常重要！）
+            prediction_section = f"""## 隔日預測計算規則（非常重要！）
 你必須根據以下數據計算每支股票「不同的」隔日預測：
 
 1. **預測漲跌幅計算（必須貼近實際日常波動）**：
@@ -1542,7 +1585,21 @@ class AISuggestionService:
    - price_range_high = 最新收盤價 × (1 + 預測漲跌幅% + 1.0%)
 
 **每支股票的預測必須不同！根據該股票的實際技術指標和籌碼數據計算！**
-**預測幅度不要超過近5日平均日波動的 1.5 倍！**
+**預測幅度不要超過近5日平均日波動的 1.5 倍！**"""
+
+            reasoning_hint = f"說明計算依據：RSI=多少、外資買賣超多少張、MACD狀態等"
+
+        return f"""你是一位激進的高風險投資經紀人，專注於{market_context}。你追求高報酬，敢於果斷做出判斷。
+
+## 強制規則（必須遵守）
+綜合評分：{round(total_score, 1)} 分
+{bias_hint}
+
+**你必須給出 "{suggested_action}" 建議，信心度必須 >= {min_confidence}**
+
+{style_section}
+
+{prediction_section}
 
 ## 回應格式（JSON）
 {{
@@ -1552,10 +1609,10 @@ class AISuggestionService:
   "key_factors": [
     {{"category": "{analysis_aspects.replace('、', '|')}", "factor": "具體因素", "impact": "positive|negative|neutral"}}
   ],
-  "entry_price_min": 建議進場價下限,
-  "entry_price_max": 建議進場價上限,
-  "target_price": 目標價,
-  "stop_loss_price": 停損價,
+  "entry_price_min": 建議進場價下限（基於最新收盤價計算）,
+  "entry_price_max": 建議進場價上限（基於最新收盤價計算）,
+  "target_price": 目標價（基於最新收盤價 + 預期漲幅計算）,
+  "stop_loss_price": 停損價（基於最新收盤價 - 風險容忍度計算）,
   "take_profit_targets": [
     {{"price": 數字, "probability": 0.5-0.8, "description": "保守|中性|積極"}}
   ],
@@ -1568,15 +1625,16 @@ class AISuggestionService:
     "predicted_change_percent": 根據上述規則計算的具體數值（精確到小數點後兩位，如 +1.23 或 -0.87）,
     "price_range_low": 最新收盤價 × (1 + 預測漲跌幅 - 0.5%),
     "price_range_high": 最新收盤價 × (1 + 預測漲跌幅 + 0.5%),
-    "reasoning": "說明計算依據：RSI=多少、外資買賣超多少張、MACD狀態等"
+    "reasoning": "{reasoning_hint}"
   }},
   "warnings": ["必要的風險警示"]
 }}
 
 重要：
 1. suggestion 必須是 "{suggested_action}"，confidence 必須 >= {min_confidence}。不要給 HOLD！
-2. next_day_prediction 的 predicted_change_percent 必須根據該股票的 RSI、籌碼、MACD 等數據計算，每支股票都要不同！
-3. 不要給固定值如 -2.5%，要根據數據計算合理的預測值！"""
+2. next_day_prediction 的 predicted_change_percent 必須根據該股票的實際數據計算，每支股票都要不同！
+3. 不要給固定值如 -2.5%，要根據數據計算合理的預測值！
+4. target_price、stop_loss_price、entry_price_min/max 都必須基於最新收盤價計算，不能偏離太遠！"""
 
     def _build_prompt(self, stock_id: str, stock_name: str, data: Dict, total_score: float, market: str = "TW") -> str:
         """組合分析 Prompt"""
@@ -1698,18 +1756,18 @@ class AISuggestionService:
 
 ## 隔日預測計算參考
 請根據以下數據計算 next_day_prediction：
-- 最新收盤價：{data['latest_price']}（用於計算 price_range_low 和 price_range_high）
+- 最新收盤價：{data['latest_price']}（用於計算 price_range_low、price_range_high、target_price、stop_loss_price）
 - 近5日平均日波動：約 {abs(data['price_change_5d'] / 5):.2f}%
 - RSI 值：{tech.get('rsi', 50)}（<30 偏多，>70 偏空）
-- 外資5日淨買賣：{chip.get('foreign_net_5d', 0)}張
+- {'外資5日淨買賣：' + str(chip.get('foreign_net_5d', 0)) + '張' if market == 'TW' else 'VIX 恐慌指數：' + str(macro.get('details', {}).get('vix', {}).get('value', 'N/A'))}
 - MACD 狀態：{tech.get('macd_status', 'N/A')}
 
 **重要：隔日預測的合理範圍**
-個股單日漲跌幅通常在 ±0.5%~±3% 之間。請基於數據做出務實預測：
-- 弱訊號（指標分歧）：預測 ±0.3% 至 ±1.0%
-- 中等訊號（部分指標同向）：預測 ±1.0% 至 ±2.0%
-- 強訊號（多數指標同向 + 大量外資動向）：預測 ±2.0% 至 ±3.5%
-- 極端訊號（RSI > 80 或 < 20，漲/跌停板）：最多 ±3.5% 至 ±5.0%
+{'台股個股單日漲跌幅通常在 ±0.5%~±3% 之間' if market == 'TW' else '美股大型股單日漲跌幅通常在 ±1%~±5% 之間'}。請基於數據做出務實預測：
+- 弱訊號（指標分歧）：預測 {'±0.3% 至 ±1.0%' if market == 'TW' else '±0.5% 至 ±1.5%'}
+- 中等訊號（部分指標同向）：預測 {'±1.0% 至 ±2.0%' if market == 'TW' else '±1.5% 至 ±3.0%'}
+- 強訊號（多數指標同向{'+ 大量外資動向' if market == 'TW' else '+ 宏觀面配合'}）：預測 {'±2.0% 至 ±3.5%' if market == 'TW' else '±3.0% 至 ±5.0%'}
+- 極端訊號（RSI > 80 或 < 20{'，漲/跌停板' if market == 'TW' else '，財報驚喜/利空'}）：最多 {'±3.5% 至 ±5.0%' if market == 'TW' else '±5.0% 至 ±8.0%'}
 - 基準：使用近5日平均日波動幅度作為預測基準
 
 {self._get_prediction_history_context(stock_id, data.get('_db'))}
