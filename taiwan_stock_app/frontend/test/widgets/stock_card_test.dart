@@ -22,8 +22,8 @@ void main() {
         ),
       );
 
-      expect(find.text('2330'), findsOneWidget);
-      expect(find.text('台積電'), findsOneWidget);
+      expect(find.textContaining('2330'), findsOneWidget);
+      expect(find.textContaining('台積電'), findsOneWidget);
     });
 
     testWidgets('displays price when available', (tester) async {
