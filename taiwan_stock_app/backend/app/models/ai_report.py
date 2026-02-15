@@ -16,6 +16,7 @@ class AIReport(Base):
     report_date = Column(Date, nullable=False, index=True)
     suggestion = Column(String(10), nullable=False)  # 'BUY', 'SELL', 'HOLD'
     confidence = Column(Numeric(3, 2))  # 0.00 ~ 1.00
+    current_price = Column(Numeric(10, 2))  # 最新收盤價
     target_price = Column(Numeric(10, 2))
     stop_loss_price = Column(Numeric(10, 2))
     reasoning = Column(Text, nullable=False)

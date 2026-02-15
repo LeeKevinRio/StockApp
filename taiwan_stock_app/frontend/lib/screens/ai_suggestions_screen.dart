@@ -330,11 +330,24 @@ class SuggestionCard extends StatelessWidget {
               const SizedBox(height: 12),
               _buildNextDayPrediction(suggestion.nextDayPrediction!, currencySymbol, isTaiwan),
             ],
-            if (suggestion.targetPrice != null ||
+            if (suggestion.currentPrice != null ||
+                suggestion.targetPrice != null ||
                 suggestion.stopLossPrice != null) ...[
               const SizedBox(height: 12),
               Row(
                 children: [
+                  if (suggestion.currentPrice != null)
+                    Expanded(
+                      child: _buildPriceInfo(
+                        isTaiwan ? '現價' : 'Current',
+                        suggestion.currentPrice!,
+                        Colors.blueGrey,
+                        currencySymbol,
+                      ),
+                    ),
+                  if (suggestion.currentPrice != null &&
+                      (suggestion.targetPrice != null || suggestion.stopLossPrice != null))
+                    const SizedBox(width: 8),
                   if (suggestion.targetPrice != null)
                     Expanded(
                       child: _buildPriceInfo(
@@ -346,7 +359,7 @@ class SuggestionCard extends StatelessWidget {
                     ),
                   if (suggestion.targetPrice != null &&
                       suggestion.stopLossPrice != null)
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 8),
                   if (suggestion.stopLossPrice != null)
                     Expanded(
                       child: _buildPriceInfo(

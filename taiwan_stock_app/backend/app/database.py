@@ -65,6 +65,7 @@ def _run_migrations():
         if 'ai_reports' in table_names:
             columns = [c['name'] for c in inspector.get_columns('ai_reports')]
             new_columns = {
+                'current_price': 'NUMERIC(10, 2)',
                 'entry_price_min': 'NUMERIC(10, 2)',
                 'entry_price_max': 'NUMERIC(10, 2)',
                 'take_profit_targets': 'TEXT',

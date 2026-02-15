@@ -1202,6 +1202,7 @@ class AISuggestionService:
             "suggestion": suggestion,
             "confidence": confidence,
             "bullish_probability": confidence if suggestion == "BUY" else (1 - confidence),
+            "current_price": mock_price,
             "target_price": round(mock_price * 1.1, 2) if suggestion == "BUY" else round(mock_price * 0.9, 2),
             "stop_loss_price": round(mock_price * 0.95, 2) if suggestion == "BUY" else round(mock_price * 1.05, 2),
             "reasoning": f"[測試模式] 由於 Gemini API 配額已用完，此為模擬建議。股票代碼：{stock_id}",
@@ -1319,6 +1320,7 @@ class AISuggestionService:
             result["market_region"] = market
             result["currency"] = "USD" if market == "US" else "TWD"
             result["report_date"] = date.today().isoformat()
+            result["current_price"] = data.get("latest_price", 0) or 0
 
             # 強制覆蓋 AI 的建議和信心度（高風險經紀人模式）
             # 根據綜合評分強制設定

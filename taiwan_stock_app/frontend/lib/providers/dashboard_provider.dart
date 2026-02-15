@@ -285,7 +285,7 @@ class DashboardProvider with ChangeNotifier {
         confidence: s.confidence,
         shortReason: _generateShortReason(s),
         targetPrice: s.targetPrice,
-        currentPrice: null,
+        currentPrice: s.currentPrice,
         market: _currentMarket,
       )).toList();
     } catch (e) {

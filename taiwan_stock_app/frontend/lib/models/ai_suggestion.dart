@@ -76,6 +76,7 @@ class AISuggestion {
   final String suggestion; // 'BUY', 'SELL', 'HOLD'
   final double confidence;
   final double? bullishProbability; // 看漲機率 (更直覺的指標)
+  final double? currentPrice; // 最新收盤價
   final double? targetPrice;
   final double? stopLossPrice;
   final String reasoning;
@@ -99,6 +100,7 @@ class AISuggestion {
     required this.suggestion,
     required this.confidence,
     this.bullishProbability,
+    this.currentPrice,
     this.targetPrice,
     this.stopLossPrice,
     required this.reasoning,
@@ -121,6 +123,9 @@ class AISuggestion {
       confidence: (json['confidence'] as num).toDouble(),
       bullishProbability: json['bullish_probability'] != null
           ? (json['bullish_probability'] as num).toDouble()
+          : null,
+      currentPrice: json['current_price'] != null
+          ? (json['current_price'] as num).toDouble()
           : null,
       targetPrice: json['target_price'] != null
           ? (json['target_price'] as num).toDouble()
