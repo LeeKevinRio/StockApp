@@ -43,6 +43,9 @@ class TaiwanSocialFetcher:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
     ]
 
     def __init__(self):
@@ -72,6 +75,30 @@ class TaiwanSocialFetcher:
         if elapsed < self.request_interval:
             time.sleep(self.request_interval - elapsed)
         self.last_request_time = time.time()
+
+    def _request_with_retry(self, url: str, max_retries: int = 3, **kwargs) -> Optional[requests.Response]:
+        """HTTP 請求 + 重試機制（指數退避）"""
+        for attempt in range(max_retries):
+            try:
+                self._rate_limit()
+                self._update_headers()
+                response = self.session.get(url, timeout=kwargs.get('timeout', 10), **{k: v for k, v in kwargs.items() if k != 'timeout'})
+                if response.status_code == 200:
+                    return response
+                if response.status_code == 403:
+                    print(f"  403 Forbidden (attempt {attempt+1}): {url}")
+                elif response.status_code == 429:
+                    print(f"  429 Rate limited (attempt {attempt+1}): {url}")
+                else:
+                    print(f"  HTTP {response.status_code} (attempt {attempt+1}): {url}")
+            except requests.exceptions.RequestException as e:
+                print(f"  Request error (attempt {attempt+1}): {e}")
+
+            if attempt < max_retries - 1:
+                wait = (2 ** attempt) + random.uniform(0.5, 1.5)
+                time.sleep(wait)
+
+        return None
 
     def _extract_stock_ids(self, text: str) -> List[str]:
         """Extract Taiwan stock IDs from text"""
@@ -122,10 +149,7 @@ class TaiwanSocialFetcher:
     # ============== PTT Fetcher ==============
 
     def fetch_ptt_board(self, board: str, pages: int = 2) -> List[Dict]:
-        """Fetch posts from a PTT board"""
-        self._rate_limit()
-        self._update_headers()
-
+        """Fetch posts from a PTT board (with retry)"""
         # PTT requires age verification cookie
         self.session.cookies.set("over18", "1", domain=".ptt.cc")
 
@@ -133,9 +157,9 @@ class TaiwanSocialFetcher:
         base_url = f"https://www.ptt.cc/bbs/{board}/index.html"
 
         try:
-            # Get the latest page
-            response = self.session.get(base_url, timeout=10)
-            if response.status_code != 200:
+            # Get the latest page with retry
+            response = self._request_with_retry(base_url, max_retries=3)
+            if response is None:
                 return []
 
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -210,10 +234,18 @@ class TaiwanSocialFetcher:
     # ============== Dcard Fetcher ==============
 
     def fetch_dcard_forum(self, forum: str = "stock", limit: int = 30) -> List[Dict]:
-        """Fetch posts from Dcard forum"""
-        self._rate_limit()
+        """Fetch posts from Dcard forum (API → Web scraping fallback)"""
+        # 嘗試 API
+        posts = self._fetch_dcard_api(forum, limit)
+        if posts:
+            return posts
 
-        # Dcard API endpoint
+        # API 失敗，改用 Web scraping fallback
+        print(f"Dcard API failed, trying web scraping fallback for {forum}")
+        return self._fetch_dcard_web(forum, limit)
+
+    def _fetch_dcard_api(self, forum: str, limit: int) -> List[Dict]:
+        """Dcard API 方式"""
         url = f"https://www.dcard.tw/service/api/v2/forums/{forum}/posts?limit={limit}"
 
         try:
@@ -223,54 +255,107 @@ class TaiwanSocialFetcher:
                 "Referer": f"https://www.dcard.tw/f/{forum}",
             }
 
-            response = requests.get(url, headers=headers, timeout=10)
-            if response.status_code != 200:
-                print(f"Dcard API error: {response.status_code}")
+            response = self._request_with_retry(url, max_retries=2, headers=headers)
+            if response is None:
                 return []
 
             data = response.json()
-            posts = []
-
-            for post in data:
-                title = post.get("title", "")
-                excerpt = post.get("excerpt", "")
-                full_text = f"{title} {excerpt}"
-
-                stock_ids = self._extract_stock_ids(full_text)
-                like_count = post.get("likeCount", 0)
-                comment_count = post.get("commentCount", 0)
-
-                sentiment_data = self._analyze_sentiment(full_text, like_count, 0)
-
-                created_at = post.get("createdAt", "")
-                posted_at = None
-                if created_at:
-                    try:
-                        posted_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                    except:
-                        pass
-
-                posts.append({
-                    "id": str(post.get("id", "")),
-                    "platform": "dcard",
-                    "board": f"Dcard-{forum}",
-                    "title": title,
-                    "content": excerpt[:500] if excerpt else "",
-                    "author": post.get("school", "匿名"),
-                    "url": f"https://www.dcard.tw/f/{forum}/p/{post.get('id', '')}",
-                    "mentioned_stocks": stock_ids,
-                    "sentiment": sentiment_data["sentiment"],
-                    "sentiment_score": sentiment_data["score"],
-                    "push_count": like_count,
-                    "boo_count": 0,
-                    "comment_count": comment_count,
-                    "posted_at": posted_at.isoformat() if posted_at else None,
-                })
-
+            return self._parse_dcard_posts(data, forum)
         except Exception as e:
-            print(f"Dcard fetch error: {e}")
+            print(f"Dcard API error: {e}")
             return []
 
+    def _fetch_dcard_web(self, forum: str, limit: int) -> List[Dict]:
+        """Dcard Web scraping fallback（當 API 403 時）"""
+        url = f"https://www.dcard.tw/f/{forum}"
+
+        try:
+            response = self._request_with_retry(url, max_retries=2)
+            if response is None:
+                return []
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+            posts = []
+
+            # 嘗試從 HTML 提取文章列表
+            articles = soup.find_all('article') or soup.find_all('div', {'data-key': True})
+            for article in articles[:limit]:
+                try:
+                    title_elem = article.find('h2') or article.find('a')
+                    if not title_elem:
+                        continue
+                    title = title_elem.get_text(strip=True)
+                    if not title:
+                        continue
+
+                    link = article.find('a', href=True)
+                    href = link.get('href', '') if link else ''
+
+                    stock_ids = self._extract_stock_ids(title)
+                    sentiment_data = self._analyze_sentiment(title)
+
+                    posts.append({
+                        "id": href.split('/')[-1] if href else '',
+                        "platform": "dcard",
+                        "board": f"Dcard-{forum}",
+                        "title": title,
+                        "content": "",
+                        "author": "匿名",
+                        "url": f"https://www.dcard.tw{href}" if href and not href.startswith('http') else href,
+                        "mentioned_stocks": stock_ids,
+                        "sentiment": sentiment_data["sentiment"],
+                        "sentiment_score": sentiment_data["score"],
+                        "push_count": 0,
+                        "boo_count": 0,
+                        "comment_count": 0,
+                        "posted_at": None,
+                    })
+                except Exception:
+                    continue
+
+            return posts
+        except Exception as e:
+            print(f"Dcard web scraping error: {e}")
+            return []
+
+    def _parse_dcard_posts(self, data: list, forum: str) -> List[Dict]:
+        """解析 Dcard API 回傳的文章列表"""
+        posts = []
+        for post in data:
+            title = post.get("title", "")
+            excerpt = post.get("excerpt", "")
+            full_text = f"{title} {excerpt}"
+
+            stock_ids = self._extract_stock_ids(full_text)
+            like_count = post.get("likeCount", 0)
+            comment_count = post.get("commentCount", 0)
+
+            sentiment_data = self._analyze_sentiment(full_text, like_count, 0)
+
+            created_at = post.get("createdAt", "")
+            posted_at = None
+            if created_at:
+                try:
+                    posted_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                except:
+                    pass
+
+            posts.append({
+                "id": str(post.get("id", "")),
+                "platform": "dcard",
+                "board": f"Dcard-{forum}",
+                "title": title,
+                "content": excerpt[:500] if excerpt else "",
+                "author": post.get("school", "匿名"),
+                "url": f"https://www.dcard.tw/f/{forum}/p/{post.get('id', '')}",
+                "mentioned_stocks": stock_ids,
+                "sentiment": sentiment_data["sentiment"],
+                "sentiment_score": sentiment_data["score"],
+                "push_count": like_count,
+                "boo_count": 0,
+                "comment_count": comment_count,
+                "posted_at": posted_at.isoformat() if posted_at else None,
+            })
         return posts
 
     # ============== Mobile01 Fetcher ==============
