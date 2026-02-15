@@ -114,7 +114,7 @@ class _ComprehensiveAnalysisViewState extends State<ComprehensiveAnalysisView> {
             _buildAISummaryCard(),
             const SizedBox(height: 16),
             ..._buildDimensionCards(),
-            const SizedBox(height: 32),
+            const SizedBox(height: 100), // 留給 FAB 按鈕的空間
           ],
         ),
       ),
@@ -357,12 +357,10 @@ class _ComprehensiveAnalysisViewState extends State<ComprehensiveAnalysisView> {
               children: [
                 _buildDetailRow('信號', _signalText(dim.signal)),
                 ...dim.details.entries
-                    .where((e) => e.value != null && e.value.toString().isNotEmpty)
+                    .where((e) => e.value != null && e.value.toString().isNotEmpty && e.value.toString() != 'N/A')
                     .map((e) => _buildDetailRow(
                         _detailLabel(e.key),
-                        e.value is List
-                            ? (e.value as List).join(', ')
-                            : e.value.toString())),
+                        _cleanDetailValue(e.value))),
               ],
             ),
           ),
@@ -465,8 +463,51 @@ class _ComprehensiveAnalysisViewState extends State<ComprehensiveAnalysisView> {
       'bullish': '偏多',
       'bearish': '偏空',
       'no_data': '無數據',
+      'strong_buy': '強力買進',
+      'buy': '買進',
+      'sell': '賣出',
+      'strong_sell': '強力賣出',
+      'N/A': '無數據',
     };
-    return map[signal] ?? signal;
+    // 先精確匹配
+    if (map.containsKey(signal)) return map[signal]!;
+    // 處理複合信號如 "very_positive_消息面利多"、"neutral_Neutral"
+    // 取底線分隔後的中文部分，或映射英文部分
+    for (final entry in map.entries) {
+      if (signal.startsWith(entry.key)) {
+        // 如果後面有中文說明，優先取中文
+        final rest = signal.substring(entry.key.length).replaceAll('_', ' ').trim();
+        if (rest.isNotEmpty && RegExp(r'[\u4e00-\u9fff]').hasMatch(rest)) {
+          return rest;
+        }
+        return entry.value;
+      }
+    }
+    // 最後兜底：把底線換成空格
+    return signal.replaceAll('_', ' ');
+  }
+
+  /// 清理詳細值（移除底線混合文字如 "above_upper_危險超買" → "危險超買"）
+  String _cleanDetailValue(dynamic value) {
+    if (value == null) return '';
+    final s = value is List ? (value as List<dynamic>).join(', ') : value.toString();
+    if (s.isEmpty || s == 'null' || s == 'N/A') return '';
+    // 如果包含底線且有中文，只取中文部分
+    if (s.contains('_') && RegExp(r'[\u4e00-\u9fff]').hasMatch(s)) {
+      final parts = s.split('_');
+      final chineseParts = parts.where((p) => RegExp(r'[\u4e00-\u9fff]').hasMatch(p)).toList();
+      if (chineseParts.isNotEmpty) return chineseParts.join(' ');
+    }
+    // 英文信號直接翻譯
+    const valueMap = {
+      'bullish': '偏多',
+      'bearish': '偏空',
+      'neutral': '中性',
+      'above_middle': '中軌之上',
+      'below_middle': '中軌之下',
+    };
+    if (valueMap.containsKey(s)) return valueMap[s]!;
+    return s.replaceAll('_', ' ');
   }
 
   String _detailLabel(String key) {
@@ -486,9 +527,9 @@ class _ComprehensiveAnalysisViewState extends State<ComprehensiveAnalysisView> {
       'positive_news': '正面新聞',
       'negative_news': '負面新聞',
       'total_mentions': '總提及',
-      'positive': '正面',
-      'negative': '負面',
-      'platforms': '平台',
+      'positive': '正面聲量',
+      'negative': '負面聲量',
+      'platforms': '來源平台',
     };
     return map[key] ?? key;
   }

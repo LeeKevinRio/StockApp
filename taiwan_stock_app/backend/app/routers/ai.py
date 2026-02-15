@@ -346,15 +346,16 @@ def get_comprehensive_analysis(
             total_score = (tech_score * 0.30) + (chip_score * 0.20) + (fund_score * 0.15) + (news_score * 0.10) + (social_score * 0.10) + (macro_score * 0.15)
 
         # 健康等級 A-F（total_score 範圍約 -100 ~ +100）
-        if total_score >= 50:
+        # 多數正常股票加權後落在 -10 ~ +20，門檻需配合實際分佈
+        if total_score >= 30:
             health_grade = 'A'
-        elif total_score >= 25:
+        elif total_score >= 15:
             health_grade = 'B'
         elif total_score >= 0:
             health_grade = 'C'
-        elif total_score >= -25:
+        elif total_score >= -15:
             health_grade = 'D'
-        elif total_score >= -50:
+        elif total_score >= -30:
             health_grade = 'E'
         else:
             health_grade = 'F'
@@ -452,33 +453,54 @@ def get_comprehensive_analysis(
                 normalize(news_score), normalize(social_score), normalize(macro_score),
             ]
 
-        # AI 摘要
+        # AI 摘要（更詳細的文字描述）
         summary_parts = []
+
+        # 技術面
+        tech_detail = data.get('technical', {})
+        rsi_val = tech_detail.get('rsi')
+        macd_st = tech_detail.get('macd_status', '')
         if tech_score > 20:
-            summary_parts.append('技術面偏多')
+            summary_parts.append(f'技術面偏多（RSI {round(rsi_val, 1) if rsi_val else "N/A"}，MACD {"翻多" if macd_st == "bullish" else "翻空" if macd_st == "bearish" else "中性"}）')
         elif tech_score < -20:
-            summary_parts.append('技術面偏空')
+            summary_parts.append(f'技術面偏空（RSI {round(rsi_val, 1) if rsi_val else "N/A"}，MACD {"翻空" if macd_st == "bearish" else "中性"}）')
+        else:
+            summary_parts.append(f'技術面中性（RSI {round(rsi_val, 1) if rsi_val else "N/A"}）')
 
+        # 籌碼面（台股）
         if market == 'TW':
+            chip_detail = data.get('chip', {})
+            foreign_5d = chip_detail.get('foreign_net_5d', 0)
             if chip_score > 20:
-                summary_parts.append('法人買超')
+                summary_parts.append(f'法人買超（外資近5日淨買 {foreign_5d} 張）')
             elif chip_score < -20:
-                summary_parts.append('法人賣超')
+                summary_parts.append(f'法人賣超（外資近5日淨賣 {abs(foreign_5d)} 張）')
 
+        # 基本面
+        fund_detail = data.get('fundamental', {})
+        per_val = fund_detail.get('per')
         if fund_score > 20:
-            summary_parts.append('基本面良好')
+            summary_parts.append(f'基本面良好' + (f'（PER {per_val}）' if per_val else ''))
         elif fund_score < -20:
-            summary_parts.append('基本面疲弱')
+            summary_parts.append(f'基本面疲弱' + (f'（PER {per_val}）' if per_val else ''))
 
+        # 社群
         if social_score > 15:
             summary_parts.append('社群看好')
         elif social_score < -15:
             summary_parts.append('社群看空')
 
-        if not summary_parts:
-            summary_parts.append('多空分歧')
+        # 宏觀面
+        macro_detail = data.get('macro', {}).get('details', {})
+        vix_val = macro_detail.get('vix', {}).get('value')
+        if macro_score > 15:
+            summary_parts.append(f'總經面利多' + (f'（VIX {vix_val}）' if vix_val else ''))
+        elif macro_score < -15:
+            summary_parts.append(f'總經面利空' + (f'（VIX {vix_val}）' if vix_val else ''))
 
-        ai_summary = '，'.join(summary_parts) + f'。綜合評分 {round(total_score, 1)}，健康等級 {health_grade}。'
+        # 總結
+        grade_desc = {'A': '體質強健', 'B': '表現不錯', 'C': '中性偏穩', 'D': '略顯疲弱', 'E': '警訊浮現', 'F': '風險偏高'}
+        ai_summary = '；'.join(summary_parts) + f'。\n綜合評分 {round(total_score, 1)} 分，健康等級 {health_grade}（{grade_desc.get(health_grade, "")}）。'
 
         # 股票基本資訊
         stock_name = stock_id

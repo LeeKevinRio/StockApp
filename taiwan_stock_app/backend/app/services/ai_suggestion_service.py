@@ -1320,7 +1320,65 @@ class AISuggestionService:
             result["market_region"] = market
             result["currency"] = "USD" if market == "US" else "TWD"
             result["report_date"] = date.today().isoformat()
-            result["current_price"] = data.get("latest_price", 0) or 0
+
+            latest_price = data.get("latest_price", 0) or 0
+            result["current_price"] = latest_price
+
+            # ===== 價格合理性驗證 =====
+            # AI 有時會產出完全偏離的 target/stop_loss，在此自動修正
+            if latest_price > 0:
+                max_dev = 0.20  # 短線預測最多偏離 20%
+                for price_key in ("target_price", "stop_loss_price", "entry_price_min", "entry_price_max"):
+                    val = result.get(price_key)
+                    if val is not None:
+                        try:
+                            val = float(val)
+                            deviation = abs(val - latest_price) / latest_price
+                            if deviation > max_dev or val <= 0:
+                                # 用公式重算
+                                if price_key == "target_price":
+                                    pct = float(result.get("predicted_change_percent", 3) or 3)
+                                    result[price_key] = round(latest_price * (1 + abs(pct) / 100), 2)
+                                elif price_key == "stop_loss_price":
+                                    pct = float(result.get("predicted_change_percent", 3) or 3)
+                                    result[price_key] = round(latest_price * (1 - abs(pct) / 100), 2)
+                                elif price_key == "entry_price_min":
+                                    result[price_key] = round(latest_price * 0.98, 2)
+                                elif price_key == "entry_price_max":
+                                    result[price_key] = round(latest_price * 1.02, 2)
+                        except (TypeError, ValueError):
+                            pass
+
+                # 修正 take_profit_targets 裡的價格
+                tpt = result.get("take_profit_targets")
+                if isinstance(tpt, list):
+                    for item in tpt:
+                        if isinstance(item, dict):
+                            p = item.get("price")
+                            if p is not None:
+                                try:
+                                    p = float(p)
+                                    if abs(p - latest_price) / latest_price > max_dev or p <= 0:
+                                        item["price"] = round(latest_price * 1.05, 2)
+                                except (TypeError, ValueError):
+                                    pass
+
+                # 修正 next_day_prediction 裡的價格
+                ndp = result.get("next_day_prediction")
+                if isinstance(ndp, dict):
+                    for pk in ("price_range_low", "price_range_high"):
+                        pv = ndp.get(pk)
+                        if pv is not None:
+                            try:
+                                pv = float(pv)
+                                if abs(pv - latest_price) / latest_price > max_dev or pv <= 0:
+                                    pct = float(ndp.get("predicted_change_percent", 0) or 0)
+                                    if pk == "price_range_low":
+                                        ndp[pk] = round(latest_price * (1 + pct / 100 - 0.015), 2)
+                                    else:
+                                        ndp[pk] = round(latest_price * (1 + pct / 100 + 0.015), 2)
+                            except (TypeError, ValueError):
+                                pass
 
             # 強制覆蓋 AI 的建議和信心度（高風險經紀人模式）
             # 根據綜合評分強制設定
@@ -1538,7 +1596,16 @@ class AISuggestionService:
 
 **每支股票的預測必須不同！根據該股票的實際技術指標和基本面數據計算！**
 **預測幅度要貼近該股票近5日的實際波動範圍！**
-**target_price 和 stop_loss_price 必須基於最新收盤價計算，要在合理範圍內！**"""
+
+## 價格計算公式（必須嚴格遵守！）
+所有價格都必須基於最新收盤價計算：
+- target_price = 最新收盤價 × (1 + 預期漲幅%/100)
+- stop_loss_price = 最新收盤價 × (1 - 停損幅%/100)
+- entry_price_min = 最新收盤價 × 0.98 ~ 0.99
+- entry_price_max = 最新收盤價 × 1.00 ~ 1.02
+- price_range_low/high = 最新收盤價 ± 2%
+
+**所有輸出價格都必須在最新收盤價的 ±15% 範圍內！偏離超過 15% 的價格視為錯誤！**"""
 
             reasoning_hint = f"說明計算依據：RSI=多少、MACD狀態、P/E估值、VIX恐慌指數等"
 
@@ -1773,6 +1840,13 @@ class AISuggestionService:
 {self._get_prediction_history_context(stock_id, data.get('_db'))}
 
 **你的隔日預測必須基於數據計算，預測值要貼近實際日常波動範圍！**
+
+⚠️ 最終檢查（輸出前必讀）：
+- 最新收盤價 = {currency_symbol}{data['latest_price']}
+- target_price 必須在 {data['latest_price']} 附近（偏離不超過 15%）
+- stop_loss_price 必須在 {data['latest_price']} 附近（偏離不超過 15%）
+- entry_price_min/max 必須在 {data['latest_price']} 附近（偏離不超過 5%）
+- price_range_low/high 必須在 {data['latest_price']} 附近（偏離不超過 5%）
 
 請根據以上所有數據進行綜合分析，給出客觀的投資建議。"""
 
