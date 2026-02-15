@@ -16,6 +16,8 @@ class _TradingDiaryScreenState extends State<TradingDiaryScreen>
   Map<String, dynamic>? _stats;
   bool _isLoading = true;
   String? _error;
+  String _searchQuery = '';
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -27,6 +29,7 @@ class _TradingDiaryScreenState extends State<TradingDiaryScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -117,31 +120,67 @@ class _TradingDiaryScreenState extends State<TradingDiaryScreen>
   }
 
   Widget _buildDiaryList() {
-    if (_entries.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.book_outlined, size: 64, color: Colors.grey),
-            SizedBox(height: 16),
-            Text('尚無交易日記', style: TextStyle(color: Colors.grey)),
-            SizedBox(height: 8),
-            Text('記錄每次交易的想法和心得', style: TextStyle(color: Colors.grey, fontSize: 12)),
-          ],
-        ),
-      );
-    }
+    final filtered = _searchQuery.isEmpty
+        ? _entries
+        : _entries.where((e) {
+            final notes = (e['notes'] as String? ?? '').toLowerCase();
+            final stockId = (e['stock_id'] as String? ?? '').toLowerCase();
+            final tags = (e['tags'] as String? ?? '').toLowerCase();
+            final q = _searchQuery.toLowerCase();
+            return notes.contains(q) || stockId.contains(q) || tags.contains(q);
+          }).toList();
 
-    return RefreshIndicator(
-      onRefresh: _loadData,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: _entries.length,
-        itemBuilder: (context, index) {
-          final entry = _entries[index];
-          return _buildDiaryCard(entry);
-        },
-      ),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: '搜尋日記 (股票/標籤/內容)',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              isDense: true,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    )
+                  : null,
+            ),
+            onChanged: (v) => setState(() => _searchQuery = v),
+          ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(_searchQuery.isNotEmpty ? Icons.search_off : Icons.book_outlined,
+                          size: 64, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      Text(
+                        _searchQuery.isNotEmpty ? '找不到符合的日記' : '尚無交易日記',
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadData,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) => _buildDiaryCard(filtered[index]),
+                  ),
+                ),
+        ),
+      ],
     );
   }
 
@@ -446,6 +485,13 @@ class _TradingDiaryScreenState extends State<TradingDiaryScreen>
                 ),
               ),
             ),
+          const SizedBox(height: 16),
+          // 情緒 vs 績效分析
+          if (emotionDist.isNotEmpty)
+            _buildEmotionPerformanceCard(),
+          const SizedBox(height: 16),
+          // 連勝/連敗追蹤
+          _buildStreakCard(),
         ],
       ),
     );
@@ -556,6 +602,168 @@ class _TradingDiaryScreenState extends State<TradingDiaryScreen>
       case 'fearful': return '恐懼';
       default: return emotion;
     }
+  }
+
+  Widget _buildEmotionPerformanceCard() {
+    // 按情緒分組計算平均損益
+    final Map<String, List<double>> emotionPnls = {};
+    for (final entry in _entries) {
+      final emotion = entry['emotion'] as String?;
+      final pnl = (entry['pnl'] as num?)?.toDouble();
+      if (emotion != null && pnl != null) {
+        emotionPnls.putIfAbsent(emotion, () => []).add(pnl);
+      }
+    }
+
+    if (emotionPnls.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.psychology, size: 20, color: Colors.purple),
+                SizedBox(width: 8),
+                Text('情緒 vs 績效', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text('了解哪種情緒下交易表現最好', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            const Divider(),
+            ...emotionPnls.entries.map((e) {
+              final avg = e.value.reduce((a, b) => a + b) / e.value.length;
+              final winCount = e.value.where((p) => p > 0).length;
+              final winRate = e.value.isNotEmpty ? winCount / e.value.length * 100 : 0.0;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8, height: 8,
+                      decoration: BoxDecoration(
+                        color: _getEmotionColor(e.key),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 50,
+                      child: Text(_getEmotionText(e.key), style: const TextStyle(fontSize: 13)),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '平均 ${avg >= 0 ? "+" : ""}\$${avg.toStringAsFixed(0)}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: avg >= 0 ? Colors.red : Colors.green,
+                            ),
+                          ),
+                          Text(
+                            '勝率 ${winRate.toStringAsFixed(0)}% (${e.value.length}筆)',
+                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStreakCard() {
+    // 計算連勝/連敗
+    int currentStreak = 0;
+    bool? lastWin;
+    int maxWinStreak = 0;
+    int maxLossStreak = 0;
+    int tempWin = 0;
+    int tempLoss = 0;
+
+    final sorted = _entries
+        .where((e) => e['pnl'] != null)
+        .toList()
+      ..sort((a, b) {
+        final da = a['trade_date'] as String? ?? '';
+        final db = b['trade_date'] as String? ?? '';
+        return da.compareTo(db);
+      });
+
+    for (final entry in sorted) {
+      final pnl = (entry['pnl'] as num).toDouble();
+      final isWin = pnl > 0;
+
+      if (isWin) {
+        tempWin++;
+        tempLoss = 0;
+        if (tempWin > maxWinStreak) maxWinStreak = tempWin;
+      } else {
+        tempLoss++;
+        tempWin = 0;
+        if (tempLoss > maxLossStreak) maxLossStreak = tempLoss;
+      }
+    }
+
+    // 計算目前連續狀態
+    if (sorted.isNotEmpty) {
+      final lastPnl = (sorted.last['pnl'] as num).toDouble();
+      lastWin = lastPnl > 0;
+      currentStreak = 1;
+      for (int i = sorted.length - 2; i >= 0; i--) {
+        final pnl = (sorted[i]['pnl'] as num).toDouble();
+        if ((pnl > 0) == lastWin) {
+          currentStreak++;
+        } else {
+          break;
+        }
+      }
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.local_fire_department, size: 20, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('連續紀錄', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const Divider(),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatCard(
+                    '目前',
+                    lastWin == null
+                        ? '-'
+                        : '${lastWin ? "連勝" : "連敗"} $currentStreak',
+                    lastWin == true ? Colors.red : lastWin == false ? Colors.green : Colors.grey,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: _buildStatCard('最長連勝', '$maxWinStreak', Colors.red)),
+                const SizedBox(width: 8),
+                Expanded(child: _buildStatCard('最長連敗', '$maxLossStreak', Colors.green)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

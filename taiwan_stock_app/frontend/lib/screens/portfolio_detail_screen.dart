@@ -437,21 +437,184 @@ class _PortfolioDetailScreenState extends State<PortfolioDetailScreen>
   }
 
   Widget _buildPerformanceTab() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.show_chart, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
-          const Text('績效圖表功能開發中...'),
-          const SizedBox(height: 8),
-          Text(
-            '目前總報酬率: ${_detail!.totalPnlPercent.toStringAsFixed(2)}%',
-            style: TextStyle(
-              color: _detail!.totalPnl >= 0 ? Colors.green : Colors.red,
-              fontWeight: FontWeight.bold,
+    if (_detail == null) return const Center(child: Text('無數據'));
+
+    final totalPnl = _detail!.totalPnl;
+    final totalPnlPct = _detail!.totalPnlPercent;
+    final isProfit = totalPnl >= 0;
+    final pnlColor = isProfit ? Colors.green : Colors.red;
+
+    // 計算各持股的已實現/未實現損益
+    double totalUnrealized = 0;
+    for (final h in _detail!.holdings) {
+      totalUnrealized += h.unrealizedPnl ?? 0;
+    }
+
+    // 計算集中度（最大持股佔比）
+    double maxWeight = 0;
+    String maxHolding = '';
+    if (_detail!.totalValue > 0) {
+      for (final h in _detail!.holdings) {
+        final weight = (h.marketValue ?? 0) / _detail!.totalValue;
+        if (weight > maxWeight) {
+          maxWeight = weight;
+          maxHolding = h.stockName ?? h.stockId;
+        }
+      }
+    }
+
+    // 計算勝率
+    int winCount = 0;
+    int totalCount = 0;
+    for (final h in _detail!.holdings) {
+      if (h.unrealizedPnl != null) {
+        totalCount++;
+        if (h.unrealizedPnl! > 0) winCount++;
+      }
+    }
+    final winRate = totalCount > 0 ? winCount / totalCount * 100 : 0.0;
+
+    return RefreshIndicator(
+      onRefresh: _loadDetail,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 總報酬卡片
+            Card(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      pnlColor.withAlpha(30),
+                      pnlColor.withAlpha(10),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    const Text('總報酬', style: TextStyle(fontSize: 14, color: Colors.grey)),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${isProfit ? '+' : ''}${_formatCurrency(totalPnl)}',
+                      style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: pnlColor),
+                    ),
+                    Text(
+                      '${isProfit ? '+' : ''}${totalPnlPct.toStringAsFixed(2)}%',
+                      style: TextStyle(fontSize: 18, color: pnlColor),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
+            const SizedBox(height: 16),
+
+            // 績效指標
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('績效指標', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Divider(),
+                    _buildPerfRow('未實現損益', '${totalUnrealized >= 0 ? '+' : ''}${_formatCurrency(totalUnrealized)}',
+                        color: totalUnrealized >= 0 ? Colors.green : Colors.red),
+                    _buildPerfRow('持股勝率', '${winRate.toStringAsFixed(1)}%',
+                        color: winRate >= 50 ? Colors.green : Colors.red),
+                    _buildPerfRow('持股數量', '${_detail!.holdings.length} 檔'),
+                    if (maxHolding.isNotEmpty)
+                      _buildPerfRow('最大持股', '$maxHolding (${(maxWeight * 100).toStringAsFixed(1)}%)'),
+                    _buildPerfRow('集中度', maxWeight > 0.5
+                        ? '高度集中'
+                        : maxWeight > 0.3
+                            ? '中度集中'
+                            : '分散',
+                        color: maxWeight > 0.5 ? Colors.red : Colors.green),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // 各持股損益排行
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('持股損益排行', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Divider(),
+                    ..._detail!.holdings
+                        .where((h) => h.unrealizedPnl != null)
+                        .toList()
+                      ..sort((a, b) => (b.unrealizedPnl ?? 0).compareTo(a.unrealizedPnl ?? 0)),
+                    ..._detail!.holdings
+                        .where((h) => h.unrealizedPnl != null)
+                        .toList()
+                        .map((h) {
+                      final pnl = h.unrealizedPnl ?? 0;
+                      final pct = h.unrealizedPnlPercent ?? 0;
+                      final isHoldingProfit = pnl >= 0;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Text(h.stockName ?? h.stockId,
+                                  style: const TextStyle(fontWeight: FontWeight.w500)),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                '${isHoldingProfit ? '+' : ''}\$${pnl.toStringAsFixed(0)}',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  color: isHoldingProfit ? Colors.green : Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                              width: 70,
+                              child: Text(
+                                '${isHoldingProfit ? '+' : ''}${pct.toStringAsFixed(1)}%',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isHoldingProfit ? Colors.green : Colors.red,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPerfRow(String label, String value, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.grey)),
+          Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: color)),
         ],
       ),
     );
