@@ -1,6 +1,7 @@
 """
 新聞資料爬蟲
 從多個來源獲取台股相關新聞
+支援 RSS、API、網頁爬蟲
 支援 AI 語意分析（Gemini）與關鍵字 fallback
 """
 import aiohttp
@@ -12,6 +13,11 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import re
 from bs4 import BeautifulSoup
+
+try:
+    import feedparser
+except ImportError:
+    feedparser = None
 
 # 設置日誌
 logger = logging.getLogger(__name__)
@@ -28,15 +34,17 @@ class NewsFetcher:
     async def fetch_stock_news(self, stock_id: str, limit: int = 10) -> List[Dict]:
         """
         獲取個股新聞
-        使用多個來源確保可用性
+        優先順序：RSS（穩定）→ API → 網頁爬蟲
         """
         news_list = []
 
-        # 優先順序：鉅亨網搜尋 > 鉅亨網分類 > Yahoo
+        # 優先順序：RSS 來源 > API > 爬蟲
         sources = [
+            ('Google News RSS', self._fetch_google_news_rss),
+            ('Yahoo RSS', self._fetch_yahoo_rss),
             ('鉅亨網搜尋', self._fetch_cnyes_search_news),
             ('鉅亨網分類', self._fetch_cnyes_news),
-            ('Yahoo', self._fetch_yahoo_news),
+            ('Yahoo爬蟲', self._fetch_yahoo_news),
         ]
 
         for source_name, fetch_func in sources:
@@ -55,8 +63,9 @@ class NewsFetcher:
         seen_titles = set()
         unique_news = []
         for news in news_list:
-            if news['title'] not in seen_titles:
-                seen_titles.add(news['title'])
+            title_key = news['title'][:40].lower()
+            if title_key not in seen_titles:
+                seen_titles.add(title_key)
                 unique_news.append(news)
 
         # 按發布時間排序
@@ -78,6 +87,83 @@ class NewsFetcher:
             logger.error(f"市場新聞獲取失敗: {e}")
 
         return news_list[:limit]
+
+    async def _fetch_google_news_rss(self, stock_id: str, limit: int) -> List[Dict]:
+        """從 Google News RSS 獲取新聞（zh-TW）"""
+        if feedparser is None:
+            return []
+
+        news_list = []
+        query = f"{stock_id} 股票"
+        url = f"https://news.google.com/rss/search?q={query}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers=self.headers,
+                    timeout=aiohttp.ClientTimeout(total=15)
+                ) as response:
+                    if response.status == 200:
+                        content = await response.text()
+                        feed = feedparser.parse(content)
+
+                        for entry in feed.entries[:limit]:
+                            published_at = None
+                            if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                                published_at = datetime(*entry.published_parsed[:6])
+
+                            news_list.append({
+                                'title': entry.get('title', ''),
+                                'summary': entry.get('summary', '')[:200] if entry.get('summary') else '',
+                                'source': 'Google News',
+                                'source_url': entry.get('link', ''),
+                                'published_at': published_at,
+                                'content': None,
+                                'sentiment': None,
+                            })
+        except Exception as e:
+            logger.error(f"Google News RSS 錯誤: {e}")
+
+        return news_list
+
+    async def _fetch_yahoo_rss(self, stock_id: str, limit: int) -> List[Dict]:
+        """從 Yahoo 台股 RSS 獲取新聞"""
+        if feedparser is None:
+            return []
+
+        news_list = []
+        url = f"https://tw.stock.yahoo.com/rss?s={stock_id}.TW"
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    url,
+                    headers=self.headers,
+                    timeout=aiohttp.ClientTimeout(total=15)
+                ) as response:
+                    if response.status == 200:
+                        content = await response.text()
+                        feed = feedparser.parse(content)
+
+                        for entry in feed.entries[:limit]:
+                            published_at = None
+                            if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                                published_at = datetime(*entry.published_parsed[:6])
+
+                            news_list.append({
+                                'title': entry.get('title', ''),
+                                'summary': entry.get('summary', '')[:200] if entry.get('summary') else '',
+                                'source': 'Yahoo財經',
+                                'source_url': entry.get('link', ''),
+                                'published_at': published_at,
+                                'content': None,
+                                'sentiment': None,
+                            })
+        except Exception as e:
+            logger.error(f"Yahoo RSS 錯誤: {e}")
+
+        return news_list
 
     async def _fetch_cnyes_search_news(self, stock_id: str, limit: int) -> List[Dict]:
         """從鉅亨網搜尋 API 獲取新聞（最可靠的方式）"""

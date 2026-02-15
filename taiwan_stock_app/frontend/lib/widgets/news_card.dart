@@ -123,28 +123,36 @@ class NewsCard extends StatelessWidget {
 
   Widget _buildSentimentChip(StockNews news) {
     Color color;
+    Color bgColor;
     IconData icon;
+    String label;
 
     switch (news.sentiment) {
       case 'positive':
-        color = Colors.green;
+        color = Colors.green.shade700;
+        bgColor = Colors.green.shade50;
         icon = Icons.trending_up;
+        label = news.sentimentText;
         break;
       case 'negative':
-        color = Colors.red;
+        color = Colors.red.shade700;
+        bgColor = Colors.red.shade50;
         icon = Icons.trending_down;
+        label = news.sentimentText;
         break;
       default:
-        color = Colors.grey;
+        color = Colors.blueGrey.shade600;
+        bgColor = Colors.blueGrey.shade50;
         icon = Icons.remove;
+        label = news.sentimentText;
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withAlpha(26),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withAlpha(77)),
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withAlpha(80)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -152,9 +160,24 @@ class NewsCard extends StatelessWidget {
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 4),
           Text(
-            news.sentimentText,
-            style: TextStyle(fontSize: 12, color: color),
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
           ),
+          if (news.sentimentScore != null) ...[
+            const SizedBox(width: 4),
+            Text(
+              '${(news.sentimentScore! * 100).toStringAsFixed(0)}',
+              style: TextStyle(
+                fontSize: 10,
+                color: color.withAlpha(180),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ],
       ),
     );

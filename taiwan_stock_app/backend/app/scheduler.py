@@ -2,10 +2,14 @@
 Scheduler - 定時任務排程器
 - 台股收盤後 3 小時更新預測 (16:30)
 - 美股收盤後 3 小時更新預測 (07:00 台灣時間)
+- 新聞抓取：交易時段每 30 分鐘
+- 社群抓取：每 2 小時（09:00-22:00）
 """
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from datetime import datetime
+import asyncio
 import pytz
 
 from app.database import SessionLocal
@@ -103,6 +107,78 @@ def generate_daily_predictions():
         db.close()
 
 
+def fetch_market_news_task():
+    """
+    排程抓取市場新聞
+    交易時段每 30 分鐘抓取熱門股票新聞
+    """
+    print(f"[{datetime.now(TW_TZ)}] Starting market news fetch...")
+    db = SessionLocal()
+    try:
+        from app.services.news_service import news_service
+
+        # 抓取自選股中的熱門股票新聞
+        watchlist_stocks = db.query(Watchlist.stock_id).distinct().limit(20).all()
+        stock_ids = [w[0] for w in watchlist_stocks]
+
+        if not stock_ids:
+            stock_ids = ['2330', '2317', '2454', '2308', '2881']  # 預設熱門台股
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        fetched_count = 0
+        for stock_id in stock_ids:
+            try:
+                loop.run_until_complete(
+                    news_service.get_stock_news(db, stock_id, limit=5, use_cache=False)
+                )
+                fetched_count += 1
+            except Exception as e:
+                print(f"  新聞抓取失敗 {stock_id}: {e}")
+
+        loop.close()
+        print(f"[{datetime.now(TW_TZ)}] Fetched news for {fetched_count}/{len(stock_ids)} stocks")
+    except Exception as e:
+        print(f"[{datetime.now(TW_TZ)}] Market news fetch error: {e}")
+    finally:
+        db.close()
+
+
+def fetch_social_data_task():
+    """
+    排程抓取社群數據
+    每 2 小時抓取一次（09:00-22:00）
+    """
+    print(f"[{datetime.now(TW_TZ)}] Starting social data fetch...")
+    db = SessionLocal()
+    try:
+        from app.services.sentiment_service import sentiment_service
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # 抓取熱門討論股票
+        loop.run_until_complete(sentiment_service.get_hot_stocks(db, limit=20))
+
+        # 抓取自選股的社群數據
+        watchlist_stocks = db.query(Watchlist.stock_id).distinct().limit(10).all()
+        for (stock_id,) in watchlist_stocks:
+            try:
+                loop.run_until_complete(
+                    sentiment_service.get_stock_sentiment(db, stock_id)
+                )
+            except Exception as e:
+                print(f"  社群數據抓取失敗 {stock_id}: {e}")
+
+        loop.close()
+        print(f"[{datetime.now(TW_TZ)}] Social data fetch completed")
+    except Exception as e:
+        print(f"[{datetime.now(TW_TZ)}] Social data fetch error: {e}")
+    finally:
+        db.close()
+
+
 def start_scheduler():
     """啟動排程器"""
     # 台股：每週一至週五 16:30 更新實際結果
@@ -127,6 +203,22 @@ def start_scheduler():
         generate_daily_predictions,
         CronTrigger(day_of_week='mon-fri', hour=9, minute=30, timezone=TW_TZ),
         id='generate_tw_predictions',
+        replace_existing=True
+    )
+
+    # 新聞抓取：每週一至週五，09:00-16:00 每 30 分鐘
+    scheduler.add_job(
+        fetch_market_news_task,
+        CronTrigger(day_of_week='mon-fri', hour='9-16', minute='0,30', timezone=TW_TZ),
+        id='fetch_market_news',
+        replace_existing=True
+    )
+
+    # 社群數據抓取：每天 09:00-22:00 每 2 小時
+    scheduler.add_job(
+        fetch_social_data_task,
+        CronTrigger(hour='9,11,13,15,17,19,21', minute=0, timezone=TW_TZ),
+        id='fetch_social_data',
         replace_existing=True
     )
 

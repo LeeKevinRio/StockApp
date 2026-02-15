@@ -1,17 +1,22 @@
 """
 新聞服務 - 支援台股與美股
+含 TTL 快取 + 情感摘要供 AI 整合使用
 """
 import asyncio
 import logging
-from typing import List, Optional
-from datetime import datetime
+from typing import List, Optional, Dict
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.models.news import StockNews
 from app.data_fetchers.news_fetcher import news_fetcher
 from app.data_fetchers.global_news_fetcher import global_news_fetcher
 
 logger = logging.getLogger(__name__)
+
+# 快取 TTL（30 分鐘）
+NEWS_CACHE_TTL_MINUTES = 30
 
 
 class NewsService:
@@ -39,10 +44,8 @@ class NewsService:
             新聞列表
         """
         if market == "US":
-            # 美股使用 global_news_fetcher (yfinance + web scraping)
             return await self._get_us_stock_news(stock_id, limit)
         else:
-            # 台股使用原有 news_fetcher
             return await self._get_tw_stock_news(db, stock_id, limit, use_cache)
 
     async def _get_tw_stock_news(
@@ -52,14 +55,16 @@ class NewsService:
         limit: int,
         use_cache: bool
     ) -> List[dict]:
-        """獲取台股新聞"""
-        # 先嘗試從資料庫獲取近期新聞
+        """獲取台股新聞（含 TTL 快取）"""
         if use_cache:
+            ttl_threshold = datetime.now() - timedelta(minutes=NEWS_CACHE_TTL_MINUTES)
             cached_news = db.query(StockNews).filter(
-                StockNews.stock_id == stock_id
+                StockNews.stock_id == stock_id,
+                StockNews.fetched_at >= ttl_threshold
             ).order_by(StockNews.published_at.desc()).limit(limit).all()
 
             if cached_news:
+                logger.info(f"使用快取新聞: {stock_id}, {len(cached_news)} 條")
                 return [self._news_to_dict(n) for n in cached_news]
 
         # 從網路獲取新聞
@@ -78,6 +83,75 @@ class NewsService:
             self._save_news(db, stock_id, news)
 
         return news_list
+
+    async def get_news_sentiment_summary(self, db: Session, stock_id: str) -> Dict:
+        """
+        獲取新聞情感摘要 — 供綜合 AI 分析(F3)使用
+
+        Returns:
+            {
+                'total': int,
+                'positive': int,
+                'negative': int,
+                'neutral': int,
+                'avg_score': float,
+                'overall': str,
+                'recent_titles': List[str]
+            }
+        """
+        ttl_threshold = datetime.now() - timedelta(hours=6)
+        recent_news = db.query(StockNews).filter(
+            StockNews.stock_id == stock_id,
+            StockNews.fetched_at >= ttl_threshold
+        ).order_by(StockNews.published_at.desc()).limit(20).all()
+
+        if not recent_news:
+            # 即時抓取
+            try:
+                news_list = await news_fetcher.fetch_stock_news(stock_id, 10)
+                for news in news_list:
+                    sr = news_fetcher.analyze_sentiment_simple(news.get('title', ''))
+                    news['sentiment'] = sr['sentiment']
+                    news['sentiment_score'] = sr['score']
+                    self._save_news(db, stock_id, news)
+
+                recent_news = db.query(StockNews).filter(
+                    StockNews.stock_id == stock_id,
+                ).order_by(StockNews.published_at.desc()).limit(20).all()
+            except Exception as e:
+                logger.error(f"即時抓取新聞失敗: {e}")
+
+        if not recent_news:
+            return {'total': 0, 'positive': 0, 'negative': 0, 'neutral': 0,
+                    'avg_score': 0, 'overall': 'neutral', 'recent_titles': []}
+
+        positive = sum(1 for n in recent_news if n.sentiment == 'positive')
+        negative = sum(1 for n in recent_news if n.sentiment == 'negative')
+        neutral = len(recent_news) - positive - negative
+        scores = []
+        for n in recent_news:
+            try:
+                scores.append(float(n.sentiment_score or 0))
+            except (ValueError, TypeError):
+                scores.append(0)
+        avg_score = sum(scores) / len(scores) if scores else 0
+
+        if avg_score > 0.15:
+            overall = 'positive'
+        elif avg_score < -0.15:
+            overall = 'negative'
+        else:
+            overall = 'neutral'
+
+        return {
+            'total': len(recent_news),
+            'positive': positive,
+            'negative': negative,
+            'neutral': neutral,
+            'avg_score': round(avg_score, 2),
+            'overall': overall,
+            'recent_titles': [n.title for n in recent_news[:5]],
+        }
 
     async def _get_us_stock_news(self, ticker: str, limit: int) -> List[dict]:
         """獲取美股新聞"""
