@@ -208,16 +208,34 @@ class SettingsScreen extends StatelessWidget {
               builder: (ctx) => AlertDialog(
                 title: const Text('刪除帳號'),
                 content: const Text(
-                  '確定要永久刪除帳號嗎？所有資料將被清除且無法復原。',
+                  '確定要永久刪除帳號嗎？\n\n'
+                  '以下資料將被清除且無法復原：\n'
+                  '• 自選股清單\n'
+                  '• 投資組合\n'
+                  '• AI 分析紀錄\n'
+                  '• 交易日記\n'
+                  '• 所有警示設定',
                 ),
                 actions: [
                   TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
                   TextButton(
-                    onPressed: () {
+                    onPressed: () async {
                       Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('帳號刪除功能即將上線')),
-                      );
+                      try {
+                        await context.read<AuthProvider>().deleteAccount();
+                        if (context.mounted) {
+                          Navigator.of(context).pushReplacementNamed('/login');
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('帳號已成功刪除')),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('刪除失敗：$e')),
+                          );
+                        }
+                      }
                     },
                     child: const Text('確認刪除', style: TextStyle(color: Colors.red)),
                   ),

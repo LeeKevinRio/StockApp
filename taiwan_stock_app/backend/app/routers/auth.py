@@ -257,3 +257,24 @@ def get_me(current_user: User = Depends(get_current_user)):
         subscription_tier=current_user.subscription_tier,
         is_admin=current_user.is_admin,
     )
+
+
+@router.delete("/account")
+def delete_account(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """刪除使用者帳號及所有關聯資料"""
+    from app.models import Portfolio, AIReport
+
+    user_id = current_user.id
+
+    # 手動刪除沒有 ondelete CASCADE 的關聯資料
+    db.query(Portfolio).filter(Portfolio.user_id == user_id).delete()
+    db.query(AIReport).filter(AIReport.user_id == user_id).delete()
+
+    # 刪除使用者（其他有 CASCADE 的關聯會自動刪除）
+    db.delete(current_user)
+    db.commit()
+
+    return {"message": "帳號已成功刪除"}

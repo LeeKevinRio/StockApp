@@ -109,6 +109,13 @@ class AuthService {
     }
   }
 
+  Future<void> deleteAccount() async {
+    await _apiService.deleteAccount();
+    await _storage.delete(key: _tokenKey);
+    await _storage.delete(key: _userKey);
+    _apiService.setAuthToken('');
+  }
+
   Future<void> logout() async {
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _userKey);

@@ -94,6 +94,14 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
+  Future<void> deleteAccount() async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/auth/account'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+  }
+
   // ==================== 股票相關 ====================
 
   Future<List<Stock>> searchStocks(String query, {String market = 'TW'}) async {

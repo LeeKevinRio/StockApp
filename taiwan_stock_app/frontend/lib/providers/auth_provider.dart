@@ -128,6 +128,23 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  Future<void> deleteAccount() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      await _authService.deleteAccount();
+      _user = null;
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> logout() async {
     await _authService.logout();
     _user = null;
