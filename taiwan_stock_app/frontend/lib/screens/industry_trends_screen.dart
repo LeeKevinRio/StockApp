@@ -58,19 +58,43 @@ class _IndustryTrendsScreenState extends State<IndustryTrendsScreen> {
           }
 
           if (provider.trendsError != null) {
+            final err = provider.trendsError!;
+            final isQuota = err.contains('429') || err.contains('quota') || err.contains('配額');
+            final isNetwork = err.contains('Failed to fetch') || err.contains('SocketException');
             return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text('錯誤：${provider.trendsError}'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => provider.loadIndustryTrends(),
-                    child: const Text('重試'),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      isQuota ? Icons.hourglass_empty : isNetwork ? Icons.wifi_off : Icons.error_outline,
+                      size: 64,
+                      color: isQuota ? Colors.orange : Colors.red,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      isQuota ? 'AI 額度已用完' : isNetwork ? '無法連線' : '載入失敗',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isQuota
+                          ? 'AI 服務免費額度已耗盡，請稍後再試。'
+                          : isNetwork
+                              ? '請檢查網路連線或後端服務狀態。'
+                              : '伺服器發生錯誤，請稍後再試。',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: () => provider.loadIndustryTrends(),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('重試'),
+                    ),
+                  ],
+                ),
               ),
             );
           }

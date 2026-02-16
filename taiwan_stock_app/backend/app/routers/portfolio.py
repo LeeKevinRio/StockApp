@@ -293,6 +293,32 @@ def get_positions(
     )
 
 
+@router.delete("/positions/{position_id}")
+def delete_position(
+    position_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """刪除單筆持倉"""
+    from app.models.portfolio import Position, Portfolio
+
+    position = db.query(Position).filter(Position.id == position_id).first()
+    if not position:
+        raise HTTPException(status_code=404, detail="Position not found")
+
+    # 驗證該持倉屬於當前用戶的組合
+    portfolio = db.query(Portfolio).filter(
+        Portfolio.id == position.portfolio_id,
+        Portfolio.user_id == current_user.id,
+    ).first()
+    if not portfolio:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    db.delete(position)
+    db.commit()
+    return {"message": "Position deleted"}
+
+
 # ==================== Statistics ====================
 
 @router.get("/{portfolio_id}/summary", response_model=PortfolioSummary)

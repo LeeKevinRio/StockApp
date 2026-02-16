@@ -85,19 +85,48 @@ class _AISuggestionsScreenState extends State<AISuggestionsScreen>
           }
 
           if (provider.suggestionsError != null) {
+            final err = provider.suggestionsError!;
+            final isQuota = err.contains('429') || err.contains('quota') || err.contains('配額');
+            final isNetwork = err.contains('Failed to fetch') || err.contains('SocketException') || err.contains('Connection');
+
             return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text('Error: ${provider.suggestionsError}'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => provider.loadSuggestions(),
-                    child: const Text('Retry'),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      isQuota ? Icons.hourglass_empty : isNetwork ? Icons.wifi_off : Icons.error_outline,
+                      size: 64,
+                      color: isQuota ? Colors.orange : Colors.red,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      isQuota
+                          ? 'AI 服務額度已用完'
+                          : isNetwork
+                              ? '無法連線到伺服器'
+                              : 'AI 服務暫時不可用',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isQuota
+                          ? 'Gemini 與 Groq 的免費額度已耗盡，請稍後再試或升級方案。'
+                          : isNetwork
+                              ? '請檢查網路連線或確認後端服務是否已啟動。'
+                              : '伺服器發生錯誤，請稍後再試。',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: () => provider.loadSuggestions(),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('重試'),
+                    ),
+                  ],
+                ),
               ),
             );
           }

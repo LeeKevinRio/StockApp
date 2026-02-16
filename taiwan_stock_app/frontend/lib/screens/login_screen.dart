@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../config/app_config.dart';
 import '../providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -18,7 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isGoogleLoading = false;
 
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    clientId: '506193160322-omn6g1hja95mv192ajdu0ospgndohh6o.apps.googleusercontent.com',
+    clientId: AppConfig.googleClientId,
     scopes: ['openid', 'email', 'profile'],
   );
 

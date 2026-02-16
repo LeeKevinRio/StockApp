@@ -74,18 +74,34 @@ class _ComprehensiveAnalysisViewState extends State<ComprehensiveAnalysisView> {
     }
 
     if (_error != null) {
+      final isQuota = _error!.contains('429') || _error!.contains('quota') || _error!.contains('配額');
+      final isNetwork = _error!.contains('Failed to fetch') || _error!.contains('SocketException');
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              Icon(
+                isQuota ? Icons.hourglass_empty : isNetwork ? Icons.wifi_off : Icons.error_outline,
+                size: 48,
+                color: isQuota ? Colors.orange : Colors.red,
+              ),
               const SizedBox(height: 16),
-              Text('分析失敗', style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                isQuota ? 'AI 額度已用完' : isNetwork ? '無法連線' : '分析失敗',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
-              Text(_error!, textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.grey)),
+              Text(
+                isQuota
+                    ? 'AI 服務免費額度已耗盡，請稍後再試。'
+                    : isNetwork
+                        ? '請檢查網路連線或後端服務狀態。'
+                        : '伺服器發生錯誤，請稍後再試。',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.grey),
+              ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: _loadAnalysis,
