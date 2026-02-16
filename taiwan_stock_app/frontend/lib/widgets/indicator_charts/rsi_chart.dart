@@ -66,20 +66,20 @@ class _RSIChartState extends State<RSIChart> {
                   getDrawingHorizontalLine: (value) {
                     if (value == 70 && _showOverbought) {
                       return FlLine(
-                        color: Colors.red.withOpacity(0.5),
+                        color: Colors.red.withValues(alpha: 0.5),
                         strokeWidth: 1,
                         dashArray: [5, 5],
                       );
                     }
                     if (value == 30 && _showOversold) {
                       return FlLine(
-                        color: Colors.green.withOpacity(0.5),
+                        color: Colors.green.withValues(alpha: 0.5),
                         strokeWidth: 1,
                         dashArray: [5, 5],
                       );
                     }
                     return FlLine(
-                      color: Theme.of(context).dividerColor.withOpacity(0.3),
+                      color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
                       strokeWidth: 0.5,
                     );
                   },
@@ -158,7 +158,7 @@ class _RSIChartState extends State<RSIChart> {
                       dotData: const FlDotData(show: false),
                       belowBarData: BarAreaData(
                         show: true,
-                        color: Colors.purple.withOpacity(0.1),
+                        color: Colors.purple.withValues(alpha: 0.1),
                       ),
                     ),
                 ],
@@ -244,7 +244,7 @@ class _RSIChartState extends State<RSIChart> {
         _buildToggleableLegendItem(
           context,
           '超買 (>70)',
-          Colors.red.withOpacity(0.5),
+          Colors.red.withValues(alpha: 0.5),
           _showOverbought,
           () => setState(() => _showOverbought = !_showOverbought),
           isArea: true,
@@ -253,7 +253,7 @@ class _RSIChartState extends State<RSIChart> {
         _buildToggleableLegendItem(
           context,
           '超賣 (<30)',
-          Colors.green.withOpacity(0.5),
+          Colors.green.withValues(alpha: 0.5),
           _showOversold,
           () => setState(() => _showOversold = !_showOversold),
           isArea: true,

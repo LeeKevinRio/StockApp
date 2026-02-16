@@ -97,7 +97,7 @@ class _MACDChartState extends State<MACDChart> {
                         );
                       }
                       return FlLine(
-                        color: Theme.of(context).dividerColor.withOpacity(0.3),
+                        color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
                         strokeWidth: 0.5,
                       );
                     },
@@ -190,7 +190,7 @@ class _MACDChartState extends State<MACDChart> {
                       );
                     }
                     return FlLine(
-                      color: Theme.of(context).dividerColor.withOpacity(0.3),
+                      color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
                       strokeWidth: 0.5,
                     );
                   },

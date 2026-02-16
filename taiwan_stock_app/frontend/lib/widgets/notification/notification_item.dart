@@ -40,11 +40,11 @@ class NotificationItem extends StatelessWidget {
             color: notification.isRead
                 ? null
                 : (isDark
-                    ? Colors.blue.withOpacity(0.1)
-                    : Colors.blue.withOpacity(0.05)),
+                    ? Colors.blue.withValues(alpha: 0.1)
+                    : Colors.blue.withValues(alpha: 0.05)),
             border: Border(
               bottom: BorderSide(
-                color: theme.dividerColor.withOpacity(0.3),
+                color: theme.dividerColor.withValues(alpha: 0.3),
                 width: 0.5,
               ),
             ),
@@ -95,7 +95,7 @@ class NotificationItem extends StatelessWidget {
                     Text(
                       notification.body,
                       style: TextStyle(
-                        color: theme.textTheme.bodyMedium?.color?.withOpacity(0.7),
+                        color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                         fontSize: 13,
                       ),
                       maxLines: 2,
@@ -110,7 +110,7 @@ class NotificationItem extends StatelessWidget {
                         Text(
                           _formatTime(notification.createdAt),
                           style: TextStyle(
-                            color: theme.textTheme.bodySmall?.color?.withOpacity(0.5),
+                            color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.5),
                             fontSize: 12,
                           ),
                         ),
@@ -214,7 +214,7 @@ class _NotificationIcon extends StatelessWidget {
 
   Color _getBackgroundColor(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return _getIconColor().withOpacity(isDark ? 0.2 : 0.1);
+    return _getIconColor().withValues(alpha: isDark ? 0.2 : 0.1);
   }
 }
 
@@ -229,7 +229,7 @@ class _TypeTag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: _getColor().withOpacity(0.1),
+        color: _getColor().withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(

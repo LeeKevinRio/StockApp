@@ -221,7 +221,7 @@ class _CandlestickChartState extends State<CandlestickChart> {
             horizontalInterval: priceRange / 5,
             getDrawingHorizontalLine: (value) {
               return FlLine(
-                color: Theme.of(context).dividerColor.withOpacity(0.3),
+                color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
                 strokeWidth: 1,
               );
             },
@@ -270,7 +270,7 @@ class _CandlestickChartState extends State<CandlestickChart> {
           ),
           borderData: FlBorderData(
             show: true,
-            border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.3)),
+            border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.3)),
           ),
           lineTouchData: LineTouchData(
             enabled: widget.enableCrosshair,
@@ -319,11 +319,11 @@ class _CandlestickChartState extends State<CandlestickChart> {
         padding: const EdgeInsets.all(8),
         margin: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Theme.of(context).cardColor.withOpacity(0.95),
+          color: Theme.of(context).cardColor.withValues(alpha: 0.95),
           borderRadius: BorderRadius.circular(8),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 4,
             ),
           ],
@@ -457,7 +457,7 @@ class _CandlestickChartState extends State<CandlestickChart> {
             horizontalInterval: maxVolume / 3,
             getDrawingHorizontalLine: (value) {
               return FlLine(
-                color: Theme.of(context).dividerColor.withOpacity(0.3),
+                color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
                 strokeWidth: 1,
               );
             },
@@ -490,7 +490,7 @@ class _CandlestickChartState extends State<CandlestickChart> {
           ),
           borderData: FlBorderData(
             show: true,
-            border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.3)),
+            border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.3)),
           ),
           barGroups: visibleData.asMap().entries.map((entry) {
             final index = entry.key;
@@ -505,8 +505,8 @@ class _CandlestickChartState extends State<CandlestickChart> {
                 BarChartRodData(
                   toY: candle.volume.toDouble(),
                   color: isRising
-                      ? Colors.red.withOpacity(0.7)
-                      : Colors.green.withOpacity(0.7),
+                      ? Colors.red.withValues(alpha: 0.7)
+                      : Colors.green.withValues(alpha: 0.7),
                   width: volumeBarWidth,
                 ),
               ],
