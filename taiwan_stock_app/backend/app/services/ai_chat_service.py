@@ -1,5 +1,6 @@
 """
 AI Chat Service - AI 問答服務
+支援備援機制: Gemini -> Groq -> 錯誤提示
 """
 from typing import List, Dict, Optional
 from datetime import date, timedelta
@@ -7,6 +8,7 @@ import google.generativeai as genai
 
 from app.data_fetchers import FinMindFetcher
 from app.config import settings
+from app.services.ai_suggestion_service import get_groq_client
 
 
 class AIChatService:
@@ -44,12 +46,6 @@ class AIChatService:
     def for_user(cls, user) -> 'AIChatService':
         """
         工廠方法：根據用戶訂閱級別創建服務實例
-
-        Args:
-            user: User model instance with subscription_tier attribute
-
-        Returns:
-            AIChatService instance configured for user's tier
         """
         tier = getattr(user, 'subscription_tier', 'free') or 'free'
         return cls(subscription_tier=tier)
@@ -60,7 +56,7 @@ class AIChatService:
         stock_id: Optional[str] = None,
         chat_history: Optional[List[Dict]] = None,
     ) -> Dict:
-        """處理用戶問答"""
+        """處理用戶問答，支援 Gemini -> Groq fallback"""
         # 建立對話歷史
         history = []
         if chat_history:
@@ -83,17 +79,17 @@ class AIChatService:
         # 組合用戶訊息
         full_message = f"{self.SYSTEM_PROMPT}\n\n{user_message}{stock_context}"
 
-        # 呼叫 Gemini API
-        chat = self.llm.start_chat(history=history)
-        response = chat.send_message(
-            full_message,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.7,
-                max_output_tokens=4096,  # 增加到 4096 以避免回答被截斷
-            )
-        )
+        # 1. 嘗試 Gemini
+        ai_response = self._call_gemini_chat(full_message, history)
 
-        ai_response = response.text
+        # 2. Gemini 失敗，嘗試 Groq
+        if ai_response is None:
+            print("Gemini chat failed, trying Groq...")
+            ai_response = self._call_groq_chat(full_message, chat_history)
+
+        # 3. 全部失敗
+        if ai_response is None:
+            raise Exception("AI 服務暫時不可用（Gemini 與 Groq 皆無法回應），請稍後再試。")
 
         # 提取相關股票代碼
         related_stocks = self._extract_stock_ids(ai_response)
@@ -101,6 +97,63 @@ class AIChatService:
             related_stocks.insert(0, stock_id)
 
         return {"response": ai_response, "related_stocks": related_stocks, "sources": sources}
+
+    def _call_gemini_chat(self, message: str, history: List[Dict]) -> Optional[str]:
+        """呼叫 Gemini Chat API"""
+        try:
+            chat = self.llm.start_chat(history=history)
+            response = chat.send_message(
+                message,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.7,
+                    max_output_tokens=4096,
+                )
+            )
+            return response.text
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "quota" in error_str.lower() or "ResourceExhausted" in error_str:
+                print(f"Gemini chat quota exceeded: {e}")
+            else:
+                print(f"Gemini chat error: {e}")
+            return None
+
+    def _call_groq_chat(self, message: str, chat_history: Optional[List[Dict]] = None) -> Optional[str]:
+        """呼叫 Groq Chat API"""
+        groq_client = get_groq_client()
+        if groq_client is None:
+            print("Groq client not available (API key not set or package not installed)")
+            return None
+
+        try:
+            messages = [
+                {"role": "system", "content": self.SYSTEM_PROMPT}
+            ]
+            # 加入對話歷史
+            if chat_history:
+                for msg in chat_history[-10:]:
+                    messages.append({
+                        "role": msg["role"],
+                        "content": msg["content"]
+                    })
+            # 加入當前訊息（去掉 system prompt 前綴，因為已放在 system message）
+            user_content = message.replace(self.SYSTEM_PROMPT + "\n\n", "")
+            messages.append({"role": "user", "content": user_content})
+
+            chat_completion = groq_client.chat.completions.create(
+                messages=messages,
+                model=settings.GROQ_MODEL,
+                temperature=0.7,
+                max_tokens=4096,
+            )
+            return chat_completion.choices[0].message.content
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "rate" in error_str.lower():
+                print(f"Groq chat rate limit exceeded: {e}")
+            else:
+                print(f"Groq chat error: {e}")
+            return None
 
     def _get_stock_context(self, stock_id: str) -> str:
         """取得股票即時數據作為上下文"""

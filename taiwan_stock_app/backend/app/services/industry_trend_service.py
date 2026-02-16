@@ -1,5 +1,6 @@
 """
 Industry Trend Analysis Service - 產業趨勢分析
+支援備援機制: Gemini -> Groq -> 簡單數據分析
 """
 from typing import Dict, List, Optional
 from datetime import date, timedelta
@@ -10,6 +11,7 @@ from app.data_fetchers import FinMindFetcher
 from app.config import settings
 from app.database import SessionLocal
 from app.models import Stock
+from app.services.ai_suggestion_service import get_groq_client
 
 
 class IndustryTrendService:
@@ -222,21 +224,66 @@ class IndustryTrendService:
 
         full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
-        # 呼叫 Gemini API
+        # 1. 嘗試 Gemini
+        result = self._call_gemini(full_prompt)
+        if result is not None:
+            return result
+
+        # 2. Gemini 失敗，嘗試 Groq
+        print("Gemini industry analysis failed, trying Groq...")
+        result = self._call_groq(full_prompt)
+        if result is not None:
+            return result
+
+        # 3. 全部失敗，返回基於數據的簡單分析
+        print("All AI providers failed for industry analysis, using simple analysis")
+        return self._generate_simple_analysis(data)
+
+    def _call_gemini(self, prompt: str) -> Optional[Dict]:
+        """呼叫 Gemini API"""
         try:
             response = self.llm.generate_content(
-                full_prompt,
+                prompt,
                 generation_config=genai.types.GenerationConfig(
                     temperature=0.7,
                     response_mime_type="application/json",
                 )
             )
-            result = json.loads(response.text)
-            return result
+            return json.loads(response.text)
         except Exception as e:
-            print(f"AI 分析失敗: {e}")
-            # 返回基於數據的簡單分析
-            return self._generate_simple_analysis(data)
+            error_str = str(e)
+            if "429" in error_str or "quota" in error_str.lower():
+                print(f"Gemini quota exceeded (industry): {e}")
+            else:
+                print(f"Gemini industry analysis error: {e}")
+            return None
+
+    def _call_groq(self, prompt: str) -> Optional[Dict]:
+        """呼叫 Groq API"""
+        groq_client = get_groq_client()
+        if groq_client is None:
+            print("Groq client not available for industry analysis")
+            return None
+
+        try:
+            chat_completion = groq_client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": "你是一位專業的台股產業分析師，必須以 JSON 格式回覆。"},
+                    {"role": "user", "content": prompt}
+                ],
+                model=settings.GROQ_MODEL,
+                temperature=0.7,
+                response_format={"type": "json_object"},
+            )
+            response_text = chat_completion.choices[0].message.content
+            return json.loads(response_text)
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "rate" in error_str.lower():
+                print(f"Groq rate limit exceeded (industry): {e}")
+            else:
+                print(f"Groq industry analysis error: {e}")
+            return None
 
     def _generate_simple_analysis(self, data: Dict) -> Dict:
         """當 AI 分析失敗時，生成簡單的數據分析"""
