@@ -1,11 +1,11 @@
 {
-    "name": "taiwan_stock_app",
-    "short_name": "taiwan_stock_app",
+    "name": "台股智慧助手",
+    "short_name": "台股助手",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#1A237E",
+    "theme_color": "#1A237E",
+    "description": "AI 驅動的台灣股票分析與投資組合管理工具",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

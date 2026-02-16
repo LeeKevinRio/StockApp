@@ -142,7 +142,10 @@ class _AIPickItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final suggestionColor = _getSuggestionColor(pick.suggestion);
 
-    return InkWell(
+    return Semantics(
+      label: '${pick.stockId} ${pick.name}，建議${pick.suggestionText}，信心度${(pick.confidence * 100).toInt()}%',
+      button: true,
+      child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
@@ -223,6 +226,7 @@ class _AIPickItem extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 

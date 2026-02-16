@@ -85,36 +85,40 @@ class _QuickActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: item.color.withAlpha(25),
-                borderRadius: BorderRadius.circular(12),
+    return Semantics(
+      label: item.label,
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: item.color.withAlpha(25),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  item.icon,
+                  color: item.color,
+                  size: 24,
+                ),
               ),
-              child: Icon(
-                item.icon,
-                color: item.color,
-                size: 24,
+              const SizedBox(height: 8),
+              Text(
+                item.label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              item.label,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -136,58 +140,66 @@ class AlertStatusWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: triggeredToday > 0
-              ? Colors.red.withAlpha(20)
-              : Colors.grey.withAlpha(20),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
+    final statusText = triggeredToday > 0
+        ? '今日 $triggeredToday 個警報觸發，$activeCount 個警報啟用中'
+        : '警報監控中，$activeCount 個警報啟用中';
+
+    return Semantics(
+      label: statusText,
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
             color: triggeredToday > 0
-                ? Colors.red.withAlpha(50)
-                : Colors.grey.withAlpha(50),
+                ? Colors.red.withAlpha(20)
+                : Colors.grey.withAlpha(20),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: triggeredToday > 0
+                  ? Colors.red.withAlpha(50)
+                  : Colors.grey.withAlpha(50),
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              triggeredToday > 0
-                  ? Icons.notifications_active
-                  : Icons.notifications_outlined,
-              color: triggeredToday > 0 ? Colors.red : Colors.grey,
-              size: 20,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    triggeredToday > 0
-                        ? '今日 $triggeredToday 個警報觸發'
-                        : '警報監控中',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: triggeredToday > 0 ? Colors.red : Colors.grey.shade700,
-                    ),
-                  ),
-                  Text(
-                    '$activeCount 個警報啟用中',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
+          child: Row(
+            children: [
+              Icon(
+                triggeredToday > 0
+                    ? Icons.notifications_active
+                    : Icons.notifications_outlined,
+                color: triggeredToday > 0 ? Colors.red : Colors.grey,
+                size: 20,
               ),
-            ),
-            const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
-          ],
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      triggeredToday > 0
+                          ? '今日 $triggeredToday 個警報觸發'
+                          : '警報監控中',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: triggeredToday > 0 ? Colors.red : Colors.grey.shade700,
+                      ),
+                    ),
+                    Text(
+                      '$activeCount 個警報啟用中',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+            ],
+          ),
         ),
       ),
     );

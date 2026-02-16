@@ -30,21 +30,26 @@ class NotificationBadge extends StatelessWidget {
           return child;
         }
 
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            child,
-            Positioned(
-              right: -6,
-              top: -6,
-              child: _Badge(
-                count: count,
-                color: badgeColor ?? Theme.of(context).colorScheme.error,
-                textColor: textColor ?? Colors.white,
-                size: badgeSize,
+        return Semantics(
+          label: '$count 則未讀通知',
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              child,
+              Positioned(
+                right: -6,
+                top: -6,
+                child: ExcludeSemantics(
+                  child: _Badge(
+                    count: count,
+                    color: badgeColor ?? Theme.of(context).colorScheme.error,
+                    textColor: textColor ?? Colors.white,
+                    size: badgeSize,
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );

@@ -89,7 +89,7 @@ class MyApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
           return MaterialApp(
-            title: 'AI 投資建議',
+            title: '台股智慧助手',
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
@@ -176,16 +176,20 @@ class _SplashScreenState extends State<_SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.show_chart,
-              size: 64,
-              color: Theme.of(context).primaryColor,
+            Semantics(
+              label: '台股智慧助手載入中',
+              excludeSemantics: true,
+              child: Icon(
+                Icons.show_chart,
+                size: 64,
+                color: Theme.of(context).primaryColor,
+              ),
             ),
             const SizedBox(height: 16),
             const CircularProgressIndicator(),
             const SizedBox(height: 16),
             Text(
-              'AI 投資建議',
+              '台股智慧助手',
               style: Theme.of(context).textTheme.titleLarge,
             ),
           ],

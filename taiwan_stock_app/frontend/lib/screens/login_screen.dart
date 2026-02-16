@@ -126,10 +126,14 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
-                  Icons.trending_up,
-                  size: 64,
-                  color: Colors.blue,
+                Semantics(
+                  label: 'StockAI 應用程式標誌',
+                  excludeSemantics: true,
+                  child: const Icon(
+                    Icons.trending_up,
+                    size: 64,
+                    color: Colors.blue,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 const Text(
@@ -251,16 +255,20 @@ class _LoginScreenState extends State<LoginScreen> {
                       '登入即表示您同意 ',
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.pushNamed(context, '/terms');
-                      },
-                      child: const Text(
-                        '使用條款',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue,
-                          decoration: TextDecoration.underline,
+                    Semantics(
+                      label: '使用條款',
+                      link: true,
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.pushNamed(context, '/terms');
+                        },
+                        child: const Text(
+                          '使用條款',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue,
+                            decoration: TextDecoration.underline,
+                          ),
                         ),
                       ),
                     ),
@@ -268,16 +276,20 @@ class _LoginScreenState extends State<LoginScreen> {
                       ' 和 ',
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
-                    GestureDetector(
-                      onTap: () {
-                        Navigator.pushNamed(context, '/privacy');
-                      },
-                      child: const Text(
-                        '隱私權政策',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue,
-                          decoration: TextDecoration.underline,
+                    Semantics(
+                      label: '隱私權政策',
+                      link: true,
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.pushNamed(context, '/privacy');
+                        },
+                        child: const Text(
+                          '隱私權政策',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue,
+                            decoration: TextDecoration.underline,
+                          ),
                         ),
                       ),
                     ),
