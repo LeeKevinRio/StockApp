@@ -158,6 +158,7 @@ class _StockDetailScreenState extends State<StockDetailScreen>
         // 設定警報
         FloatingActionButton.small(
           heroTag: 'alert',
+          tooltip: '設定價格警報',
           backgroundColor: Colors.orange,
           onPressed: () => _showQuickAlertDialog(),
           child: const Icon(Icons.notifications_active, size: 20),
@@ -166,6 +167,7 @@ class _StockDetailScreenState extends State<StockDetailScreen>
         // 加入自選
         FloatingActionButton.small(
           heroTag: 'watchlist',
+          tooltip: '加入自選股',
           backgroundColor: Colors.amber,
           onPressed: () => _addToWatchlist(),
           child: const Icon(Icons.star_border, size: 20),
@@ -174,6 +176,7 @@ class _StockDetailScreenState extends State<StockDetailScreen>
         // 模擬交易
         FloatingActionButton(
           heroTag: 'trade',
+          tooltip: '模擬交易',
           onPressed: () {
             Navigator.push(
               context,

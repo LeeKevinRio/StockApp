@@ -149,10 +149,12 @@ class SettingsScreen extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionTitle('關於'),
-        const ListTile(
-          leading: Icon(Icons.info_outline),
-          title: Text('版本'),
-          trailing: Text('1.0.0', style: TextStyle(color: Colors.grey)),
+        ListTile(
+          leading: const Icon(Icons.info_outline),
+          title: const Text('關於台股智慧助手'),
+          subtitle: const Text('版本 1.0.0'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.pushNamed(context, '/about'),
         ),
         ListTile(
           leading: const Icon(Icons.privacy_tip_outlined),

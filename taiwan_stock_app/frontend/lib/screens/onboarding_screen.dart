@@ -10,8 +10,9 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _controller = PageController();
   int _currentPage = 0;
+  bool _disclaimerAccepted = false;
 
-  static const _pages = [
+  static const _featurePages = [
     _OnboardingPage(
       icon: Icons.show_chart,
       color: Colors.blue,
@@ -38,6 +39,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     ),
   ];
 
+  // 總頁數 = 功能頁 + 免責聲明頁
+  int get _totalPages => _featurePages.length + 1;
+  bool get _isDisclaimerPage => _currentPage == _totalPages - 1;
+
   @override
   void dispose() {
     _controller.dispose();
@@ -50,51 +55,30 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // 跳過按鈕
+            // 跳過按鈕（免責聲明頁不顯示）
             Align(
               alignment: Alignment.topRight,
-              child: TextButton(
-                onPressed: () => _goToLogin(),
-                child: const Text('跳過'),
-              ),
+              child: _isDisclaimerPage
+                  ? const SizedBox(height: 48)
+                  : TextButton(
+                      onPressed: () => _goToDisclaimer(),
+                      child: const Text('跳過'),
+                    ),
             ),
             // 頁面
             Expanded(
               child: PageView.builder(
                 controller: _controller,
-                itemCount: _pages.length,
+                itemCount: _totalPages,
                 onPageChanged: (i) => setState(() => _currentPage = i),
+                physics: _isDisclaimerPage
+                    ? const NeverScrollableScrollPhysics()
+                    : null,
                 itemBuilder: (ctx, i) {
-                  final p = _pages[i];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 120,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            color: p.color.withAlpha(30),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(p.icon, size: 60, color: p.color),
-                        ),
-                        const SizedBox(height: 40),
-                        Text(
-                          p.title,
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          p.subtitle,
-                          style: TextStyle(fontSize: 16, color: Colors.grey[600], height: 1.5),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  );
+                  if (i < _featurePages.length) {
+                    return _buildFeaturePage(_featurePages[i]);
+                  }
+                  return _buildDisclaimerPage();
                 },
               ),
             ),
@@ -106,14 +90,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   // 點點指示器
                   Row(
                     children: List.generate(
-                      _pages.length,
+                      _totalPages,
                       (i) => Container(
                         width: i == _currentPage ? 24 : 8,
                         height: 8,
                         margin: const EdgeInsets.only(right: 6),
                         decoration: BoxDecoration(
                           color: i == _currentPage
-                              ? Theme.of(context).primaryColor
+                              ? (_isDisclaimerPage
+                                  ? Colors.orange
+                                  : Theme.of(context).primaryColor)
                               : Colors.grey.shade300,
                           borderRadius: BorderRadius.circular(4),
                         ),
@@ -123,18 +109,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   const Spacer(),
                   // 下一步 / 開始按鈕
                   FilledButton(
-                    onPressed: () {
-                      if (_currentPage == _pages.length - 1) {
-                        _goToLogin();
-                      } else {
-                        _controller.nextPage(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                        );
-                      }
-                    },
+                    onPressed: _isDisclaimerPage
+                        ? (_disclaimerAccepted ? _goToLogin : null)
+                        : _nextPage,
                     child: Text(
-                      _currentPage == _pages.length - 1 ? '開始使用' : '下一步',
+                      _isDisclaimerPage ? '我已瞭解，開始使用' : '下一步',
                     ),
                   ),
                 ],
@@ -143,6 +122,125 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildFeaturePage(_OnboardingPage p) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 40),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              color: p.color.withAlpha(30),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(p.icon, size: 60, color: p.color),
+          ),
+          const SizedBox(height: 40),
+          Text(
+            p.title,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            p.subtitle,
+            style: TextStyle(fontSize: 16, color: Colors.grey[600], height: 1.5),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDisclaimerPage() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        children: [
+          const SizedBox(height: 24),
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              color: Colors.orange.withAlpha(30),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.warning_amber_rounded,
+                size: 50, color: Colors.orange),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            '投資風險聲明',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.orange.withAlpha(15),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.withAlpha(50)),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _DisclaimerItem(
+                  text: '本應用程式提供之所有資訊與 AI 分析結果僅供參考，'
+                      '不構成任何投資建議或要約。',
+                ),
+                SizedBox(height: 12),
+                _DisclaimerItem(
+                  text: '投資涉及風險，過去的表現不代表未來的結果。'
+                      '您可能損失部分或全部投入的資金。',
+                ),
+                SizedBox(height: 12),
+                _DisclaimerItem(
+                  text: '在做出任何投資決策前，請諮詢合格的財務顧問，'
+                      '並評估個人風險承受能力。',
+                ),
+                SizedBox(height: 12),
+                _DisclaimerItem(
+                  text: '本應用程式並非經政府核准之投資顧問服務，'
+                      '使用者須年滿 18 歲。',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          CheckboxListTile(
+            value: _disclaimerAccepted,
+            onChanged: (v) => setState(() => _disclaimerAccepted = v ?? false),
+            title: const Text(
+              '我已閱讀並瞭解上述投資風險聲明',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  void _nextPage() {
+    _controller.nextPage(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _goToDisclaimer() {
+    _controller.animateToPage(
+      _totalPages - 1,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
     );
   }
 
@@ -163,4 +261,30 @@ class _OnboardingPage {
     required this.title,
     required this.subtitle,
   });
+}
+
+class _DisclaimerItem extends StatelessWidget {
+  final String text;
+
+  const _DisclaimerItem({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('⚠ ', style: TextStyle(fontSize: 14)),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade800,
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
