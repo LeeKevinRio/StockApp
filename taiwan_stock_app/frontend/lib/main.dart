@@ -12,6 +12,8 @@ import 'providers/market_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/dashboard_provider.dart';
 import 'providers/portfolio_provider.dart';
+import 'providers/connectivity_provider.dart';
+import 'widgets/common/offline_banner.dart';
 import 'screens/notification_center_screen.dart';
 import 'config/app_theme.dart';
 import 'utils/page_transitions.dart';
@@ -85,6 +87,9 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => PortfolioProvider(apiService),
         ),
+        ChangeNotifierProvider(
+          create: (_) => ConnectivityProvider(),
+        ),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
@@ -98,7 +103,7 @@ class MyApp extends StatelessWidget {
             routes: {
               '/splash': (context) => const _SplashScreen(),
               '/login': (context) => const LoginScreen(),
-              '/home': (context) => const HomeScreen(),
+              '/home': (context) => const OfflineBanner(child: HomeScreen()),
               '/search': (context) => const StockSearchScreen(),
               '/alerts': (context) => const AlertsScreen(),
               '/portfolio': (context) => const PortfolioScreen(),
