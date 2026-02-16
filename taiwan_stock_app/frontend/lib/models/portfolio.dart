@@ -357,6 +357,84 @@ class CreatePortfolioRequest {
   }
 }
 
+/// 投資組合詳情（含持股列表）
+class PortfolioDetail {
+  final int id;
+  final String name;
+  final String? description;
+  final double totalValue;
+  final double totalCost;
+  final double totalPnl;
+  final double totalPnlPercent;
+  final List<PortfolioHolding> holdings;
+
+  PortfolioDetail({
+    required this.id,
+    required this.name,
+    this.description,
+    required this.totalValue,
+    required this.totalCost,
+    required this.totalPnl,
+    required this.totalPnlPercent,
+    required this.holdings,
+  });
+
+  factory PortfolioDetail.fromPortfolioAndPositions(
+    Portfolio portfolio,
+    List<Position> positions,
+  ) {
+    return PortfolioDetail(
+      id: portfolio.id,
+      name: portfolio.name,
+      description: portfolio.description,
+      totalValue: portfolio.totalValue,
+      totalCost: portfolio.totalCost,
+      totalPnl: portfolio.totalPnl,
+      totalPnlPercent: portfolio.totalPnlPercent,
+      holdings: positions.map((p) => PortfolioHolding.fromPosition(p)).toList(),
+    );
+  }
+}
+
+/// 投資組合持股
+class PortfolioHolding {
+  final int id;
+  final String stockId;
+  final String? stockName;
+  final int quantity;
+  final double avgCost;
+  final double? currentPrice;
+  final double? marketValue;
+  final double? unrealizedPnl;
+  final double? unrealizedPnlPercent;
+
+  PortfolioHolding({
+    required this.id,
+    required this.stockId,
+    this.stockName,
+    required this.quantity,
+    required this.avgCost,
+    this.currentPrice,
+    this.marketValue,
+    this.unrealizedPnl,
+    this.unrealizedPnlPercent,
+  });
+
+  factory PortfolioHolding.fromPosition(Position position) {
+    return PortfolioHolding(
+      id: position.id,
+      stockId: position.stockId,
+      stockName: position.stockName,
+      quantity: position.quantity,
+      avgCost: position.avgCost,
+      currentPrice: position.currentPrice,
+      marketValue: position.marketValue,
+      unrealizedPnl: position.unrealizedPnl,
+      unrealizedPnlPercent: position.unrealizedPnlPercent,
+    );
+  }
+}
+
 /// 創建交易請求
 class CreateTransactionRequest {
   final String stockId;

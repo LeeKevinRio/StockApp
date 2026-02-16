@@ -551,13 +551,10 @@ class _PortfolioDetailScreenState extends State<PortfolioDetailScreen>
                   children: [
                     const Text('持股損益排行', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     const Divider(),
-                    ..._detail!.holdings
+                    ...(_detail!.holdings
                         .where((h) => h.unrealizedPnl != null)
                         .toList()
-                      ..sort((a, b) => (b.unrealizedPnl ?? 0).compareTo(a.unrealizedPnl ?? 0)),
-                    ..._detail!.holdings
-                        .where((h) => h.unrealizedPnl != null)
-                        .toList()
+                      ..sort((a, b) => (b.unrealizedPnl ?? 0).compareTo(a.unrealizedPnl ?? 0)))
                         .map((h) {
                       final pnl = h.unrealizedPnl ?? 0;
                       final pct = h.unrealizedPnlPercent ?? 0;

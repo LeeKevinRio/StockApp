@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:web_socket_channel/web_socket_channel.dart';
 import '../config/app_config.dart';
 import '../models/stock.dart';
 import '../models/watchlist_item.dart';
@@ -7,8 +8,10 @@ import '../models/ai_suggestion.dart';
 import '../models/stock_history.dart';
 import '../models/indicator_data.dart';
 import '../models/portfolio.dart'
-    show Portfolio, Position, Transaction, PortfolioSummary, PositionAllocation,
-         CreatePortfolioRequest, CreateTransactionRequest;
+    show Portfolio, Position, Transaction, TransactionType, PortfolioSummary,
+         PositionAllocation, CreatePortfolioRequest, CreateTransactionRequest,
+         PortfolioDetail, PortfolioHolding;
+import '../models/performance.dart';
 import '../models/alert.dart' show PriceAlert, CreateAlertRequest;
 import '../models/trading.dart';
 import '../models/social_sentiment.dart';
@@ -1054,6 +1057,57 @@ class ApiService {
     );
     _checkResponse(response);
     return jsonDecode(response.body);
+  }
+
+  // ==================== WebSocket ====================
+
+  WebSocketChannel connectWebSocket() {
+    final wsUrl = baseUrl.replaceFirst('http', 'ws');
+    final token = _authToken ?? '';
+    return WebSocketChannel.connect(Uri.parse('$wsUrl/api/alerts/ws/$token'));
+  }
+
+  // ==================== 投資組合詳情 ====================
+
+  Future<PortfolioDetail> getPortfolioDetail(int portfolioId) async {
+    final portfolio = await getPortfolio(portfolioId);
+    final positions = await getPositions(portfolioId);
+    return PortfolioDetail.fromPortfolioAndPositions(portfolio, positions);
+  }
+
+  Future<void> addPortfolioHolding(
+    int portfolioId,
+    String stockId,
+    int quantity,
+    double avgCost,
+    DateTime buyDate,
+  ) async {
+    await addTransaction(
+      portfolioId,
+      CreateTransactionRequest(
+        stockId: stockId,
+        stockName: stockId,
+        transactionType: TransactionType.buy,
+        quantity: quantity,
+        price: avgCost,
+        transactionDate: buyDate,
+      ),
+    );
+  }
+
+  Future<void> deletePortfolioHolding(int holdingId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/portfolios/positions/$holdingId'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+  }
+
+  // ==================== AI 績效 ====================
+
+  Future<PerformanceReport> getAIPerformance({int days = 30}) async {
+    final data = await getPredictionStatistics(days: days);
+    return PerformanceReport.fromJson(data);
   }
 
   // ==================== 錯誤處理 ====================
