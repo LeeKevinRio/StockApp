@@ -2,8 +2,11 @@
 Application configuration
 """
 import os
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Load .env file
 env_path = Path(__file__).parent.parent / ".env"
@@ -48,7 +51,17 @@ class Settings:
     FRED_API_KEY: str = os.getenv("FRED_API_KEY", "")
 
     # CORS
-    CORS_ORIGINS: list = ["http://localhost:3000", "http://localhost:8080"]
+    CORS_ORIGINS: list = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://localhost:8080,http://localhost:5000"
+    ).split(",")
 
 
 settings = Settings()
+
+# 安全警告：檢查 JWT 密鑰是否為預設值
+_DEFAULT_SECRETS = {"your-secret-key-change-in-production", "your_jwt_secret_key_change_in_production", ""}
+if settings.JWT_SECRET in _DEFAULT_SECRETS:
+    logger.warning(
+        "⚠️  JWT_SECRET 使用預設值，請在 .env 中設定安全的隨機密鑰！"
+    )
