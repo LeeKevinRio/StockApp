@@ -32,8 +32,11 @@ class StockDetailScreen extends StatefulWidget {
 }
 
 class _StockDetailScreenState extends State<StockDetailScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late TabController _tabController;
+  late AnimationController _fabAnimController;
+  late Animation<double> _fabAnimation;
+  bool _fabExpanded = false;
   Stock? _stock;
   bool _isLoading = true;
   String? _error;
@@ -46,13 +49,33 @@ class _StockDetailScreenState extends State<StockDetailScreen>
     super.initState();
     // 10 tabs for TW stocks (with 籌碼), 9 tabs for US stocks (without 籌碼)
     _tabController = TabController(length: isUSStock ? 9 : 10, vsync: this);
+    _fabAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _fabAnimation = CurvedAnimation(
+      parent: _fabAnimController,
+      curve: Curves.easeInOut,
+    );
     _loadStockData();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _fabAnimController.dispose();
     super.dispose();
+  }
+
+  void _toggleFAB() {
+    setState(() {
+      _fabExpanded = !_fabExpanded;
+      if (_fabExpanded) {
+        _fabAnimController.forward();
+      } else {
+        _fabAnimController.reverse();
+      }
+    });
   }
 
   Future<void> _loadStockData() async {
@@ -154,38 +177,107 @@ class _StockDetailScreenState extends State<StockDetailScreen>
   Widget _buildQuickActionsFAB() {
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // 設定警報
-        FloatingActionButton.small(
-          heroTag: 'alert',
-          tooltip: '設定價格警報',
-          backgroundColor: Colors.orange,
-          onPressed: () => _showQuickAlertDialog(),
-          child: const Icon(Icons.notifications_active, size: 20),
+        // 展開的子按鈕
+        SizeTransition(
+          sizeFactor: _fabAnimation,
+          axisAlignment: -1,
+          child: FadeTransition(
+            opacity: _fabAnimation,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // 設定警報
+                _buildMiniAction(
+                  label: '價格警報',
+                  icon: Icons.notifications_active,
+                  color: Colors.orange,
+                  onTap: () {
+                    _toggleFAB();
+                    _showQuickAlertDialog();
+                  },
+                ),
+                const SizedBox(height: 10),
+                // 加入自選
+                _buildMiniAction(
+                  label: '加入自選',
+                  icon: Icons.star_border,
+                  color: Colors.amber,
+                  onTap: () {
+                    _toggleFAB();
+                    _addToWatchlist();
+                  },
+                ),
+                const SizedBox(height: 10),
+                // 模擬交易
+                _buildMiniAction(
+                  label: '模擬交易',
+                  icon: Icons.swap_horiz,
+                  color: const Color(0xFF66BB6A),
+                  onTap: () {
+                    _toggleFAB();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const TradingScreen(),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
         ),
-        const SizedBox(height: 8),
-        // 加入自選
-        FloatingActionButton.small(
-          heroTag: 'watchlist',
-          tooltip: '加入自選股',
-          backgroundColor: Colors.amber,
-          onPressed: () => _addToWatchlist(),
-          child: const Icon(Icons.star_border, size: 20),
-        ),
-        const SizedBox(height: 8),
-        // 模擬交易
+        // 主按鈕
         FloatingActionButton(
-          heroTag: 'trade',
-          tooltip: '模擬交易',
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const TradingScreen(),
-              ),
-            );
-          },
-          child: const Icon(Icons.swap_horiz),
+          heroTag: 'main_fab',
+          tooltip: '快捷操作',
+          onPressed: _toggleFAB,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            transitionBuilder: (child, animation) => RotationTransition(
+              turns: Tween(begin: 0.5, end: 1.0).animate(animation),
+              child: child,
+            ),
+            child: Icon(
+              _fabExpanded ? Icons.close : Icons.flash_on,
+              key: ValueKey(_fabExpanded),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMiniAction({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E272E),
+            borderRadius: BorderRadius.circular(6),
+            boxShadow: const [
+              BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+            ],
+          ),
+          child: Text(label, style: const TextStyle(fontSize: 12, color: Colors.white)),
+        ),
+        const SizedBox(width: 8),
+        FloatingActionButton.small(
+          heroTag: label,
+          backgroundColor: color,
+          onPressed: onTap,
+          child: Icon(icon, size: 20),
         ),
       ],
     );

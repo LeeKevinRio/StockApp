@@ -43,11 +43,13 @@ class _ComprehensiveAnalysisViewState extends State<ComprehensiveAnalysisView> {
         widget.stockId,
         market: widget.market,
       );
+      if (!mounted) return;
       setState(() {
         _analysis = ComprehensiveAnalysis.fromJson(data);
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
