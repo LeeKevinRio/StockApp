@@ -1,0 +1,7 @@
+# App Store Connect 設定
+# 取得 Apple Developer 帳號後填入
+
+app_identifier("com.stockai.app")    # Bundle ID
+# apple_id("your@email.com")         # Apple ID
+# itc_team_id("123456789")           # App Store Connect Team ID
+# team_id("XXXXXXXXXX")              # Developer Portal Team ID

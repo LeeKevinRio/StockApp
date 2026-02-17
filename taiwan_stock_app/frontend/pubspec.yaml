@@ -42,6 +42,14 @@ dev_dependencies:
   mockito: ^5.4.0
   mocktail: ^1.0.0
   build_runner: ^2.4.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "web/icons/Icon-512.png"
+  adaptive_icon_background: "#1a73e8"
+  adaptive_icon_foreground: "web/icons/Icon-512.png"
 
 flutter:
   uses-material-design: true

@@ -1,0 +1,8 @@
+1.0.0 Initial Release
+
+- AI-powered stock analysis reports
+- Real-time Taiwan stock quotes and watchlist
+- Portfolio management with P&L tracking
+- Trading diary and strategy notes
+- Market overview and financial calendar
+- Google Sign-In for quick access

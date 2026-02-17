@@ -1,0 +1,41 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "上傳至 TestFlight 進行內測"
+  lane :beta do
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "Runner",
+      export_method: "app-store",
+      clean: true,
+    )
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+    )
+  end
+
+  desc "提交至 App Store 審核"
+  lane :release do
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "Runner",
+      export_method: "app-store",
+      clean: true,
+    )
+    upload_to_app_store(
+      force: true,
+      submit_for_review: false,
+      automatic_release: false,
+      precheck_include_in_app_purchases: false,
+    )
+  end
+
+  desc "截圖自動化（需 macOS + 模擬器）"
+  lane :screenshots do
+    capture_screenshots
+    upload_to_app_store(
+      skip_binary_upload: true,
+      skip_metadata: true,
+    )
+  end
+end

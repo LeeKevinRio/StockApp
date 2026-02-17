@@ -12,17 +12,28 @@ logger = logging.getLogger(__name__)
 # 使用絕對路徑，避免工作目錄不同導致連到不同 DB
 _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _raw_url = os.getenv("DATABASE_URL", "sqlite:///./taiwan_stock.db")
+
+# Railway 給 postgres://，SQLAlchemy 2.x 要求 postgresql://
+if _raw_url.startswith("postgres://"):
+    _raw_url = _raw_url.replace("postgres://", "postgresql://", 1)
+
 if _raw_url.startswith("sqlite:///./"):
     _db_filename = _raw_url.replace("sqlite:///./", "")
     DATABASE_URL = f"sqlite:///{os.path.join(_backend_dir, _db_filename)}"
 else:
     DATABASE_URL = _raw_url
 
-# SQLite 需要特殊的連接參數
+# 根據資料庫類型設定引擎參數
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
-    engine = create_engine(DATABASE_URL)
+    # PostgreSQL 連線池設定（適用於生產環境）
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=5,
+        max_overflow=10,
+        pool_pre_ping=True,
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

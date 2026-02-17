@@ -1,0 +1,32 @@
+Stock AI Assistant — Your Intelligent Investment Partner
+
+Leverage artificial intelligence to get in-depth analysis reports for Taiwan and US stocks, helping you make smarter investment decisions.
+
+KEY FEATURES
+
+AI Smart Analysis
+- One-tap AI analysis reports covering fundamentals, technicals, and market sentiment
+- Smart stock screener with multi-dimensional filtering
+- AI chat assistant for instant investment Q&A
+
+Real-Time Quotes
+- Live Taiwan stock prices and charts
+- Organized watchlist groups for quick tracking
+- Price alerts so you never miss a trade
+
+Portfolio Management
+- Multi-account portfolio tracking
+- Real-time P&L calculation and performance metrics
+- Visual asset allocation analysis
+
+Trading Diary
+- Record strategy and insights for every trade
+- Review and refine your investment approach
+
+Market Overview
+- Market trends and sentiment indicators
+- Financial calendar for important events
+- Industry news and stock updates
+
+DISCLAIMER
+All AI analysis provided by this app is for informational purposes only and does not constitute investment advice or recommendations. Investing involves risk, and past performance does not guarantee future returns. Users should assess risks independently and take responsibility for their investment decisions. Please consult a qualified financial advisor before investing.
