@@ -84,8 +84,8 @@ class _HomeScreenState extends State<HomeScreen> {
           return BottomNavigationBar(
             type: BottomNavigationBarType.fixed,
             currentIndex: _selectedIndex,
-            selectedItemColor: isUS ? Colors.indigo : Colors.blue,
-            unselectedItemColor: Colors.grey,
+            selectedItemColor: Theme.of(context).colorScheme.primary,
+            unselectedItemColor: Theme.of(context).textTheme.bodySmall?.color,
             onTap: (index) {
               setState(() {
                 _selectedIndex = index;
@@ -124,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 final user = authProvider.user;
                 return DrawerHeader(
                   decoration: BoxDecoration(
-                    color: marketProvider.isUSMarket ? Colors.indigo : Colors.blue,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

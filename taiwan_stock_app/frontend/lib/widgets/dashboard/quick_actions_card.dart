@@ -184,14 +184,14 @@ class AlertStatusWidget extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: triggeredToday > 0 ? Colors.red : Colors.grey.shade700,
+                        color: triggeredToday > 0 ? Colors.red : Theme.of(context).textTheme.bodyMedium?.color ?? Colors.grey,
                       ),
                     ),
                     Text(
                       '$activeCount 個警報啟用中',
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.grey.shade600,
+                        color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                       ),
                     ),
                   ],

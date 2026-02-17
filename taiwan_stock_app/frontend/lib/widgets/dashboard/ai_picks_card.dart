@@ -85,7 +85,7 @@ class AIPicksCard extends StatelessWidget {
                     Text(
                       'AI 分析中...',
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                         fontSize: 13,
                       ),
                     ),
@@ -107,7 +107,7 @@ class AIPicksCard extends StatelessWidget {
                     Text(
                       '請先新增自選股，AI 將自動分析推薦',
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                         fontSize: 13,
                       ),
                     ),
@@ -153,7 +153,7 @@ class _AIPickItem extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: Colors.grey.shade200,
+              color: Theme.of(context).dividerTheme.color ?? Colors.grey,
               width: 0.5,
             ),
           ),
@@ -177,7 +177,7 @@ class _AIPickItem extends StatelessWidget {
                   Text(
                     pick.shortReason,
                     style: TextStyle(
-                      color: Colors.grey.shade600,
+                      color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                       fontSize: 12,
                     ),
                     maxLines: 1,
@@ -215,7 +215,7 @@ class _AIPickItem extends StatelessWidget {
                     Text(
                       '${(pick.confidence * 100).toInt()}%',
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                         fontSize: 11,
                       ),
                     ),
@@ -255,7 +255,7 @@ class _ConfidenceBar extends StatelessWidget {
       width: 40,
       height: 4,
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: Theme.of(context).dividerTheme.color ?? Colors.grey,
         borderRadius: BorderRadius.circular(2),
       ),
       child: FractionallySizedBox(

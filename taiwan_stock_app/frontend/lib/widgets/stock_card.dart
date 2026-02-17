@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/watchlist_item.dart';
+import '../config/app_theme.dart';
 
 class StockCard extends StatelessWidget {
   final WatchlistItem stock;
@@ -15,16 +16,14 @@ class StockCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final priceColor = stock.isUp
-        ? Colors.red
-        : stock.isDown
-            ? Colors.green
-            : Colors.grey;
+    final theme = Theme.of(context);
+    final priceColor = AppTheme.getStockColor(stock.changePercent);
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -37,7 +36,7 @@ class StockCard extends StatelessWidget {
                   children: [
                     Text(
                       '${stock.stockId} ${stock.name}',
-                      style: const TextStyle(
+                      style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
                       ),
@@ -46,10 +45,7 @@ class StockCard extends StatelessWidget {
                     if (stock.industry != null)
                       Text(
                         stock.industry!,
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 12,
-                        ),
+                        style: theme.textTheme.bodySmall,
                       ),
                   ],
                 ),
@@ -84,7 +80,10 @@ class StockCard extends StatelessWidget {
                             ),
                             Text(
                               '${stock.changePercent! >= 0 ? '+' : ''}${stock.changePercent!.toStringAsFixed(2)}%',
-                              style: TextStyle(color: priceColor),
+                              style: TextStyle(
+                                color: priceColor,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
                         ),
@@ -94,7 +93,8 @@ class StockCard extends StatelessWidget {
               // 刪除按鈕
               if (onDelete != null)
                 IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.grey),
+                  icon: Icon(Icons.delete_outline,
+                      color: theme.textTheme.bodySmall?.color),
                   onPressed: onDelete,
                 ),
             ],

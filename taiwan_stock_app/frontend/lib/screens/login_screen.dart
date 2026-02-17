@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../config/app_config.dart';
+import '../config/app_theme.dart';
 import '../providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -67,7 +68,6 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
-        // User cancelled the sign-in
         setState(() {
           _isGoogleLoading = false;
         });
@@ -77,7 +77,6 @@ class _LoginScreenState extends State<LoginScreen> {
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
-      // 優先使用 idToken，若無則使用 accessToken
       final String? idToken = googleAuth.idToken;
       final String? accessToken = googleAuth.accessToken;
 
@@ -86,7 +85,6 @@ class _LoginScreenState extends State<LoginScreen> {
       if (idToken != null) {
         await authProvider.googleLogin(idToken);
       } else if (accessToken != null) {
-        // 使用 accessToken 登入
         await authProvider.googleLoginWithAccessToken(
           accessToken: accessToken,
           email: googleUser.email,
@@ -117,6 +115,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -126,31 +127,45 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                // Logo
                 Semantics(
                   label: 'StockAI 應用程式標誌',
                   excludeSemantics: true,
-                  child: const Icon(
-                    Icons.trending_up,
-                    size: 64,
-                    color: Colors.blue,
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withAlpha(20),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Icon(
+                      Icons.trending_up,
+                      size: 48,
+                      color: colorScheme.primary,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  'StockAI',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                const SizedBox(height: 20),
+                Text(
+                  '台股智慧助手',
+                  style: theme.textTheme.headlineMedium,
                 ),
-                const Text(
-                  'Smart Investment Assistant',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                const SizedBox(height: 4),
+                Text(
+                  'AI 驅動投資分析',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.textTheme.bodySmall?.color,
+                  ),
                 ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 40),
+
+                // 帳號
                 TextFormField(
                   controller: _emailController,
                   decoration: const InputDecoration(
                     labelText: '帳號',
-                    hintText: '任意字串皆可',
-                    border: OutlineInputBorder(),
+                    hintText: '輸入帳號名稱',
+                    prefixIcon: Icon(Icons.person_outline),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -160,11 +175,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
+
+                // 密碼
                 TextFormField(
                   controller: _passwordController,
                   decoration: const InputDecoration(
                     labelText: '密碼',
-                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock_outline),
                   ),
                   obscureText: true,
                   validator: (value) {
@@ -175,6 +192,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
                 const SizedBox(height: 24),
+
+                // 登入/註冊按鈕
                 Consumer<AuthProvider>(
                   builder: (context, auth, child) {
                     return SizedBox(
@@ -183,7 +202,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: ElevatedButton(
                         onPressed: auth.isLoading ? null : _submit,
                         child: auth.isLoading
-                            ? const CircularProgressIndicator()
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
                             : Text(_isLogin ? '登入' : '註冊'),
                       ),
                     );
@@ -197,21 +223,25 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                   child: Text(_isLogin ? '還沒有帳號？註冊' : '已有帳號？登入'),
                 ),
-                const SizedBox(height: 24),
-                const Row(
+                const SizedBox(height: 16),
+
+                // 分隔線
+                Row(
                   children: [
-                    Expanded(child: Divider()),
+                    const Expanded(child: Divider()),
                     Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
                         '或',
-                        style: TextStyle(color: Colors.grey),
+                        style: theme.textTheme.bodySmall,
                       ),
                     ),
-                    Expanded(child: Divider()),
+                    const Expanded(child: Divider()),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+
+                // Google 登入
                 SizedBox(
                   width: double.infinity,
                   height: 48,
@@ -232,62 +262,56 @@ class _LoginScreenState extends State<LoginScreen> {
                             },
                           ),
                     label: const Text('使用 Google 帳號登入'),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.grey),
-                    ),
                   ),
                 ),
-                const SizedBox(height: 32),
-                const Text(
+                const SizedBox(height: 24),
+
+                // 版本資訊
+                Text(
                   '免費版使用 Gemini Flash 模型\nPro 版使用 Gemini Pro 模型',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
-                  ),
+                  style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
                 ),
                 const SizedBox(height: 16),
+
+                // 條款連結
                 Wrap(
                   alignment: WrapAlignment.center,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    const Text(
+                    Text(
                       '登入即表示您同意 ',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
                     ),
                     Semantics(
                       label: '使用條款',
                       link: true,
                       child: GestureDetector(
-                        onTap: () {
-                          Navigator.pushNamed(context, '/terms');
-                        },
-                        child: const Text(
+                        onTap: () => Navigator.pushNamed(context, '/terms'),
+                        child: Text(
                           '使用條款',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.blue,
+                            color: colorScheme.primary,
                             decoration: TextDecoration.underline,
                           ),
                         ),
                       ),
                     ),
-                    const Text(
+                    Text(
                       ' 和 ',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
                     ),
                     Semantics(
                       label: '隱私權政策',
                       link: true,
                       child: GestureDetector(
-                        onTap: () {
-                          Navigator.pushNamed(context, '/privacy');
-                        },
-                        child: const Text(
+                        onTap: () => Navigator.pushNamed(context, '/privacy'),
+                        child: Text(
                           '隱私權政策',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.blue,
+                            color: colorScheme.primary,
                             decoration: TextDecoration.underline,
                           ),
                         ),

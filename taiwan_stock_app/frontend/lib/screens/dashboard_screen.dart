@@ -230,10 +230,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Center(
             child: Text(
               isUS ? 'US Market Data' : '台股市場數據',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade500,
-              ),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
           const SizedBox(height: 8),

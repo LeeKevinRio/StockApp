@@ -53,7 +53,7 @@ class MarketOverviewCard extends StatelessWidget {
                     _formatTime(data.updateTime),
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey.shade600,
+                      color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
                     ),
                   ),
                 ],
@@ -202,7 +202,7 @@ class _StatItem extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 12,
-              color: Colors.grey.shade600,
+              color: Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey,
             ),
           ),
         ],

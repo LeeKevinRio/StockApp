@@ -33,15 +33,15 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  Widget _buildSectionTitle(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.bold,
-          color: Colors.grey,
+          color: Theme.of(context).colorScheme.primary,
         ),
       ),
     );
@@ -54,7 +54,7 @@ class SettingsScreen extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionTitle('個人資料'),
+            _buildSectionTitle(context, '個人資料'),
             ListTile(
               leading: CircleAvatar(
                 radius: 24,
@@ -96,7 +96,7 @@ class SettingsScreen extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionTitle('外觀'),
+            _buildSectionTitle(context, '外觀'),
             ListTile(
               leading: Icon(theme.themeModeIcon),
               title: const Text('主題模式'),
@@ -128,7 +128,7 @@ class SettingsScreen extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionTitle('偏好設定'),
+            _buildSectionTitle(context, '偏好設定'),
             ListTile(
               leading: const Icon(Icons.language),
               title: const Text('預設市場'),
@@ -148,7 +148,7 @@ class SettingsScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle('關於'),
+        _buildSectionTitle(context, '關於'),
         ListTile(
           leading: const Icon(Icons.info_outline),
           title: const Text('關於台股智慧助手'),
@@ -176,7 +176,7 @@ class SettingsScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle('帳號'),
+        _buildSectionTitle(context, '帳號'),
         ListTile(
           leading: const Icon(Icons.logout, color: Colors.orange),
           title: const Text('登出'),
