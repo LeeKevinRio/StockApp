@@ -1,10 +1,21 @@
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
 class AppConfig {
-  static const String apiBaseUrl = String.fromEnvironment(
+  /// 編譯時指定的 API URL（生產環境用）
+  static const String _envApiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:8000',
+    defaultValue: '',
   );
+
+  /// 根據平台自動選擇 API base URL
+  /// Android 模擬器的 localhost 指向模擬器自己，要用 10.0.2.2 連 host
+  static String get apiBaseUrl {
+    if (_envApiBaseUrl.isNotEmpty) return _envApiBaseUrl;
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return 'http://10.0.2.2:8000';
+    }
+    return 'http://localhost:8000';
+  }
 
   /// Web 用 Google Client ID
   static const String _webGoogleClientId = String.fromEnvironment(
