@@ -151,7 +151,9 @@ def get_today_predictions(
     current_user: User = Depends(get_current_user),
 ):
     """
-    獲取今日預測結果（目標日期為今天的預測，自動更新實際結果）
+    獲取今日預測結果：
+    1. 目標日期為今天的預測（已到期，可驗證）
+    2. 今天產生的預測（pending，尚未到期）
     """
     # 自動更新尚未驗證的預測結果
     try:
@@ -159,4 +161,13 @@ def get_today_predictions(
     except Exception as e:
         print(f"Auto-update prediction results failed: {e}")
 
-    return tracker.get_daily_summary(db=db, target_date=date.today())
+    # 目標日期為今天的（可驗證的）
+    target_today = tracker.get_daily_summary(db=db, target_date=date.today())
+
+    # 今天產生的預測（包含尚未到期的）
+    made_today = tracker.get_predictions_made_on(db=db, prediction_date=date.today())
+
+    return {
+        **target_today,
+        "made_today": made_today,
+    }

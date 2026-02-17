@@ -426,3 +426,45 @@ class PredictionTracker:
             "direction_accuracy": accuracy,
             "predictions": predictions
         }
+
+    def get_predictions_made_on(self, db: Session, prediction_date: date = None) -> list:
+        """
+        取得某天產生的所有預測（不論 target_date）
+
+        Args:
+            db: Database session
+            prediction_date: 預測產生日期
+        """
+        if prediction_date is None:
+            prediction_date = date.today()
+
+        records = db.query(PredictionRecord).filter(
+            PredictionRecord.prediction_date == prediction_date
+        ).all()
+
+        results = []
+        for r in records:
+            pred = {
+                "stock_id": r.stock_id,
+                "stock_name": r.stock_name,
+                "market": r.market_region,
+                "prediction_date": r.prediction_date.isoformat(),
+                "target_date": r.target_date.isoformat(),
+                "predicted_direction": r.predicted_direction,
+                "predicted_change": float(r.predicted_change_percent or 0),
+                "predicted_probability": float(r.predicted_probability or 0),
+                "base_price": float(r.base_close_price or 0),
+                "ai_provider": r.ai_provider,
+                "status": "verified" if r.actual_close_price is not None else "pending",
+            }
+            if r.actual_close_price is not None:
+                pred.update({
+                    "actual_close": float(r.actual_close_price),
+                    "actual_change": float(r.actual_change_percent or 0),
+                    "actual_direction": r.actual_direction,
+                    "direction_correct": r.direction_correct,
+                    "error_percent": float(r.error_percent or 0),
+                })
+            results.append(pred)
+
+        return results

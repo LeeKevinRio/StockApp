@@ -664,7 +664,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
           const SizedBox(height: 16),
           // 整體統計卡片
           Card(
-            color: Colors.green.shade50,
+            color: const Color(0xFF1B3A2D),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -752,13 +752,13 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       child: ExpansionTile(
         leading: CircleAvatar(
-          backgroundColor: accuracy >= 50 ? Colors.green.shade100 : Colors.red.shade100,
+          backgroundColor: accuracy >= 50 ? const Color(0xFF1B3A2D) : const Color(0xFF3A1B1B),
           child: Text(
             '${accuracy.toInt()}%',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,
-              color: accuracy >= 50 ? Colors.green.shade700 : Colors.red.shade700,
+              color: accuracy >= 50 ? Colors.green : Colors.red,
             ),
           ),
         ),
@@ -772,14 +772,14 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: market == 'US' ? Colors.blue.shade100 : Colors.orange.shade100,
+                color: market == 'US' ? Colors.blue.withValues(alpha: 0.2) : Colors.orange.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
                 market,
                 style: TextStyle(
                   fontSize: 10,
-                  color: market == 'US' ? Colors.blue.shade700 : Colors.orange.shade700,
+                  color: market == 'US' ? Colors.blue : Colors.orange,
                 ),
               ),
             ),
@@ -999,13 +999,13 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
                     horizontalLines: [
                       HorizontalLine(
                         y: 50,
-                        color: Colors.red.shade200,
+                        color: Colors.red.withValues(alpha: 0.5),
                         strokeWidth: 1,
                         dashArray: [5, 5],
                         label: HorizontalLineLabel(
                           show: true,
                           alignment: Alignment.topRight,
-                          style: TextStyle(fontSize: 9, color: Colors.red.shade300),
+                          style: TextStyle(fontSize: 9, color: Colors.red.withValues(alpha: 0.7)),
                           labelResolver: (_) => '50%',
                         ),
                       ),
@@ -1163,7 +1163,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
                     horizontalLines: [
                       HorizontalLine(
                         y: 0,
-                        color: Colors.grey.shade400,
+                        color: const Color(0xFF455A64),
                         strokeWidth: 1,
                       ),
                     ],
@@ -1232,7 +1232,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
     if (data == null) return const SizedBox.shrink();
 
     final predictions = (data['predictions'] as List?) ?? [];
-    final total = data['total'] ?? 0;
+    final madeToday = (data['made_today'] as List?) ?? [];
     final accuracy = data['direction_accuracy'];
     final dateStr = data['date'] ?? '';
 
@@ -1245,81 +1245,231 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
       } catch (_) {}
     }
 
-    return Card(
-      color: Colors.blue.shade50,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.today, color: Colors.blue),
-                const SizedBox(width: 8),
-                Text(
-                  '今日預測結果 ($displayDate)',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Colors.blue.shade700,
-                  ),
-                ),
-                const Spacer(),
-                if (accuracy != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: accuracy >= 50 ? Colors.green : Colors.red,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '準確率 ${accuracy.toStringAsFixed(1)}%',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                    ),
-                  )
-                else if (total > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '$total 筆',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                    ),
-                  ),
-              ],
-            ),
-            const Divider(),
-            if (predictions.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: Column(
+    // 沒有任何預測資料時不顯示
+    final hasPredictions = predictions.isNotEmpty || madeToday.isNotEmpty;
+
+    return Column(
+      children: [
+        // 今日產生的預測（pending）
+        if (madeToday.isNotEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Icon(Icons.info_outline, color: Colors.grey, size: 32),
-                      SizedBox(height: 8),
-                      Text('今日無預測記錄'),
-                      SizedBox(height: 4),
+                      const Icon(Icons.auto_awesome, color: Colors.amber),
+                      const SizedBox(width: 8),
                       Text(
-                        '請先查看股票的 AI 建議，系統會自動記錄預測',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        '今日產生的預測',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${madeToday.length} 筆',
+                          style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
                       ),
                     ],
                   ),
-                ),
-              )
-            else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: predictions.length,
-                itemBuilder: (context, index) {
-                  final pred = predictions[index];
-                  return _buildPredictionItem(pred);
-                },
+                  const Divider(),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: madeToday.length,
+                    itemBuilder: (context, index) {
+                      final pred = madeToday[index];
+                      return _buildPendingPredictionItem(pred);
+                    },
+                  ),
+                ],
               ),
-          ],
-        ),
+            ),
+          ),
+        // 到期的預測結果（已驗證）
+        if (predictions.isNotEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.fact_check, color: Colors.green),
+                      const SizedBox(width: 8),
+                      Text(
+                        '今日到期驗證 ($displayDate)',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const Spacer(),
+                      if (accuracy != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: accuracy >= 50 ? Colors.green : Colors.red,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '準確率 ${accuracy.toStringAsFixed(1)}%',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const Divider(),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: predictions.length,
+                    itemBuilder: (context, index) {
+                      final pred = predictions[index];
+                      return _buildPredictionItem(pred);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        // 完全沒有預測時的提示
+        if (!hasPredictions)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: Column(
+                  children: [
+                    const Icon(Icons.info_outline, color: Colors.grey, size: 32),
+                    const SizedBox(height: 8),
+                    const Text('今日無預測記錄'),
+                    const SizedBox(height: 4),
+                    Text(
+                      '請先查看股票的 AI 建議，系統會自動記錄預測',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPendingPredictionItem(Map<String, dynamic> pred) {
+    final stockId = pred['stock_id'] ?? '';
+    final stockName = pred['stock_name'] ?? '';
+    final market = pred['market'] ?? 'TW';
+    final predictedDir = pred['predicted_direction'] ?? '';
+    final predictedChange = (pred['predicted_change'] ?? 0.0).toDouble();
+    final targetDate = pred['target_date'] ?? '';
+    final status = pred['status'] ?? 'pending';
+    final isPredictUp = predictedDir == 'UP';
+    final isVerified = status == 'verified';
+
+    // 如果已驗證，用原有的 _buildPredictionItem 顯示
+    if (isVerified) return _buildPredictionItem(pred);
+
+    // 格式化目標日期
+    String displayTarget = targetDate;
+    if (targetDate.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(targetDate);
+        displayTarget = '${dt.month}/${dt.day}';
+      } catch (_) {}
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.3), width: 1),
+      ),
+      child: Row(
+        children: [
+          // 股票資訊
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      '$stockId $stockName',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: market == 'US' ? Colors.blue.withValues(alpha: 0.2) : Colors.orange.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        market,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: market == 'US' ? Colors.blue : Colors.orange,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(
+                      isPredictUp ? Icons.arrow_upward : Icons.arrow_downward,
+                      color: isPredictUp ? Colors.red : Colors.green,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '預測${isPredictUp ? "漲" : "跌"} ${predictedChange >= 0 ? "+" : ""}${predictedChange.toStringAsFixed(2)}%',
+                      style: TextStyle(
+                        color: isPredictUp ? Colors.red : Colors.green,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // 目標日期 + 狀態
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '目標 $displayTarget',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '等待驗證',
+                  style: TextStyle(fontSize: 11, color: Colors.amber, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1437,7 +1587,6 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
     if (data == null) return const SizedBox.shrink();
 
     final predictions = (data['predictions'] as List?) ?? [];
-    final evaluated = data['evaluated'] ?? 0;
     final accuracy = data['direction_accuracy'];
 
     return Card(
