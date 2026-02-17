@@ -90,7 +90,7 @@ class _BollingerChartState extends State<BollingerChart> {
                     drawVerticalLine: false,
                     horizontalInterval: range / 5,
                     getDrawingHorizontalLine: (value) {
-                      return FlLine(color: Colors.grey.shade200, strokeWidth: 0.5);
+                      return FlLine(color: Colors.grey.shade800, strokeWidth: 0.5);
                     },
                   ),
                   titlesData: FlTitlesData(
@@ -231,9 +231,9 @@ class _BollingerChartState extends State<BollingerChart> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: const Color(0xFF2C3A47),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: const Color(0xFF455A64)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -282,7 +282,7 @@ class _BollingerChartState extends State<BollingerChart> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: isVisible ? color.withAlpha(26) : Colors.grey.shade200,
+          color: isVisible ? color.withAlpha(26) : Colors.grey.shade800,
           borderRadius: BorderRadius.circular(4),
           border: Border.all(color: isVisible ? color : Colors.grey.shade400),
         ),

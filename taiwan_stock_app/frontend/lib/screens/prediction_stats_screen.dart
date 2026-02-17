@@ -264,7 +264,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
                           ),
                           PieChartSectionData(
                             value: (100 - accuracy).toDouble(),
-                            color: Colors.grey.shade200,
+                            color: const Color(0xFF2C3A47),
                             radius: 20,
                             showTitle: false,
                           ),
@@ -454,10 +454,10 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
             ),
             const Divider(),
             Table(
-              border: TableBorder.all(color: Colors.grey.shade300),
+              border: TableBorder.all(color: const Color(0xFF455A64)),
               children: [
                 TableRow(
-                  decoration: BoxDecoration(color: Colors.grey.shade100),
+                  decoration: const BoxDecoration(color: Color(0xFF2C3A47)),
                   children: const [
                     Padding(
                       padding: EdgeInsets.all(8),
@@ -825,7 +825,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+        border: Border(bottom: BorderSide(color: const Color(0xFF455A64))),
       ),
       child: Row(
         children: [
@@ -954,7 +954,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
                     drawVerticalLine: false,
                     horizontalInterval: 25,
                     getDrawingHorizontalLine: (value) => FlLine(
-                      color: Colors.grey.shade200,
+                      color: const Color(0xFF455A64),
                       strokeWidth: 1,
                     ),
                   ),
@@ -1119,7 +1119,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
                     show: true,
                     drawVerticalLine: false,
                     getDrawingHorizontalLine: (value) => FlLine(
-                      color: Colors.grey.shade200,
+                      color: const Color(0xFF455A64),
                       strokeWidth: 1,
                     ),
                   ),

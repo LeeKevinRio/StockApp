@@ -179,7 +179,7 @@ class _SentimentViewState extends State<SentimentView> {
     return Container(
       height: height,
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: const Color(0xFF2C3A47),
         borderRadius: BorderRadius.circular(12),
       ),
       child: const Center(
@@ -306,7 +306,7 @@ class _SentimentViewState extends State<SentimentView> {
               ),
               Expanded(
                 flex: ((1 - summary.positiveRatio - summary.negativeRatio) * 100).round().clamp(1, 100),
-                child: Container(height: 28, color: Colors.grey.shade300),
+                child: Container(height: 28, color: const Color(0xFF455A64)),
               ),
             ],
           ),
@@ -328,7 +328,7 @@ class _SentimentViewState extends State<SentimentView> {
                   style: const TextStyle(fontSize: 12)),
             ]),
             Row(children: [
-              Container(width: 12, height: 12, color: Colors.grey.shade300),
+              Container(width: 12, height: 12, color: const Color(0xFF455A64)),
               const SizedBox(width: 4),
               Text('中性 ${((1 - summary.positiveRatio - summary.negativeRatio) * 100).toStringAsFixed(0)}%',
                   style: const TextStyle(fontSize: 12)),
@@ -351,9 +351,9 @@ class _SentimentViewState extends State<SentimentView> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.grey.shade50,
+            color: const Color(0xFF2C3A47),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(color: const Color(0xFF455A64)),
           ),
           child: Row(
             children: [

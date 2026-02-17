@@ -765,12 +765,11 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
           children: [
             // 時間資訊卡片
             Card(
-              color: Colors.grey[100],
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
-                    const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                    Icon(Icons.access_time, size: 16, color: Theme.of(context).textTheme.bodySmall?.color),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Row(
@@ -778,11 +777,11 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
                         children: [
                           Text(
                             '當前時間：$currentTimeStr',
-                            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                            style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
                           ),
                           Text(
                             '資料日期：$dataTimeStr',
-                            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                            style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
                           ),
                         ],
                       ),
@@ -817,7 +816,7 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
                             borderRadius: BorderRadius.circular(4),
                             child: LinearProgressIndicator(
                               value: confidence,
-                              backgroundColor: Colors.grey[300],
+                              backgroundColor: Theme.of(context).dividerTheme.color ?? const Color(0xFF2C3A47),
                               valueColor: AlwaysStoppedAnimation<Color>(suggestionColor),
                               minHeight: 8,
                             ),
@@ -898,7 +897,7 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
                     const SizedBox(height: 12),
                     Text(
                       reasoning,
-                      style: TextStyle(color: Colors.grey[700], height: 1.6),
+                      style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color, height: 1.6),
                     ),
                   ],
                 ),
@@ -1026,9 +1025,9 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
                         if (targetDate != null && targetDate.isNotEmpty)
                           TextSpan(
                             text: ' ($targetDate)',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 12,
-                              color: Colors.grey[600],
+                              color: Color(0xFF90A4AE),
                             ),
                           ),
                       ],
@@ -1101,7 +1100,7 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
               const SizedBox(height: 12),
               Text(
                 '預測價格區間: $currencySymbol${priceRangeLow.toStringAsFixed(2)} - $currencySymbol${priceRangeHigh.toStringAsFixed(2)}',
-                style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                style: TextStyle(color: const Color(0xFF90A4AE), fontSize: 13),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -1109,7 +1108,7 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
               const SizedBox(height: 12),
               Text(
                 reasoning,
-                style: TextStyle(color: Colors.grey[700], fontSize: 13, height: 1.4),
+                style: TextStyle(color: const Color(0xFFB0BEC5), fontSize: 13, height: 1.4),
               ),
             ],
           ],
@@ -1260,7 +1259,7 @@ class _StockRiskViewState extends State<_StockRiskView> {
                     const SizedBox(height: 4),
                     Text(
                       '基於 $dataDays 個交易日數據計算',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      style: TextStyle(fontSize: 12, color: const Color(0xFF90A4AE)),
                     ),
                   ],
                 ),
@@ -1341,7 +1340,7 @@ class _StockRiskViewState extends State<_StockRiskView> {
                             fontSize: 16, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
                     Text('單日最大可能損失',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                        style: TextStyle(fontSize: 12, color: const Color(0xFF90A4AE))),
                     const Divider(),
                     _buildVaRRow('95% VaR', var95, '95%的交易日損失不超過此值'),
                     _buildVaRRow('99% VaR', var99, '99%的交易日損失不超過此值'),
@@ -1400,7 +1399,7 @@ class _StockRiskViewState extends State<_StockRiskView> {
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                 if (subtitle != null)
                   Text(subtitle,
-                      style: TextStyle(fontSize: 11, color: color ?? Colors.grey[600])),
+                      style: TextStyle(fontSize: 11, color: color ?? const Color(0xFF90A4AE))),
               ],
             ),
           ),
@@ -1438,7 +1437,7 @@ class _StockRiskViewState extends State<_StockRiskView> {
             ],
           ),
           Text(description,
-              style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+              style: TextStyle(fontSize: 11, color: const Color(0xFF90A4AE))),
         ],
       ),
     );

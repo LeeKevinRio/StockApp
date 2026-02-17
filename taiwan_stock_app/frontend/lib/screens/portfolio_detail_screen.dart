@@ -418,7 +418,7 @@ class _PortfolioDetailScreenState extends State<PortfolioDetailScreen>
                             borderRadius: BorderRadius.circular(4),
                             child: LinearProgressIndicator(
                               value: (item['weight'] as double) / 100,
-                              backgroundColor: Colors.grey.shade200,
+                              backgroundColor: const Color(0xFF2C3A47),
                               valueColor: AlwaysStoppedAnimation<Color>(color),
                               minHeight: 8,
                             ),

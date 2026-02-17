@@ -100,7 +100,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               ? (_isDisclaimerPage
                                   ? Colors.orange
                                   : Theme.of(context).primaryColor)
-                              : Colors.grey.shade300,
+                              : const Color(0xFF455A64),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),

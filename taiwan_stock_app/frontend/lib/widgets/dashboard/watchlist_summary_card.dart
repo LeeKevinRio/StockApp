@@ -173,8 +173,8 @@ class _CircularStat extends StatelessWidget {
             child: CircularProgressIndicator(
               value: 1,
               strokeWidth: 8,
-              backgroundColor: Colors.grey.shade200,
-              valueColor: AlwaysStoppedAnimation(Colors.grey.shade200),
+              backgroundColor: const Color(0xFF2C3A47),
+              valueColor: const AlwaysStoppedAnimation(Color(0xFF2C3A47)),
             ),
           ),
           // 下跌部分

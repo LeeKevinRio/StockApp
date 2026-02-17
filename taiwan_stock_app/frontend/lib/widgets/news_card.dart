@@ -87,7 +87,7 @@ class NewsCard extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade200,
+                              color: const Color(0xFF2C3A47),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(

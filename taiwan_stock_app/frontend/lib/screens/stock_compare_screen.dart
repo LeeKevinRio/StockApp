@@ -273,7 +273,7 @@ class _StockCompareScreenState extends State<StockCompareScreen> {
                     show: true,
                     drawVerticalLine: false,
                     getDrawingHorizontalLine: (value) => FlLine(
-                      color: Colors.grey.shade200,
+                      color: const Color(0xFF455A64),
                       strokeWidth: 1,
                     ),
                   ),

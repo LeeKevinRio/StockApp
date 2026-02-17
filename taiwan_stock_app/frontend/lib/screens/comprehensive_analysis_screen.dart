@@ -354,7 +354,7 @@ class _ComprehensiveAnalysisViewState extends State<ComprehensiveAnalysisView> {
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   value: normalized / 100,
-                  backgroundColor: Colors.grey.shade200,
+                  backgroundColor: const Color(0xFF2C3A47),
                   valueColor: AlwaysStoppedAnimation(color),
                   minHeight: 6,
                 ),
@@ -571,7 +571,7 @@ class _HealthGaugePainter extends CustomPainter {
 
     // 背景弧
     final bgPaint = Paint()
-      ..color = Colors.grey.shade200
+      ..color = const Color(0xFF2C3A47)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 14
       ..strokeCap = StrokeCap.round;

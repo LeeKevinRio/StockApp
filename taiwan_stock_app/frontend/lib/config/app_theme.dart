@@ -21,10 +21,10 @@ class AppTheme {
   // ============ LIGHT THEME（深底金融風） ============
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
-    brightness: Brightness.light,
+    brightness: Brightness.dark,
     primaryColor: primaryColor,
-    colorScheme: const ColorScheme.light(
-      primary: Color(0xFF1B5E20),
+    colorScheme: const ColorScheme.dark(
+      primary: Color(0xFF66BB6A),
       onPrimary: Colors.white,
       secondary: Color(0xFF66BB6A),
       onSecondary: Colors.white,
@@ -32,6 +32,9 @@ class AppTheme {
       surface: Color(0xFF1E272E),        // Card 深灰藍
       onSurface: Color(0xFFECEFF1),      // 淺色文字
       surfaceContainerHighest: Color(0xFF2C3A47), // 容器背景
+      secondaryContainer: Color(0xFF1B5E20),     // SegmentedButton 選中
+      onSecondaryContainer: Color(0xFFECEFF1),   // SegmentedButton 文字
+      surfaceContainerLow: Color(0xFF1A2530),
       error: Color(0xFFEF5350),
       outline: Color(0xFF455A64),
     ),
@@ -217,6 +220,9 @@ class AppTheme {
       surface: Color(0xFF1A1A1A),
       onSurface: Color(0xFFE0E0E0),
       surfaceContainerHighest: Color(0xFF252525),
+      secondaryContainer: Color(0xFF1B5E20),
+      onSecondaryContainer: Color(0xFFE0E0E0),
+      surfaceContainerLow: Color(0xFF151515),
       error: Color(0xFFEF5350),
       outline: Color(0xFF404040),
     ),

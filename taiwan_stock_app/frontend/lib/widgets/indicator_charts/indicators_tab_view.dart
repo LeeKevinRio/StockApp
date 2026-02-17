@@ -128,7 +128,7 @@ class _IndicatorsTabViewState extends State<IndicatorsTabView>
       padding: const EdgeInsets.all(12),
       margin: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: const Color(0xFF2C3A47),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../models/stock_history.dart';
+import '../config/app_theme.dart';
 
 class CandlestickChart extends StatefulWidget {
   final List<StockHistory> data;
@@ -85,9 +86,7 @@ class _CandlestickChartState extends State<CandlestickChart> {
   Widget _buildLegend(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: Theme.of(context).brightness == Brightness.dark
-          ? Colors.grey.shade900
-          : Colors.grey.shade100,
+      color: Theme.of(context).cardTheme.color ?? const Color(0xFF1E272E),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -309,7 +308,7 @@ class _CandlestickChartState extends State<CandlestickChart> {
 
     final candle = visibleData[_touchedIndex!];
     final isRising = candle.close >= candle.open;
-    final priceColor = isRising ? Colors.red : Colors.green;
+    final priceColor = isRising ? AppTheme.stockRise : AppTheme.stockFall;
 
     return Positioned(
       top: 0,
@@ -375,7 +374,7 @@ class _CandlestickChartState extends State<CandlestickChart> {
     for (int i = 0; i < data.length; i++) {
       final candle = data[i];
       final isRising = candle.close >= candle.open;
-      final color = isRising ? Colors.red : Colors.green;
+      final color = isRising ? AppTheme.stockRise : AppTheme.stockFall;
 
       // Upper shadow (影線上半部)
       bars.add(LineChartBarData(
@@ -505,8 +504,8 @@ class _CandlestickChartState extends State<CandlestickChart> {
                 BarChartRodData(
                   toY: candle.volume.toDouble(),
                   color: isRising
-                      ? Colors.red.withValues(alpha: 0.7)
-                      : Colors.green.withValues(alpha: 0.7),
+                      ? AppTheme.stockRise.withValues(alpha: 0.7)
+                      : AppTheme.stockFall.withValues(alpha: 0.7),
                   width: volumeBarWidth,
                 ),
               ],

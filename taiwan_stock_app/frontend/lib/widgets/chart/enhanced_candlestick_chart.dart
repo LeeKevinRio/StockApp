@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../models/stock_history.dart';
 import '../../models/chart_settings.dart';
 import '../../models/indicator_data.dart';
+import '../../config/app_theme.dart';
 
 /// 副圖類型
 enum SubChartType { none, macd, rsi, kd }
@@ -90,7 +91,7 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
                         data: visibleData,
                         settings: widget.settings,
                         touchedIndex: _touchedIndex,
-                        isDark: Theme.of(context).brightness == Brightness.dark,
+                        isDark: true, // 深色金融風格，永遠使用暗色
                       ),
                     ),
                   ),
@@ -104,7 +105,7 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
                   child: CustomPaint(
                     painter: _PriceAxisPainter(
                       data: visibleData,
-                      isDark: Theme.of(context).brightness == Brightness.dark,
+                      isDark: true,
                     ),
                   ),
                 ),
@@ -117,7 +118,7 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
                   child: CustomPaint(
                     painter: _DateAxisPainter(
                       data: visibleData,
-                      isDark: Theme.of(context).brightness == Brightness.dark,
+                      isDark: true,
                     ),
                   ),
                 ),
@@ -183,12 +184,10 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
   }
 
   Widget _buildToolbar(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+        color: Theme.of(context).cardTheme.color ?? const Color(0xFF1E272E),
         border: Border(
           bottom: BorderSide(color: Theme.of(context).dividerColor),
         ),
@@ -269,11 +268,9 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
   }
 
   Widget _buildIndicatorLegend(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+      color: Theme.of(context).cardTheme.color ?? const Color(0xFF1E272E),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -378,7 +375,7 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
 
     final candle = visibleData[_touchedIndex!];
     final isRising = candle.close >= candle.open;
-    final priceColor = isRising ? Colors.red : Colors.green;
+    final priceColor = isRising ? AppTheme.stockRise : AppTheme.stockFall;
 
     return Positioned(
       top: 0, left: 0, right: 0,
@@ -442,11 +439,10 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
   // ==================== 副圖相關 ====================
 
   Widget _buildSubChartSelector(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+        color: Theme.of(context).cardTheme.color ?? const Color(0xFF1E272E),
         border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
       ),
       child: Row(
@@ -505,7 +501,7 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
           allMacdData: macdData,
           visibleData: visibleData,
           startIndex: startIndex,
-          isDark: Theme.of(context).brightness == Brightness.dark,
+          isDark: true,
         ),
       ),
     );
@@ -758,7 +754,7 @@ class _CandlestickChartPainter extends CustomPainter {
     double priceToY(double price) => size.height - ((price - paddedMin) / paddedRange * size.height);
 
     // 繪製網格線
-    final gridPaint = Paint()..color = (isDark ? Colors.grey.shade800 : Colors.grey.shade300).withAlpha(128)..strokeWidth = 0.5;
+    final gridPaint = Paint()..color = Colors.grey.shade800.withAlpha(128)..strokeWidth = 0.5;
     for (int i = 1; i < 5; i++) {
       final y = size.height * i / 5;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
@@ -776,7 +772,7 @@ class _CandlestickChartPainter extends CustomPainter {
     for (int i = 0; i < n; i++) {
       final candle = data[i];
       final isRising = candle.close >= candle.open;
-      final color = isRising ? Colors.red : Colors.green;
+      final color = isRising ? AppTheme.stockRise : AppTheme.stockFall;
       final x = (i + 0.5) * candleWidth;
 
       // 影線
@@ -790,7 +786,7 @@ class _CandlestickChartPainter extends CustomPainter {
 
       final bodyPaint = Paint()
         ..color = color
-        ..style = isRising ? PaintingStyle.stroke : PaintingStyle.fill
+        ..style = PaintingStyle.fill
         ..strokeWidth = 1;
 
       canvas.drawRect(
@@ -962,7 +958,7 @@ class _VolumePainter extends CustomPainter {
       final barHeight = (candle.volume / maxVol) * size.height;
       final x = (i + 0.5) * size.width / n;
 
-      final paint = Paint()..color = (isRising ? Colors.red : Colors.green).withAlpha(128);
+      final paint = Paint()..color = (isRising ? AppTheme.stockRise : AppTheme.stockFall).withAlpha(128);
       canvas.drawRect(
         Rect.fromLTWH(x - barWidth / 2, size.height - barHeight, barWidth, barHeight),
         paint,
@@ -1018,7 +1014,7 @@ class _MACDPainter extends CustomPainter {
     for (int i = 0; i < visible.length; i++) {
       final x = (i + 0.5) * size.width / n;
       final h = visible[i].histogram;
-      final paint = Paint()..color = (h >= 0 ? Colors.red : Colors.green).withAlpha(128);
+      final paint = Paint()..color = (h >= 0 ? AppTheme.stockRise : AppTheme.stockFall).withAlpha(128);
       canvas.drawRect(Rect.fromLTWH(x - barWidth / 2, min(zeroY, toY(h)), barWidth, (toY(h) - zeroY).abs()), paint);
     }
 

@@ -346,7 +346,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 decoration: BoxDecoration(
                   color: user['subscription_tier'] == 'pro'
                       ? Colors.amber
-                      : Colors.grey.shade300,
+                      : const Color(0xFF455A64),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
