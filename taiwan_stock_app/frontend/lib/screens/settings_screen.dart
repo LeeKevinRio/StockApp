@@ -58,7 +58,7 @@ class SettingsScreen extends StatelessWidget {
             ListTile(
               leading: CircleAvatar(
                 radius: 24,
-                backgroundColor: Colors.blue.shade100,
+                backgroundColor: const Color(0xFF2C3A47),
                 child: user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty
                     ? ClipOval(
                         child: Image.network(user.avatarUrl!, width: 48, height: 48, fit: BoxFit.cover,
@@ -71,7 +71,7 @@ class SettingsScreen extends StatelessWidget {
               trailing: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: user?.isPro == true ? Colors.amber : Colors.grey.shade200,
+                  color: user?.isPro == true ? const Color(0xFFFFB300) : const Color(0xFF2C3A47),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -79,7 +79,7 @@ class SettingsScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: user?.isPro == true ? Colors.black : Colors.grey,
+                    color: user?.isPro == true ? Colors.black : const Color(0xFF90A4AE),
                   ),
                 ),
               ),

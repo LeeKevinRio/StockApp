@@ -58,8 +58,9 @@ class CompactMarketSwitcher extends StatelessWidget {
       builder: (context, marketProvider, child) {
         return Container(
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            color: Colors.white.withAlpha(20),
             borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withAlpha(40)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -101,8 +102,6 @@ class _MarketChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Semantics(
       label: '$label市場',
       selected: isSelected,
@@ -114,7 +113,7 @@ class _MarketChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             color: isSelected
-                ? theme.colorScheme.primary
+                ? const Color(0xFF66BB6A) // 亮綠色，明顯突出
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
           ),
@@ -122,8 +121,8 @@ class _MarketChip extends StatelessWidget {
             label,
             style: TextStyle(
               color: isSelected
-                  ? theme.colorScheme.onPrimary
-                  : theme.colorScheme.onSurfaceVariant,
+                  ? Colors.white
+                  : Colors.white.withAlpha(180),
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               fontSize: 13,
             ),
@@ -150,17 +149,24 @@ class MarketBadge extends StatelessWidget {
     final isUS = market.toUpperCase() == 'US';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: isUS ? Colors.blue.shade100 : Colors.green.shade100,
+        color: isUS
+            ? const Color(0xFF42A5F5).withAlpha(30)
+            : const Color(0xFF66BB6A).withAlpha(30),
         borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: isUS
+              ? const Color(0xFF42A5F5).withAlpha(80)
+              : const Color(0xFF66BB6A).withAlpha(80),
+        ),
       ),
       child: Text(
         isUS ? 'US' : 'TW',
         style: TextStyle(
           fontSize: fontSize,
           fontWeight: FontWeight.bold,
-          color: isUS ? Colors.blue.shade800 : Colors.green.shade800,
+          color: isUS ? const Color(0xFF42A5F5) : const Color(0xFF66BB6A),
         ),
       ),
     );

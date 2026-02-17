@@ -123,8 +123,12 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (context, marketProvider, authProvider, child) {
                 final user = authProvider.user;
                 return DrawerHeader(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

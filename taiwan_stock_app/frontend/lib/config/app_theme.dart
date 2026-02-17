@@ -1,66 +1,68 @@
 import 'package:flutter/material.dart';
 
-/// App theme configuration for light and dark modes
+/// App 主題配置 — 深色金融風格
 class AppTheme {
   // Brand colors
-  static const Color primaryColor = Color(0xFF0D47A1); // 深藍，辨識度高
-  static const Color primaryColorDark = Color(0xFF1565C0);
-  static const Color accentColor = Color(0xFF42A5F5);
+  static const Color primaryColor = Color(0xFF1B5E20); // 深綠（金融穩重）
+  static const Color accentColor = Color(0xFF66BB6A); // 亮綠（行動按鈕）
+  static const Color goldAccent = Color(0xFFFFB300); // 金色點綴
 
   // Stock colors (台灣行情：紅漲綠跌)
-  static const Color stockRise = Color(0xFFD32F2F);
-  static const Color stockFall = Color(0xFF2E7D32);
-  static const Color stockFlat = Color(0xFF757575);
+  static const Color stockRise = Color(0xFFEF5350);
+  static const Color stockFall = Color(0xFF26A69A);
+  static const Color stockFlat = Color(0xFF9E9E9E);
 
   // Chart colors
-  static const Color chartMA5 = Color(0xFF2196F3);
+  static const Color chartMA5 = Color(0xFF42A5F5);
   static const Color chartMA10 = Color(0xFFFF9800);
-  static const Color chartMA20 = Color(0xFF9C27B0);
-  static const Color chartMA60 = Color(0xFF4CAF50);
+  static const Color chartMA20 = Color(0xFFAB47BC);
+  static const Color chartMA60 = Color(0xFF66BB6A);
 
-  // Light theme
+  // ============ LIGHT THEME（深底金融風） ============
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
     primaryColor: primaryColor,
-    colorScheme: ColorScheme.light(
-      primary: primaryColor,
+    colorScheme: const ColorScheme.light(
+      primary: Color(0xFF1B5E20),
       onPrimary: Colors.white,
-      secondary: const Color(0xFF1976D2),
+      secondary: Color(0xFF66BB6A),
       onSecondary: Colors.white,
-      surface: Colors.white,
-      onSurface: const Color(0xFF1A1A1A),
-      surfaceContainerHighest: const Color(0xFFF0F0F0),
-      error: Colors.red.shade700,
-      outline: const Color(0xFFBDBDBD),
+      tertiary: Color(0xFFFFB300),
+      surface: Color(0xFF1E272E),        // Card 深灰藍
+      onSurface: Color(0xFFECEFF1),      // 淺色文字
+      surfaceContainerHighest: Color(0xFF2C3A47), // 容器背景
+      error: Color(0xFFEF5350),
+      outline: Color(0xFF455A64),
     ),
-    scaffoldBackgroundColor: const Color(0xFFEEF2F6), // 藍灰底，和白 Card 拉開層次
+    scaffoldBackgroundColor: const Color(0xFF151C23), // 很深的背景
     appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFF0D47A1),
-      foregroundColor: Colors.white,
-      elevation: 1,
+      backgroundColor: Color(0xFF1E272E),
+      foregroundColor: Color(0xFFECEFF1),
+      elevation: 0,
       centerTitle: true,
       titleTextStyle: TextStyle(
-        color: Colors.white,
+        color: Color(0xFFECEFF1),
         fontSize: 18,
         fontWeight: FontWeight.w600,
       ),
-      iconTheme: IconThemeData(color: Colors.white),
+      iconTheme: IconThemeData(color: Color(0xFFECEFF1)),
     ),
     cardTheme: CardThemeData(
-      elevation: 1,
-      color: Colors.white,
+      elevation: 0,
+      color: const Color(0xFF1E272E),
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFF2C3A47), width: 1),
       ),
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: primaryColor,
+        backgroundColor: const Color(0xFF66BB6A),
         foregroundColor: Colors.white,
-        elevation: 2,
+        elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
@@ -70,8 +72,8 @@ class AppTheme {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: primaryColor,
-        side: const BorderSide(color: Color(0xFFBDBDBD)),
+        foregroundColor: const Color(0xFF66BB6A),
+        side: const BorderSide(color: Color(0xFF455A64)),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
@@ -80,48 +82,51 @@ class AppTheme {
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: primaryColor,
+        foregroundColor: const Color(0xFF66BB6A),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFBDBDBD)),
+        borderSide: const BorderSide(color: Color(0xFF455A64)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFBDBDBD)),
+        borderSide: const BorderSide(color: Color(0xFF455A64)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: primaryColor, width: 2),
+        borderSide: const BorderSide(color: Color(0xFF66BB6A), width: 2),
       ),
       filled: true,
-      fillColor: Colors.white,
+      fillColor: const Color(0xFF1E272E),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      labelStyle: const TextStyle(color: Color(0xFF616161)),
-      hintStyle: const TextStyle(color: Color(0xFF9E9E9E)),
+      labelStyle: const TextStyle(color: Color(0xFFB0BEC5)),
+      hintStyle: const TextStyle(color: Color(0xFF78909C)),
+      prefixIconColor: const Color(0xFF90A4AE),
+      suffixIconColor: const Color(0xFF90A4AE),
     ),
     textTheme: const TextTheme(
-      headlineLarge: TextStyle(color: Color(0xFF1A1A1A), fontWeight: FontWeight.bold),
-      headlineMedium: TextStyle(color: Color(0xFF1A1A1A), fontWeight: FontWeight.bold),
-      titleLarge: TextStyle(color: Color(0xFF1A1A1A), fontWeight: FontWeight.w600),
-      titleMedium: TextStyle(color: Color(0xFF1A1A1A), fontWeight: FontWeight.w500),
-      bodyLarge: TextStyle(color: Color(0xFF333333)),
-      bodyMedium: TextStyle(color: Color(0xFF333333)),
-      bodySmall: TextStyle(color: Color(0xFF757575)),
-      labelLarge: TextStyle(color: Color(0xFF333333), fontWeight: FontWeight.w500),
-      labelSmall: TextStyle(color: Color(0xFF757575)),
+      headlineLarge: TextStyle(color: Color(0xFFECEFF1), fontWeight: FontWeight.bold),
+      headlineMedium: TextStyle(color: Color(0xFFECEFF1), fontWeight: FontWeight.bold),
+      titleLarge: TextStyle(color: Color(0xFFECEFF1), fontWeight: FontWeight.w600),
+      titleMedium: TextStyle(color: Color(0xFFCFD8DC), fontWeight: FontWeight.w500),
+      bodyLarge: TextStyle(color: Color(0xFFCFD8DC)),
+      bodyMedium: TextStyle(color: Color(0xFFB0BEC5)),
+      bodySmall: TextStyle(color: Color(0xFF90A4AE)),
+      labelLarge: TextStyle(color: Color(0xFFCFD8DC), fontWeight: FontWeight.w500),
+      labelSmall: TextStyle(color: Color(0xFF90A4AE)),
     ),
+    iconTheme: const IconThemeData(color: Color(0xFFB0BEC5)),
     tabBarTheme: const TabBarThemeData(
-      labelColor: Colors.white,
-      unselectedLabelColor: Colors.white70,
-      indicatorColor: Colors.white,
+      labelColor: Color(0xFF66BB6A),
+      unselectedLabelColor: Color(0xFF90A4AE),
+      indicatorColor: Color(0xFF66BB6A),
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      selectedItemColor: primaryColor,
-      unselectedItemColor: Color(0xFF9E9E9E),
-      backgroundColor: Colors.white,
+      selectedItemColor: Color(0xFF66BB6A),
+      unselectedItemColor: Color(0xFF78909C),
+      backgroundColor: Color(0xFF1E272E),
       type: BottomNavigationBarType.fixed,
       elevation: 8,
       selectedLabelStyle: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
@@ -129,71 +134,117 @@ class AppTheme {
     dividerTheme: const DividerThemeData(
       space: 1,
       thickness: 1,
-      color: Color(0xFFE0E0E0),
+      color: Color(0xFF2C3A47),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: const Color(0xFFE8EAF6),
-      selectedColor: primaryColor.withAlpha(40),
-      labelStyle: const TextStyle(fontSize: 12, color: Color(0xFF333333)),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      backgroundColor: const Color(0xFF2C3A47),
+      selectedColor: const Color(0xFF1B5E20),
+      labelStyle: const TextStyle(fontSize: 12, color: Color(0xFFCFD8DC)),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      side: const BorderSide(color: Color(0xFF455A64), width: 1),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
       ),
     ),
     listTileTheme: const ListTileThemeData(
-      iconColor: Color(0xFF616161),
-      titleTextStyle: TextStyle(fontSize: 15, color: Color(0xFF1A1A1A)),
-      subtitleTextStyle: TextStyle(fontSize: 13, color: Color(0xFF757575)),
+      iconColor: Color(0xFF90A4AE),
+      textColor: Color(0xFFCFD8DC),
+      titleTextStyle: TextStyle(fontSize: 15, color: Color(0xFFECEFF1)),
+      subtitleTextStyle: TextStyle(fontSize: 13, color: Color(0xFF90A4AE)),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: const Color(0xFF1E272E),
+      surfaceTintColor: Colors.transparent,
+      titleTextStyle: const TextStyle(
+        color: Color(0xFFECEFF1),
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+      ),
+      contentTextStyle: const TextStyle(color: Color(0xFFB0BEC5), fontSize: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: const Color(0xFF323232),
-      contentTextStyle: const TextStyle(color: Colors.white),
+      backgroundColor: const Color(0xFF2C3A47),
+      contentTextStyle: const TextStyle(color: Color(0xFFECEFF1)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    ),
+    popupMenuTheme: const PopupMenuThemeData(
+      color: Color(0xFF1E272E),
+      surfaceTintColor: Colors.transparent,
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: Color(0xFF1E272E),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+    ),
+    drawerTheme: const DrawerThemeData(
+      backgroundColor: Color(0xFF1E272E),
+      surfaceTintColor: Colors.transparent,
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return const Color(0xFF66BB6A);
+        return const Color(0xFF78909C);
+      }),
+      trackColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return const Color(0xFF66BB6A).withAlpha(80);
+        return const Color(0xFF455A64);
+      }),
+    ),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(
+      color: Color(0xFF66BB6A),
+    ),
+    floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      backgroundColor: Color(0xFF66BB6A),
+      foregroundColor: Colors.white,
     ),
   );
 
-  // Dark theme
+  // ============ DARK THEME（更深的暗色） ============
   static ThemeData darkTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
     primaryColor: accentColor,
-    colorScheme: ColorScheme.dark(
-      primary: accentColor,
+    colorScheme: const ColorScheme.dark(
+      primary: Color(0xFF66BB6A),
       onPrimary: Colors.white,
-      secondary: accentColor,
+      secondary: Color(0xFF66BB6A),
       onSecondary: Colors.white,
-      surface: const Color(0xFF1E1E1E),
-      onSurface: const Color(0xFFE0E0E0),
-      surfaceContainerHighest: const Color(0xFF2C2C2C),
-      error: Colors.red.shade400,
-      outline: const Color(0xFF424242),
+      tertiary: Color(0xFFFFB300),
+      surface: Color(0xFF1A1A1A),
+      onSurface: Color(0xFFE0E0E0),
+      surfaceContainerHighest: Color(0xFF252525),
+      error: Color(0xFFEF5350),
+      outline: Color(0xFF404040),
     ),
-    scaffoldBackgroundColor: const Color(0xFF121212),
+    scaffoldBackgroundColor: const Color(0xFF0D0D0D),
     appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFF1E1E1E),
-      foregroundColor: Colors.white,
-      elevation: 1,
+      backgroundColor: Color(0xFF1A1A1A),
+      foregroundColor: Color(0xFFE0E0E0),
+      elevation: 0,
       centerTitle: true,
       titleTextStyle: TextStyle(
-        color: Colors.white,
+        color: Color(0xFFE0E0E0),
         fontSize: 18,
         fontWeight: FontWeight.w600,
       ),
     ),
     cardTheme: CardThemeData(
-      elevation: 1,
-      color: const Color(0xFF1E1E1E),
+      elevation: 0,
+      color: const Color(0xFF1A1A1A),
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFF333333), width: 0.5),
+        side: const BorderSide(color: Color(0xFF2A2A2A), width: 1),
       ),
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: accentColor,
+        backgroundColor: const Color(0xFF66BB6A),
         foregroundColor: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
@@ -204,8 +255,8 @@ class AppTheme {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: accentColor,
-        side: const BorderSide(color: Color(0xFF555555)),
+        foregroundColor: const Color(0xFF66BB6A),
+        side: const BorderSide(color: Color(0xFF404040)),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
@@ -213,27 +264,28 @@ class AppTheme {
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: accentColor,
+        foregroundColor: const Color(0xFF66BB6A),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF424242)),
+        borderSide: const BorderSide(color: Color(0xFF404040)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF424242)),
+        borderSide: const BorderSide(color: Color(0xFF404040)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: accentColor, width: 2),
+        borderSide: const BorderSide(color: Color(0xFF66BB6A), width: 2),
       ),
       filled: true,
-      fillColor: const Color(0xFF2C2C2C),
+      fillColor: const Color(0xFF1A1A1A),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      labelStyle: const TextStyle(color: Color(0xFFBDBDBD)),
+      labelStyle: const TextStyle(color: Color(0xFF9E9E9E)),
       hintStyle: const TextStyle(color: Color(0xFF757575)),
+      prefixIconColor: const Color(0xFF9E9E9E),
     ),
     textTheme: const TextTheme(
       headlineLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -246,43 +298,89 @@ class AppTheme {
       labelLarge: TextStyle(color: Color(0xFFE0E0E0), fontWeight: FontWeight.w500),
       labelSmall: TextStyle(color: Color(0xFF9E9E9E)),
     ),
+    iconTheme: const IconThemeData(color: Color(0xFFBDBDBD)),
     tabBarTheme: const TabBarThemeData(
-      labelColor: Colors.white,
-      unselectedLabelColor: Colors.white60,
-      indicatorColor: accentColor,
+      labelColor: Color(0xFF66BB6A),
+      unselectedLabelColor: Color(0xFF757575),
+      indicatorColor: Color(0xFF66BB6A),
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      selectedItemColor: accentColor,
+      selectedItemColor: Color(0xFF66BB6A),
       unselectedItemColor: Color(0xFF757575),
       type: BottomNavigationBarType.fixed,
-      backgroundColor: Color(0xFF1E1E1E),
+      backgroundColor: Color(0xFF1A1A1A),
       elevation: 8,
       selectedLabelStyle: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
     ),
     dividerTheme: const DividerThemeData(
       space: 1,
       thickness: 1,
-      color: Color(0xFF333333),
+      color: Color(0xFF2A2A2A),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: const Color(0xFF2C2C2C),
-      selectedColor: accentColor.withAlpha(40),
+      backgroundColor: const Color(0xFF252525),
+      selectedColor: const Color(0xFF1B5E20),
       labelStyle: const TextStyle(fontSize: 12, color: Color(0xFFE0E0E0)),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      side: const BorderSide(color: Color(0xFF404040), width: 1),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
       ),
     ),
     listTileTheme: const ListTileThemeData(
-      iconColor: Color(0xFFBDBDBD),
+      iconColor: Color(0xFF9E9E9E),
+      textColor: Color(0xFFE0E0E0),
       titleTextStyle: TextStyle(fontSize: 15, color: Color(0xFFE0E0E0)),
       subtitleTextStyle: TextStyle(fontSize: 13, color: Color(0xFF9E9E9E)),
     ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: const Color(0xFF1A1A1A),
+      surfaceTintColor: Colors.transparent,
+      titleTextStyle: const TextStyle(
+        color: Color(0xFFE0E0E0),
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+      ),
+      contentTextStyle: const TextStyle(color: Color(0xFFBDBDBD), fontSize: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: const Color(0xFF424242),
+      backgroundColor: const Color(0xFF2A2A2A),
       contentTextStyle: const TextStyle(color: Colors.white),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    ),
+    popupMenuTheme: const PopupMenuThemeData(
+      color: Color(0xFF1A1A1A),
+      surfaceTintColor: Colors.transparent,
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: Color(0xFF1A1A1A),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+    ),
+    drawerTheme: const DrawerThemeData(
+      backgroundColor: Color(0xFF1A1A1A),
+      surfaceTintColor: Colors.transparent,
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return const Color(0xFF66BB6A);
+        return const Color(0xFF757575);
+      }),
+      trackColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) return const Color(0xFF66BB6A).withAlpha(80);
+        return const Color(0xFF404040);
+      }),
+    ),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(
+      color: Color(0xFF66BB6A),
+    ),
+    floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      backgroundColor: Color(0xFF66BB6A),
+      foregroundColor: Colors.white,
     ),
   );
 
@@ -294,7 +392,6 @@ class AppTheme {
     return stockFlat;
   }
 
-  // Helper method to get stock color with custom context (for dark/light theme awareness)
   static Color getStockColorForContext(BuildContext context, double? change) {
     if (change == null) return Theme.of(context).disabledColor;
     if (change > 0) return stockRise;
@@ -302,13 +399,11 @@ class AppTheme {
     return Theme.of(context).disabledColor;
   }
 
-  /// 取得次要文字顏色（自動適配深淺主題）
   static Color secondaryTextColor(BuildContext context) {
-    return Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF757575);
+    return Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF90A4AE);
   }
 
-  /// 取得卡片分隔線顏色
   static Color dividerColor(BuildContext context) {
-    return Theme.of(context).dividerTheme.color ?? const Color(0xFFE0E0E0);
+    return Theme.of(context).dividerTheme.color ?? const Color(0xFF2C3A47);
   }
 }

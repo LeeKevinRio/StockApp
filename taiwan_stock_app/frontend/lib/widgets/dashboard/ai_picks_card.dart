@@ -31,12 +31,12 @@ class AIPicksCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.purple.withAlpha(25),
+                    color: const Color(0xFF66BB6A).withAlpha(25),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
                     Icons.psychology,
-                    color: Colors.purple,
+                    color: const Color(0xFF66BB6A),
                     size: 18,
                   ),
                 ),
@@ -78,7 +78,7 @@ class AIPicksCard extends StatelessWidget {
                       height: 32,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.5,
-                        color: Colors.purple,
+                        color: const Color(0xFF66BB6A),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -101,7 +101,7 @@ class AIPicksCard extends StatelessWidget {
                     Icon(
                       Icons.lightbulb_outline,
                       size: 40,
-                      color: Colors.grey.shade400,
+                      color: Theme.of(context).disabledColor,
                     ),
                     const SizedBox(height: 8),
                     Text(
