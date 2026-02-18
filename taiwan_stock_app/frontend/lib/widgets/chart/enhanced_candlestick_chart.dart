@@ -51,11 +51,48 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
   List<Offset> _currentDrawingPoints = [];
   SubChartType _selectedSubChart = SubChartType.none;
 
+  // 指標計算快取
+  List<StockHistory>? _cachedData;
+  List<_MACDValue>? _cachedMACD;
+  List<double>? _cachedRSI;
+  List<(double, double)>? _cachedKD;
+  // 均線預計算快取
+  List<double?>? _cachedMA5;
+  List<double?>? _cachedMA10;
+  List<double?>? _cachedMA20;
+  List<double?>? _cachedMA60;
+
+  void _ensureIndicatorCache() {
+    if (identical(_cachedData, widget.data)) return;
+    _cachedData = widget.data;
+    _cachedMACD = _computeMACDValues(widget.data);
+    _cachedRSI = _computeRSIValues(widget.data);
+    _cachedKD = _computeKDValues(widget.data);
+    _cachedMA5 = _precomputeMA(widget.data, 5);
+    _cachedMA10 = _precomputeMA(widget.data, 10);
+    _cachedMA20 = _precomputeMA(widget.data, 20);
+    _cachedMA60 = _precomputeMA(widget.data, 60);
+  }
+
+  List<double?> _precomputeMA(List<StockHistory> data, int period) {
+    final result = List<double?>.filled(data.length, null);
+    if (data.length < period) return result;
+    double sum = 0;
+    for (int i = 0; i < period; i++) sum += data[i].close;
+    result[period - 1] = sum / period;
+    for (int i = period; i < data.length; i++) {
+      sum += data[i].close - data[i - period].close;
+      result[i] = sum / period;
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.data.isEmpty) {
       return const Center(child: Text('無 K 線數據'));
     }
+    _ensureIndicatorCache();
 
     final totalPoints = widget.data.length;
     final visiblePoints = (totalPoints * _visibleDataRange).ceil().clamp(10, totalPoints);
@@ -92,6 +129,12 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
                         settings: widget.settings,
                         touchedIndex: _touchedIndex,
                         isDark: true, // 深色金融風格，永遠使用暗色
+                        maData: _PrecomputedMA(
+                          ma5: _cachedMA5?.sublist(startIndex, endIndex),
+                          ma10: _cachedMA10?.sublist(startIndex, endIndex),
+                          ma20: _cachedMA20?.sublist(startIndex, endIndex),
+                          ma60: _cachedMA60?.sublist(startIndex, endIndex),
+                        ),
                       ),
                     ),
                   ),
@@ -328,18 +371,20 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
   }
 
   void _handleScaleUpdate(ScaleUpdateDetails details) {
-    setState(() {
-      if (details.scale != 1.0) {
-        _visibleDataRange = (_visibleDataRange / details.scale).clamp(0.1, 1.0);
+    if (details.scale != 1.0) {
+      final newRange = (_visibleDataRange / details.scale).clamp(0.1, 1.0);
+      if ((newRange - _visibleDataRange).abs() > 0.005) {
+        setState(() { _visibleDataRange = newRange; });
       }
-    });
+    }
   }
 
   void _handleHorizontalDrag(DragUpdateDetails details) {
-    setState(() {
-      final delta = details.primaryDelta ?? 0;
-      _scrollOffset = (_scrollOffset - delta / 200).clamp(0.0, 1.0);
-    });
+    final delta = details.primaryDelta ?? 0;
+    final newOffset = (_scrollOffset - delta / 200).clamp(0.0, 1.0);
+    if ((newOffset - _scrollOffset).abs() > 0.002) {
+      setState(() { _scrollOffset = newOffset; });
+    }
   }
 
   void _handleDrawingTap(TapUpDetails details) {
@@ -490,7 +535,7 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
   }
 
   Widget _buildMACDSubChart(BuildContext context, List<StockHistory> visibleData, int startIndex) {
-    final macdData = _computeMACDValues(widget.data);
+    final macdData = _cachedMACD ?? [];
     if (macdData.isEmpty) return _buildNoDataHint('MACD');
 
     // 使用 CustomPainter 繪製 MACD（避免 histogram 每根一個 LineChartBarData）
@@ -508,7 +553,7 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
   }
 
   Widget _buildRSISubChart(BuildContext context, List<StockHistory> visibleData, int startIndex) {
-    final rsiData = _computeRSIValues(widget.data);
+    final rsiData = _cachedRSI ?? [];
     if (rsiData.isEmpty) return _buildNoDataHint('RSI');
 
     final List<FlSpot> rsiSpots = [];
@@ -560,7 +605,7 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
   }
 
   Widget _buildKDSubChart(BuildContext context, List<StockHistory> visibleData, int startIndex) {
-    final kdData = _computeKDValues(widget.data);
+    final kdData = _cachedKD ?? [];
     if (kdData.isEmpty) return _buildNoDataHint('KD');
 
     final List<FlSpot> kSpots = [], dSpots = [];
@@ -721,18 +766,29 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
 
 // ==================== CustomPainters ====================
 
+/// 預計算的均線資料
+class _PrecomputedMA {
+  final List<double?>? ma5;
+  final List<double?>? ma10;
+  final List<double?>? ma20;
+  final List<double?>? ma60;
+  const _PrecomputedMA({this.ma5, this.ma10, this.ma20, this.ma60});
+}
+
 /// K 線主圖 Painter（高效能：單次 paint 繪製所有 K 棒 + 均線 + 布林）
 class _CandlestickChartPainter extends CustomPainter {
   final List<StockHistory> data;
   final ChartSettings settings;
   final int? touchedIndex;
   final bool isDark;
+  final _PrecomputedMA? maData;
 
   _CandlestickChartPainter({
     required this.data,
     required this.settings,
     this.touchedIndex,
     this.isDark = false,
+    this.maData,
   });
 
   @override
@@ -810,24 +866,26 @@ class _CandlestickChartPainter extends CustomPainter {
   void _drawMovingAverages(Canvas canvas, Size size, List<StockHistory> data, double Function(double) priceToY, int n) {
     final candleWidth = (size.width / n).clamp(3.0, 16.0);
 
-    void drawMA(int period, Color color, ChartIndicatorType type) {
-      if (!settings.isIndicatorEnabled(type) || data.length < period) return;
+    void drawPrecomputedMA(List<double?>? maValues, Color color, ChartIndicatorType type) {
+      if (!settings.isIndicatorEnabled(type) || maValues == null) return;
       final path = Path();
       bool started = false;
-      for (int i = period - 1; i < data.length; i++) {
-        double sum = 0;
-        for (int j = 0; j < period; j++) sum += data[i - j].close;
-        final y = priceToY(sum / period);
+      for (int i = 0; i < maValues.length; i++) {
+        final v = maValues[i];
+        if (v == null) continue;
         final x = (i + 0.5) * candleWidth;
+        final y = priceToY(v);
         if (!started) { path.moveTo(x, y); started = true; } else { path.lineTo(x, y); }
       }
       canvas.drawPath(path, Paint()..color = color..strokeWidth = 1.5..style = PaintingStyle.stroke);
     }
 
-    drawMA(5, Colors.blue, ChartIndicatorType.ma5);
-    drawMA(10, Colors.orange, ChartIndicatorType.ma10);
-    drawMA(20, Colors.purple, ChartIndicatorType.ma20);
-    drawMA(60, Colors.teal, ChartIndicatorType.ma60);
+    if (maData != null) {
+      drawPrecomputedMA(maData!.ma5, Colors.blue, ChartIndicatorType.ma5);
+      drawPrecomputedMA(maData!.ma10, Colors.orange, ChartIndicatorType.ma10);
+      drawPrecomputedMA(maData!.ma20, Colors.purple, ChartIndicatorType.ma20);
+      drawPrecomputedMA(maData!.ma60, Colors.teal, ChartIndicatorType.ma60);
+    }
   }
 
   void _drawBollingerBands(Canvas canvas, Size size, List<StockHistory> data, double Function(double) priceToY) {

@@ -105,6 +105,28 @@ class PriceCache:
 # 全局價格緩存：盤中 30 秒、收盤後 5 分鐘
 _price_cache = PriceCache(ttl_trading=30, ttl_closed=300)
 
+# K 線歷史資料快取：5 分鐘 TTL（歷史數據不常變）
+_history_cache: Dict[str, Any] = {}
+_history_cache_lock = threading.Lock()
+_HISTORY_CACHE_TTL = 300  # 5 分鐘
+
+
+def _get_history_cache(key: str) -> Optional[List[dict]]:
+    """取得 K 線歷史快取"""
+    with _history_cache_lock:
+        if key in _history_cache:
+            data, expires_at = _history_cache[key]
+            if datetime.now() < expires_at:
+                return data
+            del _history_cache[key]
+    return None
+
+
+def _set_history_cache(key: str, data: List[dict]):
+    """設定 K 線歷史快取"""
+    with _history_cache_lock:
+        _history_cache[key] = (data, datetime.now() + timedelta(seconds=_HISTORY_CACHE_TTL))
+
 
 def generate_mock_stock_history(stock_id: str, days: int = 60) -> List[dict]:
     """Generate mock stock history data for testing"""
@@ -469,7 +491,12 @@ class StockDataService:
             return self._get_tw_history(db, stock_id, days, period)
 
     def _get_us_history(self, stock_id: str, days: int = 60, period: str = "day") -> List[dict]:
-        """取得美股歷史K線"""
+        """取得美股歷史K線（含快取）"""
+        cache_key = f"us_history:{stock_id}:{days}:{period}"
+        cached = _get_history_cache(cache_key)
+        if cached is not None:
+            return cached
+
         # Map days to yfinance period
         if period == "week":
             yf_period = f"{min(days * 7, 365)}d"
@@ -485,11 +512,14 @@ class StockDataService:
 
         # Apply aggregation if needed
         if period == "week":
-            return self._aggregate_to_weekly(raw_data, days)
+            result = self._aggregate_to_weekly(raw_data, days)
         elif period == "month":
-            return self._aggregate_to_monthly(raw_data, days)
+            result = self._aggregate_to_monthly(raw_data, days)
+        else:
+            result = raw_data[-days:] if len(raw_data) > days else raw_data
 
-        return raw_data[-days:] if len(raw_data) > days else raw_data
+        _set_history_cache(cache_key, result)
+        return result
 
     def _get_tw_history(self, db: Session, stock_id: str, days: int = 60, period: str = "day") -> List[dict]:
         """取得台股歷史K線"""

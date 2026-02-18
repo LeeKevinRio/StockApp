@@ -602,7 +602,7 @@ class _KLineTabContentState extends State<_KLineTabContent> {
       market: widget.market,
     );
 
-    // Load patterns
+    // 並行載入 patterns（不等 K 線完成）
     if (_chartSettings.showPatterns) {
       _loadPatterns();
     }
@@ -612,6 +612,7 @@ class _KLineTabContentState extends State<_KLineTabContent> {
     final apiService = Provider.of<ApiService>(context, listen: false);
     _patternsFuture = apiService
         .getStockPatterns(widget.stockId, lookback: _days, market: widget.market)
+        .timeout(const Duration(seconds: 5), onTimeout: () => {'patterns': <dynamic>[]})
         .then((data) {
       final patterns = (data['patterns'] as List?)
               ?.map((p) => PatternMarker.fromJson(p))
