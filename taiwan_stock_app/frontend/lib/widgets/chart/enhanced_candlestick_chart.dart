@@ -193,9 +193,6 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
                           ),
                         ),
                       ),
-                      // 十字線資訊
-                      if (_touchedIndex != null && widget.settings.enableCrosshair)
-                        _buildCrosshairOverlay(context, visibleData, startIndex),
                       // 形態標記（用 IgnorePointer 避免攔截滑鼠事件）
                       if (widget.settings.showPatterns && widget.patterns.isNotEmpty)
                         Positioned.fill(
@@ -211,6 +208,9 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
                         IgnorePointer(child: _buildDrawingsOverlay(context)),
                       if (_activeDrawingTool != null && _currentDrawingPoints.isNotEmpty)
                         _buildActiveDrawing(context),
+                      // 十字線資訊（放在最上層，不被形態標記遮擋）
+                      if (_touchedIndex != null && widget.settings.enableCrosshair)
+                        _buildCrosshairOverlay(context, visibleData, startIndex),
                     ],
                   ),
                 ),
@@ -850,7 +850,7 @@ class _CandlestickChartPainter extends CustomPainter {
     final paddedRange = paddedMax - paddedMin;
     if (paddedRange == 0) return;
 
-    final candleWidth = (size.width / n).clamp(3.0, 16.0);
+    final candleWidth = (size.width / n).clamp(3.0, size.width);
     final bodyWidth = candleWidth * 0.7;
 
     double priceToY(double price) => size.height - ((price - paddedMin) / paddedRange * size.height);
@@ -910,7 +910,7 @@ class _CandlestickChartPainter extends CustomPainter {
   }
 
   void _drawMovingAverages(Canvas canvas, Size size, List<StockHistory> data, double Function(double) priceToY, int n) {
-    final candleWidth = (size.width / n).clamp(3.0, 16.0);
+    final candleWidth = (size.width / n).clamp(3.0, size.width);
 
     void drawPrecomputedMA(List<double?>? maValues, Color color, ChartIndicatorType type) {
       if (!settings.isIndicatorEnabled(type) || maValues == null) return;
@@ -936,7 +936,7 @@ class _CandlestickChartPainter extends CustomPainter {
 
   void _drawPrecomputedBollinger(Canvas canvas, Size size, double Function(double) priceToY, int n) {
     if (bollingerData == null) return;
-    final candleWidth = (size.width / n).clamp(3.0, 16.0);
+    final candleWidth = (size.width / n).clamp(3.0, size.width);
     final upperPath = Path();
     final middlePath = Path();
     final lowerPath = Path();
@@ -1045,7 +1045,7 @@ class _VolumePainter extends CustomPainter {
     final maxVol = data.map((e) => e.volume).reduce(max).toDouble();
     if (maxVol == 0) return;
 
-    final barWidth = (size.width / n).clamp(2.0, 14.0) * 0.7;
+    final barWidth = (size.width / n).clamp(2.0, size.width) * 0.7;
 
     for (int i = 0; i < n; i++) {
       final candle = data[i];
