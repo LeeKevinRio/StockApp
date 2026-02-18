@@ -14,8 +14,11 @@ from app.services.ai_suggestion_service import get_groq_client
 class AIChatService:
     """AI 問答服務"""
 
-    SYSTEM_PROMPT = """你是一位專業的台股投資顧問 AI 助手。你可以：
+    SYSTEM_PROMPT_TEMPLATE = """你是一位專業的台股投資顧問 AI 助手。
 
+## 今天日期：{today}
+
+你可以：
 1. 回答關於台股投資的各種問題
 2. 分析特定股票的技術面、籌碼面、基本面
 3. 解釋投資概念和術語
@@ -26,8 +29,55 @@ class AIChatService:
 - 回答時引用具體數據，說明數據來源
 - 保持客觀中立，提醒投資風險
 - 如果不確定或沒有相關數據，誠實告知
+- **你的訓練資料有截止日期，若用戶詢問的內容超出你的知識範圍，請誠實說明你的資料截止時間，並根據下方提供的即時數據回答**
+- **絕對不要編造或猜測你不知道的股價、財報數據，若無即時數據，請明確告知**
 
 當用戶詢問特定股票時，你會收到該股票的最新數據，請根據數據提供分析。"""
+
+    # 產業關鍵字 → 代表性個股（用於自動補充即時數據）
+    INDUSTRY_STOCKS = {
+        "半導體": ["2330", "2303", "2454", "3711", "2379"],
+        "晶圓代工": ["2330", "6770"],
+        "IC設計": ["2454", "3711", "2379", "3034"],
+        "封測": ["2311", "3711", "2325"],
+        "面板": ["2409", "3481", "6116"],
+        "電子": ["2317", "2382", "2308", "3231"],
+        "金融": ["2881", "2882", "2884", "2886", "2891"],
+        "銀行": ["2881", "2882", "2884", "2886"],
+        "保險": ["2823", "2816", "2832"],
+        "證券": ["6005", "2855", "6021"],
+        "鋼鐵": ["2002", "2006", "2014"],
+        "航運": ["2603", "2609", "2615"],
+        "貨櫃": ["2603", "2609", "2615"],
+        "散裝": ["2605", "2606", "2634"],
+        "航空": ["2610", "2618", "6288"],
+        "汽車": ["2201", "2207", "2227"],
+        "電動車": ["2201", "3037", "2308", "6274"],
+        "食品": ["1216", "1301", "2912"],
+        "營建": ["2501", "2504", "2542", "5534"],
+        "生技": ["4743", "6446", "1760", "4147"],
+        "觀光": ["2702", "2706", "2707"],
+        "電信": ["2412", "3045", "4904"],
+        "石化": ["1301", "1303", "1326", "6505"],
+        "塑膠": ["1301", "1303", "1326"],
+        "紡織": ["1402", "1434", "1476"],
+        "光電": ["2349", "3008", "6285"],
+        "AI": ["2330", "2454", "3443", "2382", "3231"],
+        "人工智慧": ["2330", "2454", "3443", "2382", "3231"],
+        "5G": ["2454", "3045", "4904", "2382"],
+        "綠能": ["6244", "3576", "6443"],
+        "太陽能": ["3576", "6244", "6443"],
+        "風電": ["2208", "2634"],
+        "PCB": ["3037", "8046", "2353"],
+        "伺服器": ["2382", "3231", "2395", "4938"],
+        "記憶體": ["2303", "8299", "3006"],
+        "DRAM": ["2303", "8299"],
+        "被動元件": ["2327", "3533"],
+        "連接器": ["2354", "3023"],
+        "ABF載板": ["3037", "8046", "2353"],
+        "散熱": ["3092", "6230", "3548"],
+        "ETF": ["0050", "0056", "00878", "00919"],
+    }
 
     def __init__(self, subscription_tier: str = 'free'):
         self.finmind = FinMindFetcher(settings.FINMIND_TOKEN)
@@ -41,6 +91,25 @@ class AIChatService:
 
         self.llm = genai.GenerativeModel(self.model)
         self.subscription_tier = subscription_tier
+
+    def _get_system_prompt(self) -> str:
+        """生成包含今日日期的系統提示詞"""
+        return self.SYSTEM_PROMPT_TEMPLATE.format(today=date.today().strftime("%Y-%m-%d"))
+
+    def _detect_industry_stocks(self, message: str) -> List[str]:
+        """從用戶訊息中偵測產業關鍵字，回傳代表性個股列表"""
+        matched_stocks = []
+        for keyword, stocks in self.INDUSTRY_STOCKS.items():
+            if keyword in message:
+                matched_stocks.extend(stocks)
+        # 去重，最多取 5 檔
+        seen = set()
+        unique = []
+        for s in matched_stocks:
+            if s not in seen:
+                seen.add(s)
+                unique.append(s)
+        return unique[:5]
 
     @classmethod
     def for_user(cls, user) -> 'AIChatService':
@@ -57,6 +126,8 @@ class AIChatService:
         chat_history: Optional[List[Dict]] = None,
     ) -> Dict:
         """處理用戶問答，支援 Gemini -> Groq fallback"""
+        system_prompt = self._get_system_prompt()
+
         # 建立對話歷史
         history = []
         if chat_history:
@@ -70,14 +141,30 @@ class AIChatService:
         if stock_id:
             try:
                 stock_data = self._get_stock_context(stock_id)
-                stock_context = f"\n\n## 股票 {stock_id} 的最新數據\n{stock_data}"
+                stock_context = f"\n\n## 股票 {stock_id} 的最新即時數據（{date.today()}）\n{stock_data}"
                 sources.append("FinMind 股票數據")
                 sources.append("證交所三大法人買賣超")
             except Exception as e:
                 stock_context = f"\n\n（無法取得股票 {stock_id} 的數據：{str(e)}）"
 
+        # 如果沒有指定股票，偵測產業關鍵字並補充即時數據
+        if not stock_id:
+            industry_stocks = self._detect_industry_stocks(user_message)
+            if industry_stocks:
+                industry_context_parts = []
+                for sid in industry_stocks:
+                    try:
+                        data = self._get_stock_context(sid)
+                        industry_context_parts.append(f"### {sid}\n{data}")
+                    except Exception:
+                        pass
+                if industry_context_parts:
+                    stock_context = f"\n\n## 相關產業個股即時數據（{date.today()}）\n" + "\n".join(industry_context_parts)
+                    sources.append("FinMind 股票數據")
+                    sources.append("證交所三大法人買賣超")
+
         # 組合用戶訊息
-        full_message = f"{self.SYSTEM_PROMPT}\n\n{user_message}{stock_context}"
+        full_message = f"{system_prompt}\n\n{user_message}{stock_context}"
 
         # 1. 嘗試 Gemini
         ai_response = self._call_gemini_chat(full_message, history)
@@ -85,7 +172,7 @@ class AIChatService:
         # 2. Gemini 失敗，嘗試 Groq
         if ai_response is None:
             print("Gemini chat failed, trying Groq...")
-            ai_response = self._call_groq_chat(full_message, chat_history)
+            ai_response = self._call_groq_chat(full_message, chat_history, system_prompt)
 
         # 3. 全部失敗
         if ai_response is None:
@@ -118,16 +205,17 @@ class AIChatService:
                 print(f"Gemini chat error: {e}")
             return None
 
-    def _call_groq_chat(self, message: str, chat_history: Optional[List[Dict]] = None) -> Optional[str]:
+    def _call_groq_chat(self, message: str, chat_history: Optional[List[Dict]] = None, system_prompt: Optional[str] = None) -> Optional[str]:
         """呼叫 Groq Chat API"""
         groq_client = get_groq_client()
         if groq_client is None:
             print("Groq client not available (API key not set or package not installed)")
             return None
 
+        prompt = system_prompt or self._get_system_prompt()
         try:
             messages = [
-                {"role": "system", "content": self.SYSTEM_PROMPT}
+                {"role": "system", "content": prompt}
             ]
             # 加入對話歷史
             if chat_history:
@@ -137,7 +225,7 @@ class AIChatService:
                         "content": msg["content"]
                     })
             # 加入當前訊息（去掉 system prompt 前綴，因為已放在 system message）
-            user_content = message.replace(self.SYSTEM_PROMPT + "\n\n", "")
+            user_content = message.replace(prompt + "\n\n", "")
             messages.append({"role": "user", "content": user_content})
 
             chat_completion = groq_client.chat.completions.create(
@@ -164,6 +252,19 @@ class AIChatService:
         # 取得價格
         prices = self.finmind.get_stock_price(stock_id, start_str)
         latest = prices.iloc[-1] if len(prices) > 0 else None
+        latest_date = latest['date'] if latest is not None and 'date' in latest else end_date.strftime("%Y-%m-%d")
+
+        # 計算近期漲跌幅
+        price_change_5d = ""
+        price_change_20d = ""
+        if latest is not None and len(prices) >= 5:
+            close_now = float(latest['close'])
+            close_5d = float(prices.iloc[-5]['close'])
+            price_change_5d = f"{((close_now - close_5d) / close_5d * 100):.2f}%"
+        if latest is not None and len(prices) >= 20:
+            close_now = float(latest['close'])
+            close_20d = float(prices.iloc[-20]['close'])
+            price_change_20d = f"{((close_now - close_20d) / close_20d * 100):.2f}%"
 
         # 取得籌碼
         institutions = self.finmind.get_institutional_investors(stock_id, start_str)
@@ -174,8 +275,11 @@ class AIChatService:
         trust_sell = institutions.tail(5)["Investment_Trust_sell"].sum() if len(institutions) >= 5 else 0
 
         context = f"""
+- 資料日期：{latest_date}
 - 最新收盤價：{latest['close'] if latest is not None else 'N/A'}
 - 成交量：{latest['Trading_Volume'] if latest is not None else 'N/A'}
+- 近5日漲跌幅：{price_change_5d or 'N/A'}
+- 近20日漲跌幅：{price_change_20d or 'N/A'}
 - 近5日外資買賣超：{foreign_buy - foreign_sell if len(institutions) >= 5 else 'N/A'}
 - 近5日投信買賣超：{trust_buy - trust_sell if len(institutions) >= 5 else 'N/A'}
 """
