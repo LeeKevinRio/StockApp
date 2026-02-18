@@ -370,6 +370,26 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
                 widget.settings.copyWith(showPatterns: !widget.settings.showPatterns),
               );
             }),
+            if (widget.settings.showPatterns && widget.patterns.isNotEmpty)
+              GestureDetector(
+                onTap: () => _showPatternDetailDialog(context),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  margin: const EdgeInsets.only(left: 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.amber.withAlpha(128)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.info_outline, size: 13, color: Colors.amber),
+                      SizedBox(width: 2),
+                      Text('詳情', style: TextStyle(fontSize: 11, color: Colors.amber)),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -801,6 +821,237 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
         _ChartSettingsSheet(settings: widget.settings, onSettingsChanged: widget.onSettingsChanged));
   }
 
+  void _showPatternDetailDialog(BuildContext context) {
+    final sorted = List<PatternMarker>.from(widget.patterns)
+      ..sort((a, b) => b.confidence.compareTo(a.confidence));
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        maxChildSize: 0.85,
+        minChildSize: 0.3,
+        expand: false,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Icon(Icons.auto_graph, color: Colors.amber, size: 20),
+                const SizedBox(width: 8),
+                const Text('形態識別結果', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                TextButton.icon(
+                  icon: const Icon(Icons.school, size: 16),
+                  label: const Text('形態教學', style: TextStyle(fontSize: 12)),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _showPatternTutorialDialog(context);
+                  },
+                ),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+              ]),
+              const Divider(),
+              Text('共偵測到 ${sorted.length} 個形態，顯示信心度最高的前 ${sorted.length.clamp(0, 3)} 個',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: sorted.length,
+                  itemBuilder: (context, index) {
+                    final p = sorted[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      color: p.markerColor.withAlpha(25),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(color: p.markerColor.withAlpha(76)),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: p.markerColor.withAlpha(51),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  p.isBullish ? '看多 ▲' : p.isBearish ? '看空 ▼' : '中性',
+                                  style: TextStyle(fontSize: 11, color: p.markerColor, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(p.typeName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                              const Spacer(),
+                              Text('${p.confidence.toStringAsFixed(0)}%',
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: p.markerColor)),
+                            ]),
+                            const SizedBox(height: 8),
+                            Text(p.description, style: TextStyle(fontSize: 12, color: Colors.grey.shade300)),
+                            const SizedBox(height: 8),
+                            Row(children: [
+                              if (p.targetPrice != null) ...[
+                                Icon(Icons.flag, size: 13, color: Colors.green.shade300),
+                                const SizedBox(width: 4),
+                                Text('目標 ${p.targetPrice!.toStringAsFixed(2)}',
+                                    style: TextStyle(fontSize: 11, color: Colors.green.shade300)),
+                                const SizedBox(width: 12),
+                              ],
+                              if (p.stopLoss != null) ...[
+                                Icon(Icons.shield, size: 13, color: Colors.red.shade300),
+                                const SizedBox(width: 4),
+                                Text('停損 ${p.stopLoss!.toStringAsFixed(2)}',
+                                    style: TextStyle(fontSize: 11, color: Colors.red.shade300)),
+                              ],
+                              const Spacer(),
+                              if (p.isConfirmed)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.withAlpha(51),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text('已確認突破', style: TextStyle(fontSize: 10, color: Colors.amber)),
+                                ),
+                            ]),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '* 形態識別僅供參考，不構成投資建議。市場瞬息萬變，請結合其他指標綜合判斷。',
+                  style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPatternTutorialDialog(BuildContext context) {
+    const patternGuide = [
+      _PatternGuideItem(
+        name: '頭肩頂 / 頭肩底',
+        icon: '🔻 / 🔺',
+        desc: '三個波峰（谷），中間最高（低）。頭肩頂為反轉看空訊號，頭肩底為反轉看多訊號。',
+        tip: '觀察頸線突破時的成交量放大，確認突破有效性。',
+      ),
+      _PatternGuideItem(
+        name: '雙頂 / 雙底',
+        icon: '🔻 / 🔺',
+        desc: '兩個相近高度的波峰（谷）形成 M（W）形。雙頂看空、雙底看多。',
+        tip: '兩個頂（底）高度差距越小越可靠，第二次觸及量縮更佳。',
+      ),
+      _PatternGuideItem(
+        name: '上升/下降/對稱三角形',
+        icon: '📐',
+        desc: '價格在收斂的趨勢線內整理。上升三角偏多、下降三角偏空、對稱三角等待方向。',
+        tip: '三角形收斂到 2/3 位置後的突破最有意義。',
+      ),
+      _PatternGuideItem(
+        name: '上升/下降楔形',
+        icon: '📈',
+        desc: '兩條同向但收斂的趨勢線。上升楔形（看空）、下降楔形（看多），皆為反轉訊號。',
+        tip: '楔形末端量能萎縮，突破時量增確認方向。',
+      ),
+      _PatternGuideItem(
+        name: '多頭旗形 / 空頭旗形',
+        icon: '🚩',
+        desc: '急漲（急跌）後的短暫橫盤整理，形似旗幟。屬於延續形態。',
+        tip: '旗桿越明顯、整理期間越短，後續延續力道越強。',
+      ),
+      _PatternGuideItem(
+        name: '矩形整理',
+        icon: '▬',
+        desc: '價格在水平的支撐與阻力之間反覆震盪。突破方向決定後續走勢。',
+        tip: '整理時間越長、突破時量能越大，後續行情越可觀。',
+      ),
+      _PatternGuideItem(
+        name: '向上突破 / 向下突破',
+        icon: '⚡',
+        desc: '價格突破近期高低點，伴隨超過 0.5 ATR 的漲跌幅，為動能訊號。',
+        tip: '突破後回測不破原突破位置，即為有效突破。',
+      ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        minChildSize: 0.4,
+        expand: false,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Icon(Icons.school, color: Colors.amber, size: 20),
+                const SizedBox(width: 8),
+                const Text('K線形態教學', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+              ]),
+              const Divider(),
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: patternGuide.length,
+                  itemBuilder: (context, index) {
+                    final item = patternGuide[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(children: [
+                              Text(item.icon, style: const TextStyle(fontSize: 16)),
+                              const SizedBox(width: 8),
+                              Text(item.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                            ]),
+                            const SizedBox(height: 6),
+                            Text(item.desc, style: TextStyle(fontSize: 12, color: Colors.grey.shade300)),
+                            const SizedBox(height: 6),
+                            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Icon(Icons.lightbulb_outline, size: 13, color: Colors.amber.shade300),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(item.tip,
+                                    style: TextStyle(fontSize: 11, color: Colors.amber.shade300, fontStyle: FontStyle.italic)),
+                              ),
+                            ]),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   String _formatVolume(double volume) {
     if (volume >= 100000000) return '${(volume / 100000000).toStringAsFixed(0)}億';
     if (volume >= 10000) return '${(volume / 10000).toStringAsFixed(0)}萬';
@@ -1147,25 +1398,63 @@ class PatternMarkerPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final pattern in patterns) {
+    if (visibleData.isEmpty) return;
+
+    // 只繪製信心度前 3 名，避免過多重疊
+    final sorted = List<PatternMarker>.from(patterns)
+      ..sort((a, b) => b.confidence.compareTo(a.confidence));
+    final topPatterns = sorted.take(3).toList();
+
+    double labelY = 4; // 標籤垂直偏移，逐個往下錯開
+
+    for (final pattern in topPatterns) {
       final relativeStart = pattern.startIndex - startIndex;
       final relativeEnd = pattern.endIndex - startIndex;
       if (relativeEnd < 0 || relativeStart >= visibleData.length) continue;
 
       final startX = (relativeStart.clamp(0, visibleData.length - 1)) / visibleData.length * size.width;
-      final endX = (relativeEnd.clamp(0, visibleData.length - 1)) / visibleData.length * size.width;
+      final endX = (relativeEnd.clamp(0, visibleData.length - 1) + 1) / visibleData.length * size.width;
 
-      canvas.drawRect(Rect.fromLTRB(startX, 0, endX, size.height),
-          Paint()..color = pattern.markerColor.withAlpha(76)..style = PaintingStyle.fill);
+      // 繪製半透明背景區域（只佔上半或下半，減少遮擋）
+      final areaTop = pattern.isBearish ? 0.0 : size.height * 0.5;
+      final areaBottom = pattern.isBearish ? size.height * 0.5 : size.height;
+      canvas.drawRect(
+        Rect.fromLTRB(startX, areaTop, endX, areaBottom),
+        Paint()..color = pattern.markerColor.withAlpha(40)..style = PaintingStyle.fill,
+      );
 
+      // 繪製邊框線
+      final borderPaint = Paint()
+        ..color = pattern.markerColor.withAlpha(128)
+        ..strokeWidth = 1.5
+        ..style = PaintingStyle.stroke;
+      canvas.drawRect(Rect.fromLTRB(startX, areaTop, endX, areaBottom), borderPaint);
+
+      // 繪製標籤（背景 + 文字），垂直錯開避免重疊
+      final labelText = '${pattern.typeName} ${pattern.confidence.toStringAsFixed(0)}%'
+          '${pattern.isBullish ? " ▲" : pattern.isBearish ? " ▼" : ""}';
       final tp = TextPainter(
         text: TextSpan(
-          text: '${pattern.typeName} ${pattern.confidence.toStringAsFixed(0)}%',
-          style: textStyle.copyWith(color: pattern.markerColor, fontWeight: FontWeight.bold),
+          text: labelText,
+          style: textStyle.copyWith(
+            color: pattern.markerColor,
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+          ),
         ),
         textDirection: ui.TextDirection.ltr,
       )..layout();
-      tp.paint(canvas, Offset(startX + 4, 4));
+
+      // 標籤背景
+      final labelRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(startX + 2, labelY - 1, tp.width + 8, tp.height + 4),
+        const Radius.circular(3),
+      );
+      canvas.drawRRect(labelRect, Paint()..color = Colors.black.withAlpha(178));
+      canvas.drawRRect(labelRect, Paint()..color = pattern.markerColor.withAlpha(128)..style = PaintingStyle.stroke..strokeWidth = 0.5);
+      tp.paint(canvas, Offset(startX + 6, labelY + 1));
+
+      labelY += tp.height + 8; // 下一個標籤往下偏移
     }
   }
 
@@ -1262,4 +1551,13 @@ class _ChartSettingsSheet extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 形態教學項目
+class _PatternGuideItem {
+  final String name;
+  final String icon;
+  final String desc;
+  final String tip;
+  const _PatternGuideItem({required this.name, required this.icon, required this.desc, required this.tip});
 }
