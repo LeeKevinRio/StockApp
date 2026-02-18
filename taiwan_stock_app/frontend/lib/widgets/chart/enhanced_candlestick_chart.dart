@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'dart:ui' as ui;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -61,6 +62,8 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
   List<double?>? _cachedMA10;
   List<double?>? _cachedMA20;
   List<double?>? _cachedMA60;
+  // 布林通道預計算快取
+  List<(double, double, double)?>? _cachedBollinger; // (upper, middle, lower)
 
   void _ensureIndicatorCache() {
     if (identical(_cachedData, widget.data)) return;
@@ -72,6 +75,7 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
     _cachedMA10 = _precomputeMA(widget.data, 10);
     _cachedMA20 = _precomputeMA(widget.data, 20);
     _cachedMA60 = _precomputeMA(widget.data, 60);
+    _cachedBollinger = _precomputeBollinger(widget.data, 20, 2.0);
   }
 
   List<double?> _precomputeMA(List<StockHistory> data, int period) {
@@ -83,6 +87,24 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
     for (int i = period; i < data.length; i++) {
       sum += data[i].close - data[i - period].close;
       result[i] = sum / period;
+    }
+    return result;
+  }
+
+  List<(double, double, double)?> _precomputeBollinger(List<StockHistory> data, int period, double multiplier) {
+    final result = List<(double, double, double)?>.filled(data.length, null);
+    if (data.length < period) return result;
+    for (int i = period - 1; i < data.length; i++) {
+      double sum = 0;
+      for (int j = 0; j < period; j++) sum += data[i - j].close;
+      final ma = sum / period;
+      double sumSq = 0;
+      for (int j = 0; j < period; j++) {
+        final diff = data[i - j].close - ma;
+        sumSq += diff * diff;
+      }
+      final stdDev = sqrt(sumSq / period);
+      result[i] = (ma + multiplier * stdDev, ma, ma - multiplier * stdDev);
     }
     return result;
   }
@@ -111,34 +133,40 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
         // K線圖表（使用 CustomPainter）
         Expanded(
           flex: _selectedSubChart != SubChartType.none ? 4 : 3,
-          child: GestureDetector(
-            onScaleUpdate: widget.settings.enableZoom ? _handleScaleUpdate : null,
-            onHorizontalDragUpdate: widget.settings.enableZoom ? _handleHorizontalDrag : null,
-            onTapUp: _activeDrawingTool != null
-                ? _handleDrawingTap
-                : (widget.settings.enableCrosshair ? (details) => _handleChartTap(details, visibleData) : null),
-            child: Stack(
-              children: [
-                // K 線主圖（CustomPainter）
-                Positioned.fill(
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 50, left: 8, top: 16, bottom: 24),
-                    child: CustomPaint(
-                      painter: _CandlestickChartPainter(
-                        data: visibleData,
-                        settings: widget.settings,
-                        touchedIndex: _touchedIndex,
-                        isDark: true, // 深色金融風格，永遠使用暗色
-                        maData: _PrecomputedMA(
-                          ma5: _cachedMA5?.sublist(startIndex, endIndex),
-                          ma10: _cachedMA10?.sublist(startIndex, endIndex),
-                          ma20: _cachedMA20?.sublist(startIndex, endIndex),
-                          ma60: _cachedMA60?.sublist(startIndex, endIndex),
+          child: Listener(
+            // Web: 用滑鼠滾輪縮放
+            onPointerSignal: widget.settings.enableZoom ? _handlePointerSignal : null,
+            child: GestureDetector(
+              // 用水平拖動來左右滾動 K 線
+              onHorizontalDragUpdate: widget.settings.enableZoom ? _handleHorizontalDrag : null,
+              onTapUp: _activeDrawingTool != null
+                  ? _handleDrawingTap
+                  : (widget.settings.enableCrosshair ? (details) => _handleChartTap(details, visibleData) : null),
+              behavior: HitTestBehavior.opaque,
+              child: RepaintBoundary(
+                child: Stack(
+                  children: [
+                    // K 線主圖（CustomPainter）
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 50, left: 8, top: 16, bottom: 24),
+                        child: CustomPaint(
+                          painter: _CandlestickChartPainter(
+                            data: visibleData,
+                            settings: widget.settings,
+                            touchedIndex: _touchedIndex,
+                            isDark: true,
+                            maData: _PrecomputedMA(
+                              ma5: _cachedMA5?.sublist(startIndex, endIndex),
+                              ma10: _cachedMA10?.sublist(startIndex, endIndex),
+                              ma20: _cachedMA20?.sublist(startIndex, endIndex),
+                              ma60: _cachedMA60?.sublist(startIndex, endIndex),
+                            ),
+                            bollingerData: _cachedBollinger?.sublist(startIndex, endIndex),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
                 // 右側價格軸
                 Positioned(
                   right: 0,
@@ -182,19 +210,23 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
                 // 正在繪製的對象
                 if (_activeDrawingTool != null && _currentDrawingPoints.isNotEmpty)
                   _buildActiveDrawing(context),
-              ],
+                ],
+              ),
             ),
+          ),
           ),
         ),
         // 成交量圖表
         if (widget.settings.showVolume) ...[
           const SizedBox(height: 4),
-          SizedBox(
-            height: 60,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 50, left: 8),
-              child: CustomPaint(
-                painter: _VolumePainter(data: visibleData),
+          RepaintBoundary(
+            child: SizedBox(
+              height: 60,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 50, left: 8),
+                child: CustomPaint(
+                  painter: _VolumePainter(data: visibleData),
+                ),
               ),
             ),
           ),
@@ -370,9 +402,10 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
     widget.onSettingsChanged?.call(widget.settings.toggleIndicator(type));
   }
 
-  void _handleScaleUpdate(ScaleUpdateDetails details) {
-    if (details.scale != 1.0) {
-      final newRange = (_visibleDataRange / details.scale).clamp(0.1, 1.0);
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent) {
+      final scrollDelta = event.scrollDelta.dy;
+      final newRange = (_visibleDataRange + scrollDelta * 0.001).clamp(0.1, 1.0);
       if ((newRange - _visibleDataRange).abs() > 0.005) {
         setState(() { _visibleDataRange = newRange; });
       }
@@ -381,7 +414,7 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
 
   void _handleHorizontalDrag(DragUpdateDetails details) {
     final delta = details.primaryDelta ?? 0;
-    final newOffset = (_scrollOffset - delta / 200).clamp(0.0, 1.0);
+    final newOffset = (_scrollOffset - delta / 300).clamp(0.0, 1.0);
     if ((newOffset - _scrollOffset).abs() > 0.002) {
       setState(() { _scrollOffset = newOffset; });
     }
@@ -782,6 +815,7 @@ class _CandlestickChartPainter extends CustomPainter {
   final int? touchedIndex;
   final bool isDark;
   final _PrecomputedMA? maData;
+  final List<(double, double, double)?>? bollingerData;
 
   _CandlestickChartPainter({
     required this.data,
@@ -789,6 +823,7 @@ class _CandlestickChartPainter extends CustomPainter {
     this.touchedIndex,
     this.isDark = false,
     this.maData,
+    this.bollingerData,
   });
 
   @override
@@ -816,9 +851,9 @@ class _CandlestickChartPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
 
-    // 繪製布林通道
-    if (settings.isIndicatorEnabled(ChartIndicatorType.bollinger)) {
-      _drawBollingerBands(canvas, size, data, priceToY);
+    // 繪製布林通道（使用預計算資料）
+    if (settings.isIndicatorEnabled(ChartIndicatorType.bollinger) && bollingerData != null) {
+      _drawPrecomputedBollinger(canvas, size, priceToY, n);
     }
 
     // 繪製均線
@@ -888,36 +923,27 @@ class _CandlestickChartPainter extends CustomPainter {
     }
   }
 
-  void _drawBollingerBands(Canvas canvas, Size size, List<StockHistory> data, double Function(double) priceToY) {
-    const period = 20;
-    const stdDevMultiplier = 2.0;
-    if (data.length < period) return;
-
-    final candleWidth = size.width / data.length;
+  void _drawPrecomputedBollinger(Canvas canvas, Size size, double Function(double) priceToY, int n) {
+    if (bollingerData == null) return;
+    final candleWidth = (size.width / n).clamp(3.0, 16.0);
     final upperPath = Path();
     final middlePath = Path();
     final lowerPath = Path();
     bool started = false;
 
-    for (int i = period - 1; i < data.length; i++) {
-      double sum = 0;
-      for (int j = 0; j < period; j++) sum += data[i - j].close;
-      final ma = sum / period;
-
-      double sumSq = 0;
-      for (int j = 0; j < period; j++) sumSq += (data[i - j].close - ma) * (data[i - j].close - ma);
-      final stdDev = sqrt(sumSq / period);
-
+    for (int i = 0; i < bollingerData!.length; i++) {
+      final b = bollingerData![i];
+      if (b == null) continue;
       final x = (i + 0.5) * candleWidth;
       if (!started) {
-        upperPath.moveTo(x, priceToY(ma + stdDevMultiplier * stdDev));
-        middlePath.moveTo(x, priceToY(ma));
-        lowerPath.moveTo(x, priceToY(ma - stdDevMultiplier * stdDev));
+        upperPath.moveTo(x, priceToY(b.$1));
+        middlePath.moveTo(x, priceToY(b.$2));
+        lowerPath.moveTo(x, priceToY(b.$3));
         started = true;
       } else {
-        upperPath.lineTo(x, priceToY(ma + stdDevMultiplier * stdDev));
-        middlePath.lineTo(x, priceToY(ma));
-        lowerPath.lineTo(x, priceToY(ma - stdDevMultiplier * stdDev));
+        upperPath.lineTo(x, priceToY(b.$1));
+        middlePath.lineTo(x, priceToY(b.$2));
+        lowerPath.lineTo(x, priceToY(b.$3));
       }
     }
 

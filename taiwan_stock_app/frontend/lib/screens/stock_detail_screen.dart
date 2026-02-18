@@ -571,10 +571,14 @@ class _KLineTabContent extends StatefulWidget {
   State<_KLineTabContent> createState() => _KLineTabContentState();
 }
 
-class _KLineTabContentState extends State<_KLineTabContent> {
+class _KLineTabContentState extends State<_KLineTabContent>
+    with AutomaticKeepAliveClientMixin {
   ChartSettings _chartSettings = ChartSettings();
   Future<List<StockHistory>>? _dataFuture;
   Future<List<PatternMarker>>? _patternsFuture;
+
+  @override
+  bool get wantKeepAlive => true;
 
   int get _days {
     switch (_chartSettings.period) {
@@ -634,6 +638,7 @@ class _KLineTabContentState extends State<_KLineTabContent> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     return FutureBuilder<List<StockHistory>>(
       future: _dataFuture,
       builder: (context, snapshot) {
