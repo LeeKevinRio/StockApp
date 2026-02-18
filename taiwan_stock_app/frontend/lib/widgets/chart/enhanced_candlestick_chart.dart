@@ -132,88 +132,90 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
         _buildIndicatorLegend(context),
         // K線圖表（使用 CustomPainter）
         Expanded(
-          flex: _selectedSubChart != SubChartType.none ? 4 : 3,
-          child: Listener(
-            // Web: 用滑鼠滾輪縮放
-            onPointerSignal: widget.settings.enableZoom ? _handlePointerSignal : null,
-            child: GestureDetector(
-              // 用水平拖動來左右滾動 K 線
-              onHorizontalDragUpdate: widget.settings.enableZoom ? _handleHorizontalDrag : null,
-              onTapUp: _activeDrawingTool != null
-                  ? _handleDrawingTap
-                  : (widget.settings.enableCrosshair ? (details) => _handleChartTap(details, visibleData) : null),
-              behavior: HitTestBehavior.opaque,
-              child: RepaintBoundary(
-                child: Stack(
-                  children: [
-                    // K 線主圖（CustomPainter）
-                    Positioned.fill(
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 50, left: 8, top: 16, bottom: 24),
-                        child: CustomPaint(
-                          painter: _CandlestickChartPainter(
-                            data: visibleData,
-                            settings: widget.settings,
-                            touchedIndex: _touchedIndex,
-                            isDark: true,
-                            maData: _PrecomputedMA(
-                              ma5: _cachedMA5?.sublist(startIndex, endIndex),
-                              ma10: _cachedMA10?.sublist(startIndex, endIndex),
-                              ma20: _cachedMA20?.sublist(startIndex, endIndex),
-                              ma60: _cachedMA60?.sublist(startIndex, endIndex),
+          flex: _selectedSubChart != SubChartType.none ? 3 : 1,
+          child: MouseRegion(
+            // 滑鼠移動時即時顯示十字線
+            onHover: widget.settings.enableCrosshair ? (event) => _handleMouseHover(event, visibleData) : null,
+            onExit: (_) { if (_touchedIndex != null) setState(() => _touchedIndex = null); },
+            child: Listener(
+              onPointerSignal: widget.settings.enableZoom ? _handlePointerSignal : null,
+              child: GestureDetector(
+                onHorizontalDragUpdate: widget.settings.enableZoom ? _handleHorizontalDrag : null,
+                onTapUp: _activeDrawingTool != null ? _handleDrawingTap : null,
+                behavior: HitTestBehavior.opaque,
+                child: RepaintBoundary(
+                  child: Stack(
+                    children: [
+                      // K 線主圖
+                      Positioned.fill(
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 50, left: 8, top: 16, bottom: 24),
+                          child: CustomPaint(
+                            painter: _CandlestickChartPainter(
+                              data: visibleData,
+                              settings: widget.settings,
+                              touchedIndex: _touchedIndex,
+                              isDark: true,
+                              maData: _PrecomputedMA(
+                                ma5: _cachedMA5?.sublist(startIndex, endIndex),
+                                ma10: _cachedMA10?.sublist(startIndex, endIndex),
+                                ma20: _cachedMA20?.sublist(startIndex, endIndex),
+                                ma60: _cachedMA60?.sublist(startIndex, endIndex),
+                              ),
+                              bollingerData: _cachedBollinger?.sublist(startIndex, endIndex),
                             ),
-                            bollingerData: _cachedBollinger?.sublist(startIndex, endIndex),
                           ),
                         ),
                       ),
-                    ),
-                // 右側價格軸
-                Positioned(
-                  right: 0,
-                  top: 16,
-                  bottom: 24,
-                  width: 50,
-                  child: CustomPaint(
-                    painter: _PriceAxisPainter(
-                      data: visibleData,
-                      isDark: true,
-                    ),
+                      // 右側價格軸
+                      Positioned(
+                        right: 0,
+                        top: 16,
+                        bottom: 24,
+                        width: 50,
+                        child: CustomPaint(
+                          painter: _PriceAxisPainter(
+                            data: visibleData,
+                            isDark: true,
+                          ),
+                        ),
+                      ),
+                      // 底部日期軸
+                      Positioned(
+                        left: 8,
+                        right: 50,
+                        bottom: 0,
+                        height: 20,
+                        child: CustomPaint(
+                          painter: _DateAxisPainter(
+                            data: visibleData,
+                            isDark: true,
+                          ),
+                        ),
+                      ),
+                      // 十字線資訊
+                      if (_touchedIndex != null && widget.settings.enableCrosshair)
+                        _buildCrosshairOverlay(context, visibleData, startIndex),
+                      // 形態標記（用 IgnorePointer 避免攔截滑鼠事件）
+                      if (widget.settings.showPatterns && widget.patterns.isNotEmpty)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 50, left: 8, top: 16, bottom: 24),
+                              child: _buildPatternMarkers(context, visibleData, startIndex),
+                            ),
+                          ),
+                        ),
+                      // 繪圖層
+                      if (widget.settings.drawings.isNotEmpty)
+                        IgnorePointer(child: _buildDrawingsOverlay(context)),
+                      if (_activeDrawingTool != null && _currentDrawingPoints.isNotEmpty)
+                        _buildActiveDrawing(context),
+                    ],
                   ),
                 ),
-                // 底部日期軸
-                Positioned(
-                  left: 8,
-                  right: 50,
-                  bottom: 0,
-                  height: 20,
-                  child: CustomPaint(
-                    painter: _DateAxisPainter(
-                      data: visibleData,
-                      isDark: true,
-                    ),
-                  ),
-                ),
-                // 十字線資訊
-                if (_touchedIndex != null && widget.settings.enableCrosshair)
-                  _buildCrosshairOverlay(context, visibleData, startIndex),
-                // 形態標記
-                if (widget.settings.showPatterns && widget.patterns.isNotEmpty)
-                  Positioned.fill(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 50, left: 8, top: 16, bottom: 24),
-                      child: _buildPatternMarkers(context, visibleData, startIndex),
-                    ),
-                  ),
-                // 繪圖層
-                if (widget.settings.drawings.isNotEmpty)
-                  _buildDrawingsOverlay(context),
-                // 正在繪製的對象
-                if (_activeDrawingTool != null && _currentDrawingPoints.isNotEmpty)
-                  _buildActiveDrawing(context),
-                ],
               ),
             ),
-          ),
           ),
         ),
         // 成交量圖表
@@ -236,8 +238,10 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
         // 副圖指標
         if (_selectedSubChart != SubChartType.none)
           Expanded(
-            flex: 2,
-            child: _buildSubChart(context, visibleData, startIndex),
+            flex: 1,
+            child: RepaintBoundary(
+              child: _buildSubChart(context, visibleData, startIndex),
+            ),
           ),
         // 縮放控制
         if (widget.settings.enableZoom) _buildZoomControls(context),
@@ -245,17 +249,19 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
     );
   }
 
-  void _handleChartTap(TapUpDetails details, List<StockHistory> visibleData) {
-    // 計算觸碰的 K 棒 index
-    final RenderBox box = context.findRenderObject() as RenderBox;
+  void _handleMouseHover(PointerHoverEvent event, List<StockHistory> visibleData) {
+    final RenderBox? box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
     final chartWidth = box.size.width - 50 - 8; // 減去右側軸和左 padding
-    final localX = details.localPosition.dx - 8; // 減去左 padding
-    if (localX < 0 || localX > chartWidth) return;
-
+    final localX = event.localPosition.dx - 8; // 減去左 padding
+    if (localX < 0 || localX > chartWidth || visibleData.isEmpty) {
+      if (_touchedIndex != null) setState(() => _touchedIndex = null);
+      return;
+    }
     final index = (localX / chartWidth * visibleData.length).floor().clamp(0, visibleData.length - 1);
-    setState(() {
-      _touchedIndex = (_touchedIndex == index) ? null : index;
-    });
+    if (index != _touchedIndex) {
+      setState(() => _touchedIndex = index);
+    }
   }
 
   Widget _buildToolbar(BuildContext context) {
@@ -454,10 +460,12 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
     final candle = visibleData[_touchedIndex!];
     final isRising = candle.close >= candle.open;
     final priceColor = isRising ? AppTheme.stockRise : AppTheme.stockFall;
+    final changePercent = candle.open != 0 ? ((candle.close - candle.open) / candle.open * 100) : 0.0;
 
     return Positioned(
       top: 0, left: 0, right: 0,
-      child: Container(
+      child: IgnorePointer(
+        child: Container(
         padding: const EdgeInsets.all(8),
         margin: const EdgeInsets.all(8),
         decoration: BoxDecoration(
@@ -474,8 +482,11 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
             _buildPriceLabel('高', candle.high, priceColor),
             _buildPriceLabel('低', candle.low, priceColor),
             _buildPriceLabel('收', candle.close, priceColor),
+            Text('${changePercent >= 0 ? "+" : ""}${changePercent.toStringAsFixed(2)}%',
+                style: TextStyle(fontSize: 11, color: priceColor, fontWeight: FontWeight.w500)),
             Text('量 ${_formatVolume(candle.volume.toDouble())}', style: const TextStyle(fontSize: 11)),
           ],
+        ),
         ),
       ),
     );
