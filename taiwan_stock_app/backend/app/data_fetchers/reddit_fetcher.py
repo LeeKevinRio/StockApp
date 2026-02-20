@@ -9,6 +9,9 @@ from datetime import datetime, timedelta
 import re
 import time
 import random
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class RedditFetcher:
@@ -149,16 +152,16 @@ class RedditFetcher:
                 if response.status_code == 200:
                     return response.json()
                 elif response.status_code == 403:
-                    print(f"Reddit 403 error (attempt {attempt + 1}), retrying...")
+                    logger.warning(f"Reddit 403 error (attempt {attempt + 1}), retrying...")
                     time.sleep(2 + attempt * 2)
                 elif response.status_code == 429:
-                    print(f"Reddit rate limited (attempt {attempt + 1}), waiting...")
+                    logger.warning(f"Reddit rate limited (attempt {attempt + 1}), waiting...")
                     time.sleep(5 + attempt * 5)
                 else:
-                    print(f"Reddit API error: {response.status_code}")
+                    logger.error(f"Reddit API error: {response.status_code}")
                     return None
             except Exception as e:
-                print(f"Reddit request error: {e}")
+                logger.error(f"Reddit request error: {e}")
                 time.sleep(2)
 
         return None

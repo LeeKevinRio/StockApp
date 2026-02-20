@@ -8,6 +8,9 @@ import re
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from bs4 import BeautifulSoup
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PTTFetcher:
@@ -49,7 +52,7 @@ class PTTFetcher:
                     current_url = self.base_url + prev_url
 
         except Exception as e:
-            print(f"PTT 爬取錯誤: {e}")
+            logger.error(f"PTT 爬取錯誤: {e}")
 
         return posts
 
@@ -83,7 +86,7 @@ class PTTFetcher:
                             continue
 
         except Exception as e:
-            print(f"頁面解析錯誤: {e}")
+            logger.error(f"頁面解析錯誤: {e}")
 
         return posts, prev_url
 

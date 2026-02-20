@@ -182,7 +182,7 @@ class GlobalNewsFetcher:
             return news_items
 
         except Exception as e:
-            print(f"Yahoo Finance news error for {ticker}: {e}")
+            logger.error(f"Yahoo Finance news error for {ticker}: {e}")
             return []
 
     def fetch_marketwatch_news(self, ticker: str, limit: int = 10) -> List[Dict]:
@@ -235,7 +235,7 @@ class GlobalNewsFetcher:
             return news_items
 
         except Exception as e:
-            print(f"MarketWatch news error for {ticker}: {e}")
+            logger.error(f"MarketWatch news error for {ticker}: {e}")
             return []
 
     def fetch_seeking_alpha_news(self, ticker: str, limit: int = 10) -> List[Dict]:
@@ -291,7 +291,7 @@ class GlobalNewsFetcher:
             return news_items
 
         except Exception as e:
-            print(f"Seeking Alpha news error for {ticker}: {e}")
+            logger.error(f"Seeking Alpha news error for {ticker}: {e}")
             return []
 
     def fetch_benzinga_news(self, ticker: str, limit: int = 10) -> List[Dict]:
@@ -344,7 +344,7 @@ class GlobalNewsFetcher:
             return news_items
 
         except Exception as e:
-            print(f"Benzinga news error for {ticker}: {e}")
+            logger.error(f"Benzinga news error for {ticker}: {e}")
             return []
 
     def fetch_yfinance_news(self, ticker: str, limit: int = 15) -> List[Dict]:
@@ -383,16 +383,16 @@ class GlobalNewsFetcher:
                     try:
                         # Parse ISO format: "2026-01-25T12:54:34Z"
                         published_at = datetime.fromisoformat(pub_date.replace('Z', '+00:00'))
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"yfinance news date ISO parse failed: {e}")
                 # Try old format: providerPublishTime as timestamp
                 if not published_at:
                     timestamp = item.get("providerPublishTime")
                     if timestamp:
                         try:
                             published_at = datetime.fromtimestamp(timestamp)
-                        except:
-                            pass
+                        except Exception as e:
+                            logger.warning(f"yfinance news timestamp parse failed: {e}")
 
                 sentiment_data = self._analyze_sentiment(title)
 
@@ -525,15 +525,15 @@ class GlobalNewsFetcher:
                             if pub_date and isinstance(pub_date, str):
                                 try:
                                     published_at = datetime.fromisoformat(pub_date.replace('Z', '+00:00'))
-                                except:
-                                    pass
+                                except Exception as e:
+                                    logger.warning(f"Market news date ISO parse failed: {e}")
                             if not published_at:
                                 timestamp = item.get("providerPublishTime")
                                 if timestamp:
                                     try:
                                         published_at = datetime.fromtimestamp(timestamp)
-                                    except:
-                                        pass
+                                    except Exception as e:
+                                        logger.warning(f"Market news timestamp parse failed: {e}")
 
                             sentiment_data = self._analyze_sentiment(title)
 

@@ -5,6 +5,9 @@ import yfinance as yf
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class USStockFetcher:
@@ -92,7 +95,7 @@ class USStockFetcher:
                 "market_region": "US"
             }
         except Exception as e:
-            print(f"Error fetching stock info for {symbol}: {e}")
+            logger.error(f"Error fetching stock info for {symbol}: {e}")
             return None
 
     def get_realtime_quote(self, symbol: str) -> Optional[Dict]:
@@ -115,8 +118,8 @@ class USStockFetcher:
                     fast_info = ticker.fast_info
                     current_price = fast_info.get('lastPrice', 0)
                     previous_close = fast_info.get('previousClose', 0)
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"fast_info fallback failed for {symbol}: {e}")
 
             if not current_price:
                 return None
@@ -142,7 +145,7 @@ class USStockFetcher:
                 "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
         except Exception as e:
-            print(f"Error fetching realtime quote for {symbol}: {e}")
+            logger.error(f"Error fetching realtime quote for {symbol}: {e}")
             return None
 
     def get_realtime_quotes(self, symbols: List[str]) -> List[Dict]:
@@ -201,7 +204,7 @@ class USStockFetcher:
 
             return results
         except Exception as e:
-            print(f"Error fetching price history for {symbol}: {e}")
+            logger.error(f"Error fetching price history for {symbol}: {e}")
             return []
 
     def search_stocks(self, query: str, limit: int = 20) -> List[Dict]:
@@ -272,7 +275,7 @@ class USStockFetcher:
 
             return results
         except Exception as e:
-            print(f"Error fetching news for {symbol}: {e}")
+            logger.error(f"Error fetching news for {symbol}: {e}")
             return []
 
     def get_popular_stocks(self) -> List[Dict]:
@@ -295,7 +298,8 @@ class USStockFetcher:
             ticker = yf.Ticker(symbol)
             info = ticker.info
             return info is not None and info.get('regularMarketPrice') is not None
-        except:
+        except Exception as e:
+            logger.warning(f"Symbol validation failed for {symbol}: {e}")
             return False
 
 
@@ -415,7 +419,7 @@ class USStockFundamentalFetcher:
                 "shares_outstanding": info.get('sharesOutstanding'),
             }
         except Exception as e:
-            print(f"Error fetching fundamentals for {symbol}: {e}")
+            logger.error(f"Error fetching fundamentals for {symbol}: {e}")
             return None
 
     def get_financial_statements(self, symbol: str) -> Optional[Dict]:
@@ -454,7 +458,7 @@ class USStockFundamentalFetcher:
                             "ebitda": self._safe_get(data, 'EBITDA'),
                         })
             except Exception as e:
-                print(f"Error fetching income statement for {symbol}: {e}")
+                logger.error(f"Error fetching income statement for {symbol}: {e}")
 
             # Get quarterly balance sheet
             try:
@@ -473,7 +477,7 @@ class USStockFundamentalFetcher:
                             "total_debt": self._safe_get(data, 'Total Debt'),
                         })
             except Exception as e:
-                print(f"Error fetching balance sheet for {symbol}: {e}")
+                logger.error(f"Error fetching balance sheet for {symbol}: {e}")
 
             # Get quarterly cash flow
             try:
@@ -490,11 +494,11 @@ class USStockFundamentalFetcher:
                             "capital_expenditure": self._safe_get(data, 'Capital Expenditure'),
                         })
             except Exception as e:
-                print(f"Error fetching cash flow for {symbol}: {e}")
+                logger.error(f"Error fetching cash flow for {symbol}: {e}")
 
             return result
         except Exception as e:
-            print(f"Error fetching financial statements for {symbol}: {e}")
+            logger.error(f"Error fetching financial statements for {symbol}: {e}")
             return None
 
     def _safe_get(self, data, key):
@@ -504,8 +508,8 @@ class USStockFundamentalFetcher:
                 val = data[key]
                 if val is not None and not (isinstance(val, float) and val != val):  # Check for NaN
                     return float(val)
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Safe get failed for key '{key}': {e}")
         return None
 
     def get_dividends(self, symbol: str) -> List[Dict]:
@@ -556,7 +560,7 @@ class USStockFundamentalFetcher:
 
             return results[:10]  # Return last 10 years
         except Exception as e:
-            print(f"Error fetching dividends for {symbol}: {e}")
+            logger.error(f"Error fetching dividends for {symbol}: {e}")
             return []
 
     def get_earnings_history(self, symbol: str) -> List[Dict]:
@@ -584,12 +588,12 @@ class USStockFundamentalFetcher:
                             "surprise_percent": row.get('Surprise(%)'),
                         })
                     return results
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Earnings dates fetch failed for {symbol}: {e}")
 
             return []
         except Exception as e:
-            print(f"Error fetching earnings for {symbol}: {e}")
+            logger.error(f"Error fetching earnings for {symbol}: {e}")
             return []
 
 

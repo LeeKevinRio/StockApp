@@ -12,6 +12,9 @@ from datetime import datetime, timedelta
 import re
 import time
 import random
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TaiwanSocialFetcher:
@@ -86,13 +89,13 @@ class TaiwanSocialFetcher:
                 if response.status_code == 200:
                     return response
                 if response.status_code == 403:
-                    print(f"  403 Forbidden (attempt {attempt+1}): {url}")
+                    logger.warning(f"  403 Forbidden (attempt {attempt+1}): {url}")
                 elif response.status_code == 429:
-                    print(f"  429 Rate limited (attempt {attempt+1}): {url}")
+                    logger.warning(f"  429 Rate limited (attempt {attempt+1}): {url}")
                 else:
-                    print(f"  HTTP {response.status_code} (attempt {attempt+1}): {url}")
+                    logger.warning(f"  HTTP {response.status_code} (attempt {attempt+1}): {url}")
             except requests.exceptions.RequestException as e:
-                print(f"  Request error (attempt {attempt+1}): {e}")
+                logger.error(f"  Request error (attempt {attempt+1}): {e}")
 
             if attempt < max_retries - 1:
                 wait = (2 ** attempt) + random.uniform(0.5, 1.5)
@@ -192,7 +195,8 @@ class TaiwanSocialFetcher:
                     else:
                         try:
                             push_count = int(push_text) if push_text else 0
-                        except:
+                        except Exception as e:
+                            logger.warning(f"Push count parse failed: {e}")
                             push_count = 0
 
                     # Get author
@@ -227,7 +231,7 @@ class TaiwanSocialFetcher:
                     continue
 
         except Exception as e:
-            print(f"PTT fetch error for {board}: {e}")
+            logger.error(f"PTT fetch error for {board}: {e}")
 
         return posts
 
@@ -241,7 +245,7 @@ class TaiwanSocialFetcher:
             return posts
 
         # API 失敗，改用 Web scraping fallback
-        print(f"Dcard API failed, trying web scraping fallback for {forum}")
+        logger.info(f"Dcard API failed, trying web scraping fallback for {forum}")
         return self._fetch_dcard_web(forum, limit)
 
     def _fetch_dcard_api(self, forum: str, limit: int) -> List[Dict]:
@@ -262,7 +266,7 @@ class TaiwanSocialFetcher:
             data = response.json()
             return self._parse_dcard_posts(data, forum)
         except Exception as e:
-            print(f"Dcard API error: {e}")
+            logger.error(f"Dcard API error: {e}")
             return []
 
     def _fetch_dcard_web(self, forum: str, limit: int) -> List[Dict]:
@@ -315,7 +319,7 @@ class TaiwanSocialFetcher:
 
             return posts
         except Exception as e:
-            print(f"Dcard web scraping error: {e}")
+            logger.error(f"Dcard web scraping error: {e}")
             return []
 
     def _parse_dcard_posts(self, data: list, forum: str) -> List[Dict]:
@@ -337,8 +341,8 @@ class TaiwanSocialFetcher:
             if created_at:
                 try:
                     posted_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Dcard date parse failed: {e}")
 
             posts.append({
                 "id": str(post.get("id", "")),
@@ -412,7 +416,7 @@ class TaiwanSocialFetcher:
                     continue
 
         except Exception as e:
-            print(f"Mobile01 fetch error: {e}")
+            logger.error(f"Mobile01 fetch error: {e}")
 
         return posts
 
@@ -469,7 +473,8 @@ class TaiwanSocialFetcher:
                             else:
                                 try:
                                     push_count = int(push_text) if push_text else 0
-                                except:
+                                except Exception as e:
+                                    logger.warning(f"Push count parse failed in search: {e}")
                                     push_count = 0
 
                             sentiment_data = self._analyze_sentiment(title, max(push_count, 0), max(-push_count, 0))
@@ -493,7 +498,7 @@ class TaiwanSocialFetcher:
                         except Exception:
                             continue
             except Exception as e:
-                print(f"PTT search error: {e}")
+                logger.error(f"PTT search error: {e}")
 
         return all_posts[:limit]
 
@@ -517,8 +522,8 @@ class TaiwanSocialFetcher:
         try:
             m01_posts = self.fetch_mobile01_forum(291, limit_per_platform // 2)
             all_posts.extend(m01_posts)
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Mobile01 fetch failed in aggregation: {e}")
 
         return all_posts
 

@@ -4,6 +4,9 @@ FinMind API Integration
 import requests
 from typing import Optional
 import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class FinMindFetcher:
@@ -67,7 +70,8 @@ class FinMindFetcher:
             params["end_date"] = end_date
         try:
             return self._request("TaiwanStockFinancialStatements", params)
-        except:
+        except Exception as e:
+            logger.warning(f"取得財務報表失敗 (stock_id={stock_id}): {e}")
             return pd.DataFrame()
 
     def get_per_pbr(
@@ -79,7 +83,8 @@ class FinMindFetcher:
             params["end_date"] = end_date
         try:
             return self._request("TaiwanStockPER", params)
-        except:
+        except Exception as e:
+            logger.warning(f"取得本益比/股價淨值比失敗 (stock_id={stock_id}): {e}")
             return pd.DataFrame()
 
     def get_dividend(
@@ -91,7 +96,8 @@ class FinMindFetcher:
             params["end_date"] = end_date
         try:
             return self._request("TaiwanStockDividend", params)
-        except:
+        except Exception as e:
+            logger.warning(f"取得股利資料失敗 (stock_id={stock_id}): {e}")
             return pd.DataFrame()
 
     def get_stock_list(self) -> pd.DataFrame:
@@ -107,7 +113,8 @@ class FinMindFetcher:
             params["end_date"] = end_date
         try:
             return self._request("TaiwanStockBalanceSheet", params)
-        except:
+        except Exception as e:
+            logger.warning(f"取得資產負債表失敗 (stock_id={stock_id}): {e}")
             return pd.DataFrame()
 
     def get_cash_flow(
@@ -119,5 +126,6 @@ class FinMindFetcher:
             params["end_date"] = end_date
         try:
             return self._request("TaiwanStockCashFlowsStatement", params)
-        except:
+        except Exception as e:
+            logger.warning(f"取得現金流量表失敗 (stock_id={stock_id}): {e}")
             return pd.DataFrame()
