@@ -20,10 +20,24 @@ logger = logging.getLogger(__name__)
 class IndustryTrendService:
     """產業趨勢分析服務"""
 
-    def __init__(self):
+    def __init__(self, ai_client=None):
         self.finmind = FinMindFetcher(settings.FINMIND_TOKEN)
         genai.configure(api_key=settings.GOOGLE_API_KEY)
         self.llm = genai.GenerativeModel(settings.AI_MODEL)
+        # BYOK: 用戶自訂 AI client（若有）
+        self.ai_client = ai_client
+
+    @classmethod
+    def for_user(cls, user, db=None) -> 'IndustryTrendService':
+        """工廠方法：支援 BYOK"""
+        from app.services.ai_client_factory import AIClientFactory
+
+        ai_client = None
+        if db is not None:
+            config = AIClientFactory.resolve_config(user, db)
+            if config:
+                ai_client = AIClientFactory.create_client(config)
+        return cls(ai_client=ai_client)
 
     def get_all_industries(self) -> List[str]:
         """取得所有產業類別"""
@@ -226,6 +240,15 @@ class IndustryTrendService:
 請回傳完整的 JSON 分析結果。"""
 
         full_prompt = f"{system_prompt}\n\n{user_prompt}"
+
+        # 0. 若有 BYOK 自訂 client，優先使用
+        if self.ai_client is not None:
+            try:
+                byok_result = self.ai_client.generate_json(full_prompt, temperature=0.7)
+                if byok_result is not None:
+                    return byok_result
+            except Exception as e:
+                logger.warning(f"BYOK client failed for industry analysis: {e}")
 
         # 1. 嘗試 Gemini
         result = self._call_gemini(full_prompt)

@@ -22,6 +22,9 @@ class SettingsScreen extends StatelessWidget {
           // 偏好
           _buildPreferencesSection(context),
           const Divider(height: 1),
+          // AI 設定
+          _buildAISettingsSection(context),
+          const Divider(height: 1),
           // 券商連結
           _buildBrokerSection(context),
           const Divider(height: 1),
@@ -144,6 +147,22 @@ class SettingsScreen extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildAISettingsSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(context, 'AI 設定'),
+        ListTile(
+          leading: const Icon(Icons.smart_toy),
+          title: const Text('自訂 AI 模型'),
+          subtitle: const Text('使用自己的 API Key (BYOK)'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.pushNamed(context, '/ai-settings'),
+        ),
+      ],
     );
   }
 

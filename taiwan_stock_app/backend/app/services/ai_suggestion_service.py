@@ -39,7 +39,7 @@ def get_groq_client():
 class AISuggestionService:
     """AI 每日建議服務 - 多面向分析（支援台股與美股）"""
 
-    def __init__(self, subscription_tier: str = 'free'):
+    def __init__(self, subscription_tier: str = 'free', ai_client=None):
         self.finmind = FinMindFetcher(settings.FINMIND_TOKEN)
         self.us_fetcher = USStockFetcher()
         self.news_fetcher = NewsFetcher()
@@ -54,20 +54,30 @@ class AISuggestionService:
 
         self.llm = genai.GenerativeModel(self.model)
         self.subscription_tier = subscription_tier
+        # BYOK: 用戶自訂 AI client（若有）
+        self.ai_client = ai_client
 
     @classmethod
-    def for_user(cls, user) -> 'AISuggestionService':
+    def for_user(cls, user, db=None) -> 'AISuggestionService':
         """
-        工廠方法：根據用戶訂閱級別創建服務實例
+        工廠方法：根據用戶訂閱級別創建服務實例，支援 BYOK
 
         Args:
             user: User model instance with subscription_tier attribute
+            db: 資料庫 session（用於查詢 BYOK 配置）
 
         Returns:
             AISuggestionService instance configured for user's tier
         """
+        from app.services.ai_client_factory import AIClientFactory
+
         tier = getattr(user, 'subscription_tier', 'free') or 'free'
-        return cls(subscription_tier=tier)
+        ai_client = None
+        if db is not None:
+            config = AIClientFactory.resolve_config(user, db)
+            if config:
+                ai_client = AIClientFactory.create_client(config)
+        return cls(subscription_tier=tier, ai_client=ai_client)
 
     def collect_stock_data(self, stock_id: str, days: int = 60, market: str = "TW") -> Dict:
         """
@@ -1444,8 +1454,18 @@ class AISuggestionService:
     def _call_ai_with_fallback(self, prompt: str, stock_id: str, stock_name: str, market: str) -> Optional[Dict]:
         """
         呼叫 AI API，支援備援機制
-        順序: Gemini -> Groq -> None (will use mock)
+        順序: BYOK custom client -> Gemini -> Groq -> None (will use mock)
         """
+        # 0. 若有 BYOK 自訂 client，優先使用
+        if self.ai_client is not None:
+            try:
+                byok_result = self.ai_client.generate_json(prompt)
+                if byok_result is not None:
+                    byok_result["ai_provider"] = self.ai_client.provider_label
+                    return byok_result
+            except Exception as e:
+                logger.warning(f"BYOK client failed for {stock_id}: {e}, falling back to system default")
+
         # 1. 嘗試 Gemini
         gemini_result = self._call_gemini(prompt)
         if gemini_result is not None:

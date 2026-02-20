@@ -1152,6 +1152,63 @@ class ApiService {
     return PerformanceReport.fromJson(data);
   }
 
+  // ==================== AI 設定 (BYOK) ====================
+
+  Future<List<Map<String, dynamic>>> getAIProviders() async {
+    final response = await _get(
+      Uri.parse('$baseUrl/api/ai-config/providers'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    final body = _safeJsonDecode(response.body) as Map<String, dynamic>;
+    return (body['providers'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> getAIConfig() async {
+    final response = await _get(
+      Uri.parse('$baseUrl/api/ai-config'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return _safeJsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> saveAIConfig({
+    required String provider,
+    required String model,
+    required String apiKey,
+  }) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/api/ai-config'),
+      headers: _headers,
+      body: jsonEncode({'provider': provider, 'model': model, 'api_key': apiKey}),
+    );
+    _checkResponse(response);
+    return _safeJsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<void> deleteAIConfig() async {
+    final response = await _delete(
+      Uri.parse('$baseUrl/api/ai-config'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+  }
+
+  Future<Map<String, dynamic>> testAIConfig({
+    required String provider,
+    required String model,
+    required String apiKey,
+  }) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/api/ai-config/test'),
+      headers: _headers,
+      body: jsonEncode({'provider': provider, 'model': model, 'api_key': apiKey}),
+    );
+    _checkResponse(response);
+    return _safeJsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   // ==================== 券商連動相關 ====================
 
   Future<BrokerLinkResponse> linkBroker(String username, String password, String pin) async {

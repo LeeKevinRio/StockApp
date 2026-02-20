@@ -14,6 +14,7 @@ from .fundamental import router as fundamental_router
 from .screener import router as screener_router
 from .admin import router as admin_router
 from .broker import router as broker_router
+from .ai_config import router as ai_config_router
 
 __all__ = [
     "auth_router",
@@ -29,4 +30,5 @@ __all__ = [
     "screener_router",
     "admin_router",
     "broker_router",
+    "ai_config_router",
 ]

@@ -82,7 +82,7 @@ class AIChatService:
         "ETF": ["0050", "0056", "00878", "00919"],
     }
 
-    def __init__(self, subscription_tier: str = 'free'):
+    def __init__(self, subscription_tier: str = 'free', ai_client=None):
         self.finmind = FinMindFetcher(settings.FINMIND_TOKEN)
         genai.configure(api_key=settings.GOOGLE_API_KEY)
 
@@ -94,6 +94,8 @@ class AIChatService:
 
         self.llm = genai.GenerativeModel(self.model)
         self.subscription_tier = subscription_tier
+        # BYOK: 用戶自訂 AI client（若有）
+        self.ai_client = ai_client
 
     def _get_system_prompt(self) -> str:
         """生成包含今日日期的系統提示詞"""
@@ -115,12 +117,19 @@ class AIChatService:
         return unique[:5]
 
     @classmethod
-    def for_user(cls, user) -> 'AIChatService':
+    def for_user(cls, user, db=None) -> 'AIChatService':
         """
-        工廠方法：根據用戶訂閱級別創建服務實例
+        工廠方法：根據用戶訂閱級別創建服務實例，支援 BYOK
         """
+        from app.services.ai_client_factory import AIClientFactory
+
         tier = getattr(user, 'subscription_tier', 'free') or 'free'
-        return cls(subscription_tier=tier)
+        ai_client = None
+        if db is not None:
+            config = AIClientFactory.resolve_config(user, db)
+            if config:
+                ai_client = AIClientFactory.create_client(config)
+        return cls(subscription_tier=tier, ai_client=ai_client)
 
     def chat(
         self,
@@ -169,8 +178,25 @@ class AIChatService:
         # 組合用戶訊息
         full_message = f"{system_prompt}\n\n{user_message}{stock_context}"
 
+        ai_response = None
+
+        # 0. 若有 BYOK 自訂 client，優先使用
+        if self.ai_client is not None:
+            try:
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                ]
+                if chat_history:
+                    for msg in chat_history[-10:]:
+                        messages.append({"role": msg["role"], "content": msg["content"]})
+                messages.append({"role": "user", "content": f"{user_message}{stock_context}"})
+                ai_response = self.ai_client.chat(messages)
+            except Exception as e:
+                logger.warning(f"BYOK chat client failed: {e}, falling back to system default")
+
         # 1. 嘗試 Gemini
-        ai_response = self._call_gemini_chat(full_message, history)
+        if ai_response is None:
+            ai_response = self._call_gemini_chat(full_message, history)
 
         # 2. Gemini 失敗，嘗試 Groq
         if ai_response is None:

@@ -37,6 +37,7 @@ import 'screens/onboarding_screen.dart';
 import 'screens/about_screen.dart';
 import 'screens/broker_screen.dart';
 import 'screens/broker_link_screen.dart';
+import 'screens/ai_settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -128,6 +129,7 @@ class MyApp extends StatelessWidget {
               '/about': (context) => const AboutScreen(),
               '/broker': (context) => const BrokerScreen(),
               '/broker-link': (context) => const BrokerLinkScreen(),
+              '/ai-settings': (context) => const AISettingsScreen(),
             },
             onGenerateRoute: (settings) {
               if (settings.name == '/stock-detail') {

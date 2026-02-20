@@ -20,6 +20,7 @@ from .fundamental import (
 )
 from .trading_diary import TradingDiaryEntry
 from .broker import BrokerAccount, BrokerPosition
+from .user_ai_config import UserAIConfig
 
 __all__ = [
     "User",
@@ -50,4 +51,5 @@ __all__ = [
     "TradingDiaryEntry",
     "BrokerAccount",
     "BrokerPosition",
+    "UserAIConfig",
 ]

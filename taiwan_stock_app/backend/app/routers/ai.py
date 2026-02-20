@@ -172,7 +172,7 @@ def get_ai_suggestions(
             # Only generate new suggestion if explicitly requested
             try:
                 # Create service instance based on user's subscription tier
-                suggestion_service = AISuggestionService.for_user(current_user)
+                suggestion_service = AISuggestionService.for_user(current_user, db)
                 suggestion_data = suggestion_service.generate_suggestion(
                     stock.stock_id, stock.name, market=market
                 )
@@ -313,7 +313,7 @@ def get_stock_suggestion(
 
         # Generate new suggestion with market parameter
         # Create service instance based on user's subscription tier
-        suggestion_service = AISuggestionService.for_user(current_user)
+        suggestion_service = AISuggestionService.for_user(current_user, db)
         suggestion_data = suggestion_service.generate_suggestion(stock_id, stock_name, market=market, db=db)
 
         # Save to database with error handling
@@ -408,7 +408,7 @@ def get_comprehensive_analysis(
     """
     validate_stock_id(stock_id)
     try:
-        suggestion_service = AISuggestionService.for_user(current_user)
+        suggestion_service = AISuggestionService.for_user(current_user, db)
         data = suggestion_service.collect_stock_data(stock_id, market=market)
 
         tech_score = data.get('technical', {}).get('technical_score', 0)
@@ -636,7 +636,7 @@ def ai_chat(
     chat_history = [{"role": msg.role, "content": msg.content} for msg in history]
 
     # Create chat service based on user's subscription tier
-    chat_service = AIChatService.for_user(current_user)
+    chat_service = AIChatService.for_user(current_user, db)
 
     try:
         # Get AI response
