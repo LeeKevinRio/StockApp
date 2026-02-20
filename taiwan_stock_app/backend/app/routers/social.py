@@ -72,7 +72,7 @@ async def get_hot_stocks(
             }
     except Exception as e:
         logger.error(f"Hot stocks error: {e}")
-        raise HTTPException(status_code=500, detail=f"獲取熱門股票失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail="獲取熱門股票失敗，請稍後再試")
 
 
 @router.get("/stock/{stock_id}/sentiment")
@@ -159,7 +159,7 @@ async def get_stock_sentiment(
             return result
     except Exception as e:
         logger.error(f"Stock sentiment error: {e}")
-        raise HTTPException(status_code=500, detail=f"獲取情緒分析失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail="獲取情緒分析失敗，請稍後再試")
 
 
 @router.get("/market")
@@ -193,4 +193,4 @@ async def get_market_sentiment(
             return result
     except Exception as e:
         logger.error(f"Market sentiment error: {e}")
-        raise HTTPException(status_code=500, detail=f"獲取市場情緒失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail="獲取市場情緒失敗，請稍後再試")

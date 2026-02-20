@@ -7,10 +7,12 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from typing import List, Optional
 import json
+from jose import JWTError, jwt as jose_jwt
 
 logger = logging.getLogger(__name__)
 
 from app.models import User
+from app.config import settings
 from app.schemas.alert import (
     AlertCreate,
     AlertResponse,
@@ -126,11 +128,15 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         "timestamp": "2024-01-01T00:00:00"
     }
     """
-    # 簡易 token 驗證（生產環境應使用 JWT 驗證）
-    # 這裡假設 token 是 user_id
+    # JWT 驗證
     try:
-        user_id = int(token)
-    except ValueError:
+        payload = jose_jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        user_id_str = payload.get("sub")
+        if user_id_str is None:
+            await websocket.close(code=4001, reason="Invalid token")
+            return
+        user_id = int(user_id_str)
+    except (JWTError, ValueError):
         await websocket.close(code=4001, reason="Invalid token")
         return
 

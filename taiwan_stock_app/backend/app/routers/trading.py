@@ -1,8 +1,12 @@
 """
 模擬交易路由
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models import User
@@ -27,7 +31,8 @@ def get_account(
     try:
         return trading_service.get_account_summary(db, current_user.id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"獲取帳戶失敗: {str(e)}")
+        logger.error(f"獲取帳戶失敗: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="獲取帳戶失敗，請稍後再試")
 
 
 @router.post("/order")
@@ -56,7 +61,8 @@ def place_order(
         )
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"下單失敗: {str(e)}")
+        logger.error(f"下單失敗: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="下單失敗，請稍後再試")
 
 
 @router.delete("/order/{order_id}")
@@ -78,7 +84,8 @@ def cancel_order(
         result = trading_service.cancel_order(db, current_user.id, order_id)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"取消訂單失敗: {str(e)}")
+        logger.error(f"取消訂單失敗: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="取消訂單失敗，請稍後再試")
 
 
 @router.post("/reset")
@@ -98,7 +105,8 @@ def reset_account(
         result = trading_service.reset_account(db, current_user.id)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"重置帳戶失敗: {str(e)}")
+        logger.error(f"重置帳戶失敗: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="重置帳戶失敗，請稍後再試")
 
 
 @router.get("/positions")
@@ -116,7 +124,8 @@ def get_positions(
         summary = trading_service.get_account_summary(db, current_user.id)
         return {'positions': summary['positions']}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"獲取持倉失敗: {str(e)}")
+        logger.error(f"獲取持倉失敗: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="獲取持倉失敗，請稍後再試")
 
 
 @router.get("/orders")
@@ -134,4 +143,5 @@ def get_orders(
         summary = trading_service.get_account_summary(db, current_user.id)
         return {'orders': summary['recent_orders']}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"獲取訂單失敗: {str(e)}")
+        logger.error(f"獲取訂單失敗: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="獲取訂單失敗，請稍後再試")

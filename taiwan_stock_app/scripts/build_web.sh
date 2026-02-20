@@ -5,9 +5,11 @@
 set -e
 
 API_URL="${1:-https://your-app.up.railway.app}"
+GOOGLE_CLIENT_ID="${2:-${GOOGLE_CLIENT_ID:-}}"
 
 echo "=== 台股智慧助手 Web Release Build ==="
 echo "API URL: $API_URL"
+echo "Google Client ID: ${GOOGLE_CLIENT_ID:+(set)}"
 
 cd "$(dirname "$0")/../frontend"
 
@@ -19,7 +21,8 @@ flutter pub get
 
 # 建置 Web Release
 flutter build web --release \
-  --dart-define=API_BASE_URL="$API_URL"
+  --dart-define=API_BASE_URL="$API_URL" \
+  --dart-define=GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
 
 echo ""
 echo "=== Build 完成 ==="

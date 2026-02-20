@@ -390,7 +390,7 @@ def get_stock_suggestion(
         raise
     except Exception as e:
         logger.error(f"AI Suggestion Error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="AI 建議服務暫時不可用，請稍後再試")
 
 
 @router.get("/comprehensive-analysis/{stock_id}")
@@ -611,7 +611,7 @@ def get_comprehensive_analysis(
 
     except Exception as e:
         logger.error(f"綜合分析失敗: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"綜合分析失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail="綜合分析服務暫時不可用，請稍後再試")
 
 
 @router.post("/chat", response_model=AIChatResponse)
@@ -650,7 +650,7 @@ def ai_chat(
                 status_code=429,
                 detail="AI 服務配額已達上限，請稍後再試。(API quota exceeded, please try again later.)"
             )
-        raise HTTPException(status_code=500, detail=f"AI 服務暫時不可用: {error_str}")
+        raise HTTPException(status_code=500, detail="AI 服務暫時不可用，請稍後再試")
 
     # Save to database
     user_msg = AIChatHistory(

@@ -113,7 +113,8 @@ def health_check():
             conn.execute(text("SELECT 1"))
         db_status = "connected"
     except Exception as e:
-        return {"status": "unhealthy", "database": str(e)}
+        logger.error(f"Health check DB error: {e}", exc_info=True)
+        return {"status": "unhealthy", "database": "connection_failed"}
     return {"status": "healthy", "database": db_status}
 
 

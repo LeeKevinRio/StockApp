@@ -47,7 +47,8 @@ async def get_stock_news(
             "source": "Taiwan News" if market == "TW" else "Global News",
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"獲取新聞失敗: {str(e)}")
+        logger.error(f"獲取新聞失敗: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="獲取新聞失敗，請稍後再試")
 
 
 @router.get("/market")
@@ -76,4 +77,5 @@ async def get_market_news(
             "source": "Taiwan News" if market == "TW" else "Global News",
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"獲取市場新聞失敗: {str(e)}")
+        logger.error(f"獲取市場新聞失敗: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="獲取市場新聞失敗，請稍後再試")

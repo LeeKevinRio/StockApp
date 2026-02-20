@@ -17,10 +17,10 @@ class AppConfig {
     return 'http://localhost:8000';
   }
 
-  /// Web 用 Google Client ID
+  /// Web 用 Google Client ID（透過 --dart-define=GOOGLE_CLIENT_ID=xxx 傳入）
   static const String _webGoogleClientId = String.fromEnvironment(
     'GOOGLE_CLIENT_ID',
-    defaultValue: '506193160322-omn6g1hja95mv192ajdu0ospgndohh6o.apps.googleusercontent.com',
+    defaultValue: '',
   );
 
   /// iOS 用 Google Client ID（需在 Google Cloud Console 另建 iOS OAuth 憑證）
