@@ -2,10 +2,13 @@
 Alerts router
 專業級高風險交易分析平台 - 告警 API
 """
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from typing import List, Optional
 import json
+
+logger = logging.getLogger(__name__)
 
 from app.models import User
 from app.schemas.alert import (
@@ -188,7 +191,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
     except WebSocketDisconnect:
         await ws_manager.disconnect(user_id)
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        logger.error(f"WebSocket error: {e}")
         await ws_manager.disconnect(user_id)
 
 

@@ -1,10 +1,14 @@
 """
 AI router - AI 建議與問答（支援台股與美股）
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, timedelta
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models import User, Watchlist, Stock, AIReport, AIChatHistory
@@ -199,7 +203,7 @@ def get_ai_suggestions(
                 results.append(AISuggestion(**suggestion_data))
             except Exception as e:
                 db.rollback()  # Important: rollback on error
-                print(f"Error generating suggestion for {stock.stock_id}: {e}")
+                logger.error(f"Error generating suggestion for {stock.stock_id}: {e}")
                 continue
 
     return results
@@ -340,7 +344,7 @@ def get_stock_suggestion(
         except Exception as db_error:
             # Database save failed, but we still have the suggestion data
             db.rollback()
-            print(f"Warning: Failed to save AI report to database: {db_error}")
+            logger.warning(f"Failed to save AI report to database: {db_error}")
 
         # 儲存預測記錄（用於準確度追蹤）
         try:
@@ -360,9 +364,9 @@ def get_stock_suggestion(
                     base_close_price=latest_price,
                     ai_provider=ai_provider
                 )
-                print(f"Saved prediction record for {stock_id}")
+                logger.info(f"Saved prediction record for {stock_id}")
         except Exception as pred_error:
-            print(f"Warning: Failed to save prediction record: {pred_error}")
+            logger.warning(f"Failed to save prediction record: {pred_error}")
 
         # Fix report_date format - convert string to date if needed
         if isinstance(suggestion_data.get("report_date"), str):
@@ -377,9 +381,7 @@ def get_stock_suggestion(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        print(f"AI Suggestion Error: {e}")
-        traceback.print_exc()
+        logger.error(f"AI Suggestion Error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -597,8 +599,7 @@ def get_comprehensive_analysis(
         }
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.error(f"綜合分析失敗: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"綜合分析失敗: {str(e)}")
 
 
@@ -629,7 +630,7 @@ def ai_chat(
         response_data = chat_service.chat(request.message, request.stock_id, chat_history)
     except Exception as e:
         error_str = str(e)
-        print(f"AI Chat Error: {error_str}")
+        logger.error(f"AI Chat Error: {error_str}")
         # Handle quota exceeded error
         if "429" in error_str or "quota" in error_str.lower() or "ResourceExhausted" in error_str:
             raise HTTPException(

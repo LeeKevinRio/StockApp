@@ -1,10 +1,14 @@
 """
 Predictions Router - AI 預測追蹤 API
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import date, timedelta
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models import User
@@ -38,7 +42,7 @@ def get_prediction_statistics(
     try:
         tracker.update_actual_results(db=db, market=market)
     except Exception as e:
-        print(f"Auto-update prediction results failed: {e}")
+        logger.warning(f"Auto-update prediction results failed: {e}")
 
     return tracker.get_accuracy_statistics(
         db=db,
@@ -80,7 +84,7 @@ def get_yesterday_predictions(
     try:
         tracker.update_actual_results(db=db)
     except Exception as e:
-        print(f"Auto-update prediction results failed: {e}")
+        logger.warning(f"Auto-update prediction results failed: {e}")
 
     yesterday = get_previous_trading_date()
 
@@ -140,7 +144,7 @@ def get_all_stocks_statistics(
     try:
         tracker.update_actual_results(db=db)
     except Exception as e:
-        print(f"Auto-update prediction results failed: {e}")
+        logger.warning(f"Auto-update prediction results failed: {e}")
 
     return tracker.get_all_stocks_statistics(db=db, days=days)
 
@@ -159,7 +163,7 @@ def get_today_predictions(
     try:
         tracker.update_actual_results(db=db)
     except Exception as e:
-        print(f"Auto-update prediction results failed: {e}")
+        logger.warning(f"Auto-update prediction results failed: {e}")
 
     # 目標日期為今天的（可驗證的）
     target_today = tracker.get_daily_summary(db=db, target_date=date.today())

@@ -1,9 +1,13 @@
 """
 社群情緒分析路由 - 支援台股(PTT/Dcard/Mobile01)與美股(Reddit)
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models import User, Stock
@@ -67,7 +71,7 @@ async def get_hot_stocks(
                 'market': 'TW',
             }
     except Exception as e:
-        print(f"Hot stocks error: {e}")
+        logger.error(f"Hot stocks error: {e}")
         raise HTTPException(status_code=500, detail=f"獲取熱門股票失敗: {str(e)}")
 
 
@@ -154,7 +158,7 @@ async def get_stock_sentiment(
             result["market"] = "TW"
             return result
     except Exception as e:
-        print(f"Stock sentiment error: {e}")
+        logger.error(f"Stock sentiment error: {e}")
         raise HTTPException(status_code=500, detail=f"獲取情緒分析失敗: {str(e)}")
 
 
@@ -188,5 +192,5 @@ async def get_market_sentiment(
             result["market"] = "TW"
             return result
     except Exception as e:
-        print(f"Market sentiment error: {e}")
+        logger.error(f"Market sentiment error: {e}")
         raise HTTPException(status_code=500, detail=f"獲取市場情緒失敗: {str(e)}")

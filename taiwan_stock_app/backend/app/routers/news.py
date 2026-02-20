@@ -1,9 +1,13 @@
 """
 新聞路由 - 支援台股與美股
 """
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models import User
