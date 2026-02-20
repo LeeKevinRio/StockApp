@@ -21,6 +21,7 @@ class NotificationService {
 
   bool _isInitialized = false;
   NotificationPreferences _preferences = NotificationPreferences();
+  StreamSubscription<AppNotification>? _tappedSubscription;
 
   /// 通知列表流
   Stream<List<AppNotification>> get notificationsStream => _notificationsController.stream;
@@ -45,8 +46,9 @@ class NotificationService {
       // 初始化本地通知
       final localInitialized = await _localService.initialize();
 
-      // 監聽通知點擊事件
-      _localService.onTapped.listen(_handleNotificationTapped);
+      // 監聽通知點擊事件（儲存訂閱以便後續取消）
+      _tappedSubscription?.cancel();
+      _tappedSubscription = _localService.onTapped.listen(_handleNotificationTapped);
 
       _isInitialized = localInitialized;
 
@@ -247,8 +249,11 @@ class NotificationService {
 
   /// 釋放資源
   void dispose() {
+    _tappedSubscription?.cancel();
+    _tappedSubscription = null;
     _notificationsController.close();
     _newNotificationController.close();
     _localService.dispose();
+    _isInitialized = false;
   }
 }

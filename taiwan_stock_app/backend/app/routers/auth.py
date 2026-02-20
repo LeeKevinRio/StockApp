@@ -1,7 +1,7 @@
 """
 Authentication router
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -14,6 +14,7 @@ from app.models import User
 from app.schemas import UserCreate, UserLogin, Token, UserResponse, GoogleAuthRequest, GoogleAccessTokenRequest
 from app.config import settings
 from app.services.oauth_service import oauth_service
+from app.rate_limit import limiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -72,7 +73,8 @@ def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
 
 
 @router.post("/register", response_model=Token)
-def register(user_data: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register(request: Request, user_data: UserCreate, db: Session = Depends(get_db)):
     """Register new user"""
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == user_data.email).first()
@@ -109,7 +111,8 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-def login(user_data: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(request: Request, user_data: UserLogin, db: Session = Depends(get_db)):
     """Login user"""
     user = db.query(User).filter(User.email == user_data.email).first()
     if not user or not user.password_hash or not verify_password(user_data.password, user.password_hash):
@@ -134,10 +137,11 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
 
 
 @router.post("/google", response_model=Token)
-def google_auth(request: GoogleAuthRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def google_auth(request: Request, auth_data: GoogleAuthRequest, db: Session = Depends(get_db)):
     """Google OAuth 登入"""
     # Verify Google token
-    google_user = oauth_service.verify_google_token(request.id_token)
+    google_user = oauth_service.verify_google_token(auth_data.id_token)
     if not google_user:
         raise HTTPException(status_code=401, detail="Invalid Google token")
 
@@ -189,36 +193,37 @@ def google_auth(request: GoogleAuthRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/google-access-token", response_model=Token)
-def google_auth_with_access_token(request: GoogleAccessTokenRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def google_auth_with_access_token(request: Request, token_data: GoogleAccessTokenRequest, db: Session = Depends(get_db)):
     """Google OAuth 登入 (使用 Access Token) - 用於 Web 平台"""
     import hashlib
 
     # 使用 email 作為唯一識別 (因為 Web 無法取得 google_id)
     # 產生一個基於 email 的偽 google_id
-    google_id = hashlib.sha256(f"google_{request.email}".encode()).hexdigest()[:32]
+    google_id = hashlib.sha256(f"google_{token_data.email}".encode()).hexdigest()[:32]
 
     # Check if user exists by google_id
     user = db.query(User).filter(User.google_id == google_id).first()
 
     if not user:
         # Check if user exists by email
-        user = db.query(User).filter(User.email == request.email).first()
+        user = db.query(User).filter(User.email == token_data.email).first()
 
         if user:
             # Link Google account to existing user
             user.google_id = google_id
             user.auth_provider = 'google'
-            if not user.avatar_url and request.photo_url:
-                user.avatar_url = request.photo_url
-            if not user.display_name and request.display_name:
-                user.display_name = request.display_name
+            if not user.avatar_url and token_data.photo_url:
+                user.avatar_url = token_data.photo_url
+            if not user.display_name and token_data.display_name:
+                user.display_name = token_data.display_name
         else:
             # Create new user
             user = User(
-                email=request.email,
+                email=token_data.email,
                 google_id=google_id,
-                display_name=request.display_name or '',
-                avatar_url=request.photo_url or '',
+                display_name=token_data.display_name or '',
+                avatar_url=token_data.photo_url or '',
                 auth_provider='google',
             )
             db.add(user)

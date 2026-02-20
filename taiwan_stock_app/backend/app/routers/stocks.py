@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models import User, Stock
+from app.validators import validate_stock_id, MarketEnum
 from app.schemas import (
     StockDetail, StockPrice, StockHistory,
     RSIResponse, MACDResponse, BollingerResponse, KDResponse,
@@ -77,6 +78,7 @@ def get_stock_detail(
         stock_id: 股票代碼
         market: 市場 - "TW"(台股) 或 "US"(美股)
     """
+    validate_stock_id(stock_id)
     stock = stock_service.get_stock(db, stock_id, market=market)
     if not stock:
         raise HTTPException(status_code=404, detail="Stock not found")
@@ -97,6 +99,7 @@ def get_stock_price(
         stock_id: 股票代碼
         market: 市場 - "TW"(台股) 或 "US"(美股)
     """
+    validate_stock_id(stock_id)
     price_data = stock_service.get_realtime_price(stock_id, market=market)
     if not price_data:
         raise HTTPException(status_code=404, detail="Price data not available")
@@ -113,7 +116,7 @@ def get_stock_price(
 @router.get("/{stock_id}/history")
 def get_stock_history(
     stock_id: str,
-    days: int = 60,
+    days: int = Query(60, ge=1, le=365),
     period: str = "day",
     market: str = Query("TW", description="Market region: TW or US"),
     db: Session = Depends(get_db),
@@ -128,6 +131,7 @@ def get_stock_history(
         period: 週期 - "day"(日K), "week"(週K), "month"(月K)
         market: 市場 - "TW"(台股) 或 "US"(美股)
     """
+    validate_stock_id(stock_id)
     if period not in ["day", "week", "month"]:
         period = "day"
     history = stock_service.get_history(db, stock_id, days, period=period, market=market)
@@ -138,7 +142,7 @@ def get_stock_history(
 def get_stock_news(
     stock_id: str,
     market: str = Query("TW", description="Market region: TW or US"),
-    limit: int = Query(10, description="Number of news items"),
+    limit: int = Query(10, ge=1, le=50, description="Number of news items"),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -149,12 +153,14 @@ def get_stock_news(
         market: 市場 - "TW"(台股) 或 "US"(美股)
         limit: 新聞數量
     """
+    validate_stock_id(stock_id)
     news = stock_service.get_news(stock_id, market=market, limit=limit)
     return news
 
 
 def _get_history_dataframe(stock_id: str, db: Session, days: int = 120, market: str = "TW") -> pd.DataFrame:
     """取得歷史數據並轉換為 DataFrame"""
+    validate_stock_id(stock_id)
     history = stock_service.get_history(db, stock_id, days, market=market)
     if not history:
         return pd.DataFrame()

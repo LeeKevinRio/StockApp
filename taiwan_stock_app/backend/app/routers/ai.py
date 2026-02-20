@@ -3,10 +3,12 @@ AI router - AI 建議與問答（支援台股與美股）
 """
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, timedelta
+
+from app.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +19,7 @@ from app.services import AISuggestionService, AIChatService, StockDataService
 from app.services.prediction_tracker import PredictionTracker
 from app.services.trading_calendar import get_next_trading_date
 from app.routers.auth import get_current_user
+from app.validators import validate_stock_id
 
 prediction_tracker = PredictionTracker()
 
@@ -97,7 +100,9 @@ stock_service = StockDataService()
 
 
 @router.get("/suggestions", response_model=List[AISuggestion])
+@limiter.limit("10/minute")
 def get_ai_suggestions(
+    request: Request,
     generate_missing: bool = Query(False, description="是否自動生成缺少的建議（會較慢）"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -210,7 +215,9 @@ def get_ai_suggestions(
 
 
 @router.get("/suggestions/{stock_id}", response_model=AISuggestion)
+@limiter.limit("10/minute")
 def get_stock_suggestion(
+    request: Request,
     stock_id: str,
     market: str = Query("TW", description="Market region: TW or US"),
     refresh: bool = Query(False, description="Force refresh, ignore cache"),
@@ -225,6 +232,7 @@ def get_stock_suggestion(
         market: 市場 - "TW"(台股) 或 "US"(美股)
         refresh: 是否強制刷新（忽略快取）
     """
+    validate_stock_id(stock_id)
     try:
         # Get stock info based on market
         if market == "US":
@@ -386,7 +394,9 @@ def get_stock_suggestion(
 
 
 @router.get("/comprehensive-analysis/{stock_id}")
+@limiter.limit("10/minute")
 def get_comprehensive_analysis(
+    request: Request,
     stock_id: str,
     market: str = Query("TW", description="Market region: TW or US"),
     db: Session = Depends(get_db),
@@ -396,6 +406,7 @@ def get_comprehensive_analysis(
     綜合 AI 分析 — 6維度（技術/籌碼/基本面/新聞/社群/宏觀）
     回傳雷達圖數據 + 健康等級(A-F) + AI 摘要
     """
+    validate_stock_id(stock_id)
     try:
         suggestion_service = AISuggestionService.for_user(current_user)
         data = suggestion_service.collect_stock_data(stock_id, market=market)
@@ -604,8 +615,10 @@ def get_comprehensive_analysis(
 
 
 @router.post("/chat", response_model=AIChatResponse)
+@limiter.limit("10/minute")
 def ai_chat(
-    request: AIChatRequest,
+    request: Request,
+    chat_request: AIChatRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -627,7 +640,7 @@ def ai_chat(
 
     try:
         # Get AI response
-        response_data = chat_service.chat(request.message, request.stock_id, chat_history)
+        response_data = chat_service.chat(chat_request.message, chat_request.stock_id, chat_history)
     except Exception as e:
         error_str = str(e)
         logger.error(f"AI Chat Error: {error_str}")
@@ -642,13 +655,13 @@ def ai_chat(
     # Save to database
     user_msg = AIChatHistory(
         user_id=current_user.id,
-        stock_id=request.stock_id,
+        stock_id=chat_request.stock_id,
         role="user",
-        content=request.message,
+        content=chat_request.message,
     )
     assistant_msg = AIChatHistory(
         user_id=current_user.id,
-        stock_id=request.stock_id,
+        stock_id=chat_request.stock_id,
         role="assistant",
         content=response_data["response"],
     )
@@ -661,7 +674,7 @@ def ai_chat(
 
 @router.get("/chat/history", response_model=List[ChatMessage])
 def get_chat_history(
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

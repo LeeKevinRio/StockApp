@@ -48,6 +48,8 @@ enum WebSocketState {
   connecting,
   connected,
   reconnecting,
+  /// 已達最大重連次數，停止嘗試
+  failed,
 }
 
 class WebSocketProvider with ChangeNotifier {
@@ -66,6 +68,9 @@ class WebSocketProvider with ChangeNotifier {
   // Getters
   WebSocketState get state => _state;
   bool get isConnected => _state == WebSocketState.connected;
+  bool get hasFailed => _state == WebSocketState.failed;
+  int get reconnectAttempts => _reconnectAttempts;
+  int get maxReconnectAttempts => _maxReconnectAttempts;
   Map<String, StockUpdate> get latestUpdates => _latestUpdates;
   Set<String> get subscribedStocks => _subscribedStocks;
 
@@ -112,6 +117,7 @@ class WebSocketProvider with ChangeNotifier {
     _subscription?.cancel();
     _channel?.sink.close();
     _channel = null;
+    _reconnectAttempts = 0;
     _state = WebSocketState.disconnected;
     notifyListeners();
   }
@@ -186,6 +192,12 @@ class WebSocketProvider with ChangeNotifier {
   /// 排程重連
   void _scheduleReconnect() {
     if (_reconnectAttempts >= _maxReconnectAttempts) {
+      _state = WebSocketState.failed;
+      notifyListeners();
+      debugPrint(
+        'WebSocket: 已達最大重連次數 ($_maxReconnectAttempts)，停止重連。'
+        '請呼叫 reconnect() 手動重試。',
+      );
       return;
     }
 
@@ -193,9 +205,14 @@ class WebSocketProvider with ChangeNotifier {
     _state = WebSocketState.reconnecting;
     notifyListeners();
 
-    // 指數退避重連
+    // 指數退避重連（1s, 2s, 4s, 8s, 16s，上限 30s）
     final delay = Duration(seconds: (1 << _reconnectAttempts).clamp(1, 30));
     _reconnectAttempts++;
+
+    debugPrint(
+      'WebSocket: 第 $_reconnectAttempts/$_maxReconnectAttempts 次重連，'
+      '${delay.inSeconds} 秒後嘗試...',
+    );
 
     _reconnectTimer = Timer(delay, () {
       connect();

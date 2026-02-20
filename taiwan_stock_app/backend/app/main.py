@@ -3,12 +3,15 @@ Main FastAPI Application
 """
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from fastapi.responses import HTMLResponse, RedirectResponse
+from slowapi.errors import RateLimitExceeded
 
 from app.logging_config import setup_logging
 from app.config import settings
+from app.rate_limit import limiter, rate_limit_exceeded_handler
 
 # 在所有模組 import 前初始化 logging
 setup_logging(level="DEBUG" if not settings.IS_PRODUCTION else "INFO")
@@ -42,13 +45,22 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS middleware
+# --- Rate Limiting ---
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+# --- HTTPS 強制重導（僅生產環境） ---
+if settings.IS_PRODUCTION:
+    app.add_middleware(HTTPSRedirectMiddleware)
+
+# --- CORS middleware（收緊配置） ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+    max_age=600,
 )
 
 # Include routers

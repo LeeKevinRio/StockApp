@@ -117,6 +117,18 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    // 讀取目前 token，若有效才嘗試呼叫後端登出 API
+    final token = await _storage.read(key: _tokenKey);
+    if (token != null && token.isNotEmpty) {
+      try {
+        // 嘗試呼叫後端登出（若後端有提供），失敗不影響本地登出
+        // await _apiService.logoutRemote();
+      } catch (_) {
+        // 忽略遠端登出失敗，確保本地狀態仍能清除
+      }
+    }
+
+    // 無論遠端登出是否成功，都清除本地狀態
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _userKey);
     _apiService.setAuthToken('');
