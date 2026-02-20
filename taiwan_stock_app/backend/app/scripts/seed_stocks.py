@@ -4,10 +4,13 @@ Populates the database with Taiwan and US stocks
 """
 import sys
 import os
+import logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from app.database import SessionLocal, engine
 from app.models.stock import Stock, Base
+
+logger = logging.getLogger(__name__)
 
 # Create tables if not exist
 Base.metadata.create_all(bind=engine)
@@ -373,15 +376,15 @@ def seed_stocks():
             count += 1
 
         db.commit()
-        print(f"✅ Stock seeding completed!")
-        print(f"   - Processed: {count} stocks")
-        print(f"   - Taiwan stocks (TWSE): {len(TAIWAN_TWSE_STOCKS)}")
-        print(f"   - Taiwan stocks (TPEx): {len(TAIWAN_TPEX_STOCKS)}")
-        print(f"   - US stocks: {len(US_STOCKS)}")
+        logger.info(f"Stock seeding completed!")
+        logger.info(f"   - Processed: {count} stocks")
+        logger.info(f"   - Taiwan stocks (TWSE): {len(TAIWAN_TWSE_STOCKS)}")
+        logger.info(f"   - Taiwan stocks (TPEx): {len(TAIWAN_TPEX_STOCKS)}")
+        logger.info(f"   - US stocks: {len(US_STOCKS)}")
 
     except Exception as e:
         db.rollback()
-        print(f"❌ Error seeding stocks: {e}")
+        logger.error(f"Error seeding stocks: {e}")
         raise
     finally:
         db.close()

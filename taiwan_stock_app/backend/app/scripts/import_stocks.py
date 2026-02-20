@@ -4,12 +4,15 @@
 import requests
 import sys
 import os
+import logging
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from app.database import SessionLocal, create_tables
 from app.models import Stock
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_twse_stocks():
@@ -35,7 +38,7 @@ def fetch_twse_stocks():
                     })
         return stocks
     except Exception as e:
-        print(f"取得上市股票清單失敗: {e}")
+        logger.error(f"取得上市股票清單失敗: {e}")
         return []
 
 
@@ -61,7 +64,7 @@ def fetch_tpex_stocks():
                 })
         return stocks
     except Exception as e:
-        print(f"取得上櫃股票清單失敗: {e}")
+        logger.error(f"取得上櫃股票清單失敗: {e}")
         return []
 
 
@@ -95,7 +98,7 @@ def fetch_all_stocks_alternative():
                                 "market": "TWSE"
                             })
     except Exception as e:
-        print(f"備用方案（上市）失敗: {e}")
+        logger.error(f"備用方案（上市）失敗: {e}")
 
     # 上櫃股票
     try:
@@ -123,7 +126,7 @@ def fetch_all_stocks_alternative():
                                 "market": "TPEx"
                             })
     except Exception as e:
-        print(f"備用方案（上櫃）失敗: {e}")
+        logger.error(f"備用方案（上櫃）失敗: {e}")
 
     return stocks
 
@@ -137,21 +140,21 @@ def import_stocks():
 
     try:
         # 取得所有股票
-        print("正在取得上市股票清單...")
+        logger.info("正在取得上市股票清單...")
         twse_stocks = fetch_twse_stocks()
-        print(f"取得 {len(twse_stocks)} 檔上市股票")
+        logger.info(f"取得 {len(twse_stocks)} 檔上市股票")
 
-        print("正在取得上櫃股票清單...")
+        logger.info("正在取得上櫃股票清單...")
         tpex_stocks = fetch_tpex_stocks()
-        print(f"取得 {len(tpex_stocks)} 檔上櫃股票")
+        logger.info(f"取得 {len(tpex_stocks)} 檔上櫃股票")
 
         all_stocks = twse_stocks + tpex_stocks
 
         # 如果主要方案失敗，使用備用方案
         if len(all_stocks) < 100:
-            print("使用備用方案取得股票清單...")
+            logger.info("使用備用方案取得股票清單...")
             all_stocks = fetch_all_stocks_alternative()
-            print(f"備用方案取得 {len(all_stocks)} 檔股票")
+            logger.info(f"備用方案取得 {len(all_stocks)} 檔股票")
 
         # 匯入到資料庫
         imported = 0
@@ -174,12 +177,12 @@ def import_stocks():
                 imported += 1
 
         db.commit()
-        print(f"\n匯入完成！新增 {imported} 檔，更新 {updated} 檔")
-        print(f"資料庫共有 {db.query(Stock).count()} 檔股票")
+        logger.info(f"匯入完成！新增 {imported} 檔，更新 {updated} 檔")
+        logger.info(f"資料庫共有 {db.query(Stock).count()} 檔股票")
 
     except Exception as e:
         db.rollback()
-        print(f"匯入失敗: {e}")
+        logger.error(f"匯入失敗: {e}")
         raise
     finally:
         db.close()

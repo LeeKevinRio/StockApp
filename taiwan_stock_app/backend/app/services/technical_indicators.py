@@ -1,9 +1,12 @@
 """
 技術指標計算服務
 """
+import logging
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class TechnicalIndicators:
@@ -207,7 +210,7 @@ class TechnicalIndicators:
             )
 
         except Exception as e:
-            print(f"計算技術指標時發生錯誤: {e}")
+            logger.error(f"計算技術指標時發生錯誤: {e}")
             return {}
 
         return result

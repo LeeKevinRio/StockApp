@@ -3,6 +3,7 @@
 """
 import sys
 import os
+import logging
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -12,24 +13,26 @@ from app.models import Base, Stock
 from app.data_fetchers import FinMindFetcher
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 
 def init_stocks():
     """從 FinMind 匯入台股清單"""
-    print("正在初始化資料庫表格...")
+    logger.info("正在初始化資料庫表格...")
     Base.metadata.create_all(bind=engine)
 
-    print(f"正在從 FinMind 取得股票清單 (Token: {settings.FINMIND_TOKEN[:10]}...)...")
+    logger.info("正在從 FinMind 取得股票清單...")
 
     fetcher = FinMindFetcher(settings.FINMIND_TOKEN)
 
     try:
         df = fetcher.get_stock_list()
-        print(f"取得 {len(df)} 筆股票資料")
+        logger.info(f"取得 {len(df)} 筆股票資料")
     except Exception as e:
-        print(f"錯誤：無法從 FinMind 取得資料 - {e}")
-        print("\n請確認：")
-        print("1. FINMIND_TOKEN 是否正確設定在 .env 檔案")
-        print("2. 可到 https://finmindtrade.com/ 免費註冊取得 Token")
+        logger.error(f"錯誤：無法從 FinMind 取得資料 - {e}")
+        logger.error("請確認：")
+        logger.error("1. FINMIND_TOKEN 是否正確設定在 .env 檔案")
+        logger.error("2. 可到 https://finmindtrade.com/ 免費註冊取得 Token")
         return
 
     db = SessionLocal()
@@ -62,20 +65,20 @@ def init_stocks():
             count += 1
 
             if count % 100 == 0:
-                print(f"已處理 {count} 筆...")
+                logger.info(f"已處理 {count} 筆...")
                 db.commit()
 
         db.commit()
-        print(f"\n✅ 成功匯入 {count} 筆股票資料！")
+        logger.info(f"成功匯入 {count} 筆股票資料！")
 
         # 顯示範例
         sample = db.query(Stock).limit(5).all()
-        print("\n範例資料：")
+        logger.info("範例資料：")
         for s in sample:
-            print(f"  {s.stock_id} - {s.name} ({s.industry})")
+            logger.info(f"  {s.stock_id} - {s.name} ({s.industry})")
 
     except Exception as e:
-        print(f"匯入失敗：{e}")
+        logger.error(f"匯入失敗：{e}")
         db.rollback()
     finally:
         db.close()

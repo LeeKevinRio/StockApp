@@ -4,11 +4,14 @@
 """
 import sys
 import os
+import logging
 
 from app.database import SessionLocal, engine, Base
 from app.models import Stock
 from app.data_fetchers import FinMindFetcher
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 # 創建資料表
 Base.metadata.create_all(bind=engine)
@@ -19,18 +22,18 @@ def init_all_stocks():
     finmind = FinMindFetcher(settings.FINMIND_TOKEN)
 
     try:
-        print("開始獲取台股列表...")
+        logger.info("開始獲取台股列表...")
 
         # 獲取台股上市股票列表
-        print("\n正在獲取上市股票...")
+        logger.info("正在獲取上市股票...")
         twse_stocks = finmind.get_stock_list()
 
         if twse_stocks is None or len(twse_stocks) == 0:
-            print("❌ 無法獲取股票列表，請檢查 FinMind API Token")
+            logger.error("無法獲取股票列表，請檢查 FinMind API Token")
             return
 
-        print(f"✅ 獲取到 {len(twse_stocks)} 支股票")
-        print("\n開始寫入資料庫...")
+        logger.info(f"獲取到 {len(twse_stocks)} 支股票")
+        logger.info("開始寫入資料庫...")
 
         added_count = 0
         existing_count = 0
@@ -56,7 +59,7 @@ def init_all_stocks():
                 if existing:
                     existing_count += 1
                     if existing_count % 100 == 0:
-                        print(f"  處理中... 已存在 {existing_count} 筆")
+                        logger.info(f"  處理中... 已存在 {existing_count} 筆")
                     continue
 
                 # 新增股票
@@ -72,35 +75,33 @@ def init_all_stocks():
 
                 if added_count % 100 == 0:
                     db.commit()  # 每 100 筆提交一次
-                    print(f"  ✅ 已新增 {added_count} 筆股票...")
+                    logger.info(f"  已新增 {added_count} 筆股票...")
 
             except Exception as e:
                 error_count += 1
                 if 'duplicate key' not in str(e).lower():
-                    print(f"  ⚠️  處理 {stock_id} 時發生錯誤: {e}")
+                    logger.warning(f"  處理 {stock_id} 時發生錯誤: {e}")
                 db.rollback()
                 continue
 
         # 最後一次提交
         db.commit()
 
-        print("\n" + "="*60)
-        print(f"✅ 初始化完成！")
-        print(f"   新增股票：{added_count} 筆")
-        print(f"   已存在：{existing_count} 筆")
-        print(f"   錯誤：{error_count} 筆")
-        print(f"   總計：{added_count + existing_count} 筆股票在資料庫中")
-        print("="*60)
+        logger.info("=" * 60)
+        logger.info(f"初始化完成！")
+        logger.info(f"   新增股票：{added_count} 筆")
+        logger.info(f"   已存在：{existing_count} 筆")
+        logger.info(f"   錯誤：{error_count} 筆")
+        logger.info(f"   總計：{added_count + existing_count} 筆股票在資料庫中")
+        logger.info("=" * 60)
 
     except Exception as e:
-        print(f"❌ 發生錯誤：{e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"發生錯誤：{e}", exc_info=True)
         db.rollback()
     finally:
         db.close()
 
 if __name__ == "__main__":
-    print("台股完整資料庫初始化工具")
-    print("="*60)
+    logger.info("台股完整資料庫初始化工具")
+    logger.info("=" * 60)
     init_all_stocks()

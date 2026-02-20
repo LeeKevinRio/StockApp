@@ -5,6 +5,7 @@ Initialize popular US stocks in the database
 
 import sys
 import os
+import logging
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -13,6 +14,8 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine
 from app.models.stock import Stock, Base
 from app.data_fetchers.us_stock_fetcher import USStockFetcher
+
+logger = logging.getLogger(__name__)
 
 # Popular US stocks to initialize
 POPULAR_US_STOCKS = [
@@ -63,7 +66,7 @@ def init_us_stocks():
                         existing.sector = info.get('sector')
                         existing.market = info.get('exchange')
                         updated_count += 1
-                        print(f"Updated: {symbol} - {info.get('name', symbol)}")
+                        logger.info(f"Updated: {symbol} - {info.get('name', symbol)}")
                     else:
                         # Create new stock
                         new_stock = Stock(
@@ -76,33 +79,33 @@ def init_us_stocks():
                         )
                         db.add(new_stock)
                         added_count += 1
-                        print(f"Added: {symbol} - {info.get('name', symbol)}")
+                        logger.info(f"Added: {symbol} - {info.get('name', symbol)}")
                 else:
-                    print(f"Warning: No info found for {symbol}")
+                    logger.warning(f"No info found for {symbol}")
                     failed_count += 1
 
             except Exception as e:
-                print(f"Error processing {symbol}: {e}")
+                logger.error(f"Error processing {symbol}: {e}")
                 failed_count += 1
                 continue
 
         db.commit()
-        print(f"\n=== Summary ===")
-        print(f"Added: {added_count}")
-        print(f"Updated: {updated_count}")
-        print(f"Failed: {failed_count}")
-        print(f"Total: {len(POPULAR_US_STOCKS)}")
+        logger.info(f"=== Summary ===")
+        logger.info(f"Added: {added_count}")
+        logger.info(f"Updated: {updated_count}")
+        logger.info(f"Failed: {failed_count}")
+        logger.info(f"Total: {len(POPULAR_US_STOCKS)}")
 
     except Exception as e:
-        print(f"Database error: {e}")
+        logger.error(f"Database error: {e}")
         db.rollback()
     finally:
         db.close()
 
 
 if __name__ == "__main__":
-    print("Initializing popular US stocks...")
-    print("=" * 50)
+    logger.info("Initializing popular US stocks...")
+    logger.info("=" * 50)
     init_us_stocks()
-    print("=" * 50)
-    print("Done!")
+    logger.info("=" * 50)
+    logger.info("Done!")
