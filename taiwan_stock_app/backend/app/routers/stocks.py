@@ -62,45 +62,6 @@ def search_stocks(
     ]
 
 
-@router.get("/debug/us-test")
-def debug_us_stock_test():
-    """
-    Debug endpoint to test US stock fetcher (no auth required)
-    """
-    from app.data_fetchers.us_stock_fetcher import USStockFetcher
-    fetcher = USStockFetcher()
-
-    result = {
-        "yfinance_available": False,
-        "search_result": None,
-        "quote_result": None,
-        "error": None
-    }
-
-    try:
-        import yfinance as yf
-        result["yfinance_available"] = True
-        result["yfinance_version"] = yf.__version__
-    except ImportError as e:
-        result["error"] = f"yfinance import error: {str(e)}"
-        return result
-
-    try:
-        # Test search
-        search_results = fetcher.search_stocks("AAPL")
-        result["search_result"] = search_results[:3] if search_results else []
-    except Exception as e:
-        result["search_error"] = str(e)
-
-    try:
-        # Test quote
-        quote = fetcher.get_realtime_quote("AAPL")
-        result["quote_result"] = quote
-    except Exception as e:
-        result["quote_error"] = str(e)
-
-    return result
-
 
 @router.get("/{stock_id}")
 def get_stock_detail(

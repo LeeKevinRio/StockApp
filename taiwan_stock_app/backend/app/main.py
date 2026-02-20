@@ -1,11 +1,19 @@
 """
 Main FastAPI Application
 """
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
+from app.logging_config import setup_logging
 from app.config import settings
+
+# 在所有模組 import 前初始化 logging
+setup_logging(level="DEBUG" if not settings.IS_PRODUCTION else "INFO")
+
+logger = logging.getLogger(__name__)
 from app.database import create_tables, engine
 from app.routers import (
     auth_router,
@@ -72,7 +80,7 @@ def on_startup():
         from app.scheduler import start_scheduler
         start_scheduler()
     except Exception as e:
-        print(f"Warning: Could not start scheduler: {e}")
+        logger.warning(f"Could not start scheduler: {e}")
 
 
 @app.get("/")
