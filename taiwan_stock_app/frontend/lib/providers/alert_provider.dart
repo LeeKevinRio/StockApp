@@ -117,4 +117,10 @@ class AlertProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
   }
+
+  @override
+  void dispose() {
+    _alerts.clear();
+    super.dispose();
+  }
 }

@@ -22,9 +22,11 @@ class _PortfolioScreenState extends State<PortfolioScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<PortfolioProvider>();
       provider.loadPortfolios().then((_) {
-        if (provider.portfolios.isNotEmpty && provider.selectedPortfolio == null) {
+        if (mounted && provider.portfolios.isNotEmpty && provider.selectedPortfolio == null) {
           provider.selectPortfolio(provider.portfolios.first.id);
         }
+      }).catchError((e) {
+        debugPrint('Failed to load portfolios: $e');
       });
     });
   }

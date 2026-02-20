@@ -36,7 +36,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     try {
       final groups = await context.read<ApiService>().getWatchlistGroups();
       if (mounted) setState(() => _groups = groups);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Failed to load watchlist groups: $e');
+    }
   }
 
   void _onMarketChanged() {

@@ -175,4 +175,11 @@ class AIProvider with ChangeNotifier {
   Future<void> refreshIndustryTrends() async {
     await loadIndustryTrends();
   }
+
+  @override
+  void dispose() {
+    _suggestions.clear();
+    _messages.clear();
+    super.dispose();
+  }
 }
