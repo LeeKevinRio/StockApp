@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
+import logging
 import random
 
 from app.models import Stock
@@ -20,6 +21,8 @@ from app.models.fundamental import (
 from app.data_fetchers.finmind_fetcher import FinMindFetcher
 from app.data_fetchers.us_stock_fetcher import USStockFundamentalFetcher
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def generate_mock_fundamentals(stock_id: str) -> Dict:
@@ -165,7 +168,7 @@ class FundamentalService:
                 }
             return None
         except Exception as e:
-            print(f"Error getting US fundamentals for {stock_id}: {e}")
+            logger.error("Error getting US fundamentals for %s: %s", stock_id, e)
             return None
 
     def _is_cache_valid(self, cached: StockFundamental) -> bool:
@@ -311,9 +314,7 @@ class FundamentalService:
             return result
 
         except Exception as e:
-            print(f"Error getting TW fundamentals for {stock_id}: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("Error getting TW fundamentals for %s: %s", stock_id, e, exc_info=True)
             # Return mock data for testing
             return generate_mock_fundamentals(stock_id)
 
@@ -347,7 +348,7 @@ class FundamentalService:
             return result if result else None
 
         except Exception as e:
-            print(f"Error getting balance sheet for {stock_id}: {e}")
+            logger.error("Error getting balance sheet for %s: %s", stock_id, e)
             return None
 
     def _get_monthly_revenue(self, stock_id: str, start_date: date, end_date: date) -> Optional[Dict]:
@@ -398,7 +399,7 @@ class FundamentalService:
             return result
 
         except Exception as e:
-            print(f"Error getting monthly revenue for {stock_id}: {e}")
+            logger.error("Error getting monthly revenue for %s: %s", stock_id, e)
             return None
 
     def _fundamental_to_dict(self, f: StockFundamental) -> Dict:
@@ -455,7 +456,7 @@ class FundamentalService:
             db.commit()
         except Exception as e:
             db.rollback()
-            print(f"Error saving fundamental data: {e}")
+            logger.error("Error saving fundamental data: %s", e)
 
     async def get_financial_statements(self, db: Session, stock_id: str, market: str = "TW") -> Optional[Dict]:
         """
@@ -479,7 +480,7 @@ class FundamentalService:
         try:
             return self.us_fetcher.get_financial_statements(stock_id)
         except Exception as e:
-            print(f"Error getting US financial statements for {stock_id}: {e}")
+            logger.error("Error getting US financial statements for %s: %s", stock_id, e)
             return None
 
     async def _get_tw_financial_statements(self, db: Session, stock_id: str) -> Optional[Dict]:
@@ -541,7 +542,7 @@ class FundamentalService:
             return result
 
         except Exception as e:
-            print(f"Error getting TW financial statements for {stock_id}: {e}")
+            logger.error("Error getting TW financial statements for %s: %s", stock_id, e)
             return None
 
     async def get_dividends(self, db: Session, stock_id: str, market: str = "TW") -> List[Dict]:
@@ -566,7 +567,7 @@ class FundamentalService:
         try:
             return self.us_fetcher.get_dividends(stock_id)
         except Exception as e:
-            print(f"Error getting US dividends for {stock_id}: {e}")
+            logger.error("Error getting US dividends for %s: %s", stock_id, e)
             return []
 
     async def _get_tw_dividends(self, db: Session, stock_id: str) -> List[Dict]:
@@ -664,7 +665,7 @@ class FundamentalService:
             return results
 
         except Exception as e:
-            print(f"Error getting TW dividends for {stock_id}: {e}")
+            logger.error("Error getting TW dividends for %s: %s", stock_id, e)
             return []
 
     def _save_dividend(self, db: Session, data: Dict):
@@ -692,7 +693,7 @@ class FundamentalService:
                 db.commit()
         except Exception as e:
             db.rollback()
-            print(f"Error saving dividend data: {e}")
+            logger.error("Error saving dividend data: %s", e)
 
     async def get_institutional_trading(self, db: Session, stock_id: str, days: int = 30) -> List[Dict]:
         """
@@ -797,7 +798,7 @@ class FundamentalService:
             return results
 
         except Exception as e:
-            print(f"Error getting institutional trading for {stock_id}: {e}")
+            logger.error("Error getting institutional trading for %s: %s", stock_id, e)
             # Return mock data for testing
             return generate_mock_institutional(stock_id, days)
 
@@ -838,7 +839,7 @@ class FundamentalService:
                 db.commit()
         except Exception as e:
             db.rollback()
-            print(f"Error saving institutional data: {e}")
+            logger.error("Error saving institutional data: %s", e)
 
     async def get_margin_trading(self, db: Session, stock_id: str, days: int = 30) -> List[Dict]:
         """
@@ -919,7 +920,7 @@ class FundamentalService:
             return results
 
         except Exception as e:
-            print(f"Error getting margin trading for {stock_id}: {e}")
+            logger.error("Error getting margin trading for %s: %s", stock_id, e)
             # Return mock data for testing
             return generate_mock_margin(stock_id, days)
 
@@ -958,7 +959,7 @@ class FundamentalService:
                 db.commit()
         except Exception as e:
             db.rollback()
-            print(f"Error saving margin data: {e}")
+            logger.error("Error saving margin data: %s", e)
 
 
 # Global service instance

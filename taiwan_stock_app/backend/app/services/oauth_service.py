@@ -4,8 +4,11 @@ OAuth Service - Google OAuth 驗證服務
 from typing import Optional, Dict
 from google.oauth2 import id_token
 from google.auth.transport import requests
+import logging
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class OAuthService:
@@ -24,8 +27,7 @@ class OAuthService:
             如果驗證失敗返回 None
         """
         try:
-            print(f"Verifying Google token with client_id: {settings.GOOGLE_CLIENT_ID[:20]}...")
-            print(f"Token preview: {token[:50]}...")
+            logger.info("Verifying Google token...")
 
             # Verify the token with Google
             idinfo = id_token.verify_oauth2_token(
@@ -34,11 +36,11 @@ class OAuthService:
                 settings.GOOGLE_CLIENT_ID
             )
 
-            print(f"Token verified successfully. User: {idinfo.get('email')}")
+            logger.info("Token verified successfully for user: %s", idinfo.get('email'))
 
             # Check issuer
             if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
-                print(f"Invalid issuer: {idinfo['iss']}")
+                logger.warning("Invalid issuer: %s", idinfo['iss'])
                 return None
 
             # Extract user info
@@ -52,10 +54,10 @@ class OAuthService:
 
         except ValueError as e:
             # Invalid token
-            print(f"Google token verification failed (ValueError): {e}")
+            logger.warning("Google token verification failed (ValueError): %s", e)
             return None
         except Exception as e:
-            print(f"Unexpected error during Google token verification: {type(e).__name__}: {e}")
+            logger.error("Unexpected error during Google token verification: %s: %s", type(e).__name__, e)
             return None
 
 

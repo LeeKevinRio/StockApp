@@ -11,10 +11,13 @@ Portfolio Service
 
 from typing import Dict, List, Optional
 from datetime import datetime
+import logging
 from sqlalchemy.orm import Session
 
 from app.models import Portfolio, Position, Transaction, TransactionType
 from app.services import StockDataService
+
+logger = logging.getLogger(__name__)
 
 
 class PortfolioService:
@@ -283,7 +286,7 @@ class PortfolioService:
                     )
                     position.last_updated = datetime.utcnow()
             except Exception as e:
-                print(f"更新持倉價格失敗 {position.stock_id}: {e}")
+                logger.error("更新持倉價格失敗 %s: %s", position.stock_id, e)
 
         db.commit()
         return positions

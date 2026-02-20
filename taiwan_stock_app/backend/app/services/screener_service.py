@@ -4,11 +4,14 @@ Filter stocks based on fundamental criteria
 """
 from typing import List, Optional, Dict
 from datetime import date, datetime, timedelta
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_, or_
 
 from app.models import Stock
 from app.models.fundamental import StockFundamental, StockDividend
+
+logger = logging.getLogger(__name__)
 
 
 class ScreenerService:
@@ -168,7 +171,7 @@ class ScreenerService:
             return stocks[:limit]
 
         except Exception as e:
-            print(f"Error screening stocks: {e}")
+            logger.error("Error screening stocks: %s", e)
             return []
 
     async def _filter_by_dividend_yield(
@@ -285,7 +288,7 @@ class ScreenerService:
             )
             return sorted([i[0] for i in industries if i[0]])
         except Exception as e:
-            print(f"Error getting industries: {e}")
+            logger.error("Error getting industries: %s", e)
             return []
 
     async def get_top_by_metric(
@@ -351,7 +354,7 @@ class ScreenerService:
             ]
 
         except Exception as e:
-            print(f"Error getting top stocks by {metric}: {e}")
+            logger.error("Error getting top stocks by %s: %s", metric, e)
             return []
 
 

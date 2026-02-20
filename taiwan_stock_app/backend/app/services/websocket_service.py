@@ -15,6 +15,9 @@ from datetime import datetime
 from fastapi import WebSocket
 import asyncio
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -54,10 +57,10 @@ class WebSocketManager:
                 websocket=websocket,
                 user_id=user_id,
             )
-            print(f"WebSocket 連線建立: user_id={user_id}")
+            logger.info("WebSocket 連線建立: user_id=%d", user_id)
             return True
         except Exception as e:
-            print(f"WebSocket 連線失敗: {e}")
+            logger.error("WebSocket 連線失敗: %s", e)
             return False
 
     async def disconnect(self, user_id: int):
@@ -80,7 +83,7 @@ class WebSocketManager:
 
             # 移除連線
             del self._connections[user_id]
-            print(f"WebSocket 連線斷開: user_id={user_id}")
+            logger.info("WebSocket 連線斷開: user_id=%d", user_id)
 
     async def subscribe_stock(self, user_id: int, stock_id: str) -> bool:
         """
@@ -102,7 +105,7 @@ class WebSocketManager:
             self._stock_subscribers[stock_id] = set()
         self._stock_subscribers[stock_id].add(user_id)
 
-        print(f"用戶 {user_id} 訂閱 {stock_id}")
+        logger.info("用戶 %d 訂閱 %s", user_id, stock_id)
         return True
 
     async def unsubscribe_stock(self, user_id: int, stock_id: str) -> bool:
@@ -171,7 +174,7 @@ class WebSocketManager:
             await self._connections[user_id].websocket.send_json(message)
             return True
         except Exception as e:
-            print(f"發送訊息失敗: {e}")
+            logger.error("發送訊息失敗: %s", e)
             await self.disconnect(user_id)
             return False
 

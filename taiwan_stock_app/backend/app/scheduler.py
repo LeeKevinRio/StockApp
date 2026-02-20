@@ -10,12 +10,15 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from datetime import datetime
 import asyncio
+import logging
 import pytz
 
 from app.database import SessionLocal
 from app.services.prediction_tracker import PredictionTracker
 from app.services.ai_suggestion_service import AISuggestionService
 from app.models import Watchlist, Stock, User
+
+logger = logging.getLogger(__name__)
 
 # 台灣時區
 TW_TZ = pytz.timezone('Asia/Taipei')
@@ -29,13 +32,13 @@ def update_tw_predictions():
     更新台股預測的實際結果
     排程：每個交易日 16:30（收盤後3小時）
     """
-    print(f"[{datetime.now(TW_TZ)}] Starting TW prediction update...")
+    logger.info("Starting TW prediction update...")
     db = SessionLocal()
     try:
         updated = prediction_tracker.update_actual_results(db, market="TW")
-        print(f"[{datetime.now(TW_TZ)}] Updated {updated} TW prediction records")
+        logger.info("Updated %d TW prediction records", updated)
     except Exception as e:
-        print(f"[{datetime.now(TW_TZ)}] TW prediction update error: {e}")
+        logger.error("TW prediction update error: %s", e)
     finally:
         db.close()
 
@@ -45,13 +48,13 @@ def update_us_predictions():
     更新美股預測的實際結果
     排程：每個交易日 07:00（美股收盤後約3小時，台灣時間）
     """
-    print(f"[{datetime.now(TW_TZ)}] Starting US prediction update...")
+    logger.info("Starting US prediction update...")
     db = SessionLocal()
     try:
         updated = prediction_tracker.update_actual_results(db, market="US")
-        print(f"[{datetime.now(TW_TZ)}] Updated {updated} US prediction records")
+        logger.info("Updated %d US prediction records", updated)
     except Exception as e:
-        print(f"[{datetime.now(TW_TZ)}] US prediction update error: {e}")
+        logger.error("US prediction update error: %s", e)
     finally:
         db.close()
 
@@ -61,7 +64,7 @@ def generate_daily_predictions():
     為所有用戶的自選股生成新的每日預測
     排程：台股 09:30（開盤後），美股 22:00（開盤後，台灣時間）
     """
-    print(f"[{datetime.now(TW_TZ)}] Starting daily prediction generation...")
+    logger.info("Starting daily prediction generation...")
     db = SessionLocal()
     try:
         # 獲取所有用戶的自選股
@@ -95,14 +98,14 @@ def generate_daily_predictions():
                         base_close_price=suggestion.get("analysis_scores", {}).get("latest_price", 0) or 0,
                         ai_provider=suggestion.get("ai_provider", "Unknown")
                     )
-                    print(f"Generated prediction for {stock.stock_id}")
+                    logger.info("Generated prediction for %s", stock.stock_id)
             except Exception as e:
-                print(f"Error generating prediction for {stock.stock_id}: {e}")
+                logger.error("Error generating prediction for %s: %s", stock.stock_id, e)
                 continue
 
-        print(f"[{datetime.now(TW_TZ)}] Generated predictions for {len(processed)} stocks")
+        logger.info("Generated predictions for %d stocks", len(processed))
     except Exception as e:
-        print(f"[{datetime.now(TW_TZ)}] Daily prediction generation error: {e}")
+        logger.error("Daily prediction generation error: %s", e)
     finally:
         db.close()
 
@@ -112,7 +115,7 @@ def fetch_market_news_task():
     排程抓取市場新聞
     交易時段每 30 分鐘抓取熱門股票新聞
     """
-    print(f"[{datetime.now(TW_TZ)}] Starting market news fetch...")
+    logger.info("Starting market news fetch...")
     db = SessionLocal()
     try:
         from app.services.news_service import news_service
@@ -135,12 +138,12 @@ def fetch_market_news_task():
                 )
                 fetched_count += 1
             except Exception as e:
-                print(f"  新聞抓取失敗 {stock_id}: {e}")
+                logger.warning("新聞抓取失敗 %s: %s", stock_id, e)
 
         loop.close()
-        print(f"[{datetime.now(TW_TZ)}] Fetched news for {fetched_count}/{len(stock_ids)} stocks")
+        logger.info("Fetched news for %d/%d stocks", fetched_count, len(stock_ids))
     except Exception as e:
-        print(f"[{datetime.now(TW_TZ)}] Market news fetch error: {e}")
+        logger.error("Market news fetch error: %s", e)
     finally:
         db.close()
 
@@ -150,7 +153,7 @@ def fetch_social_data_task():
     排程抓取社群數據
     每 2 小時抓取一次（09:00-22:00）
     """
-    print(f"[{datetime.now(TW_TZ)}] Starting social data fetch...")
+    logger.info("Starting social data fetch...")
     db = SessionLocal()
     try:
         from app.services.sentiment_service import sentiment_service
@@ -169,12 +172,12 @@ def fetch_social_data_task():
                     sentiment_service.get_stock_sentiment(db, stock_id)
                 )
             except Exception as e:
-                print(f"  社群數據抓取失敗 {stock_id}: {e}")
+                logger.warning("社群數據抓取失敗 %s: %s", stock_id, e)
 
         loop.close()
-        print(f"[{datetime.now(TW_TZ)}] Social data fetch completed")
+        logger.info("Social data fetch completed")
     except Exception as e:
-        print(f"[{datetime.now(TW_TZ)}] Social data fetch error: {e}")
+        logger.error("Social data fetch error: %s", e)
     finally:
         db.close()
 
@@ -223,12 +226,12 @@ def start_scheduler():
     )
 
     scheduler.start()
-    print(f"[{datetime.now(TW_TZ)}] Scheduler started with jobs:")
+    logger.info("Scheduler started with jobs:")
     for job in scheduler.get_jobs():
-        print(f"  - {job.id}: {job.trigger}")
+        logger.info("  - %s: %s", job.id, job.trigger)
 
 
 def stop_scheduler():
     """停止排程器"""
     scheduler.shutdown()
-    print("Scheduler stopped")
+    logger.info("Scheduler stopped")

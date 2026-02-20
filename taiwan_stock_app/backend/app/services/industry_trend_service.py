@@ -6,12 +6,15 @@ from typing import Dict, List, Optional
 from datetime import date, timedelta
 import google.generativeai as genai
 import json
+import logging
 
 from app.data_fetchers import FinMindFetcher
 from app.config import settings
 from app.database import SessionLocal
 from app.models import Stock
 from app.services.ai_suggestion_service import get_groq_client
+
+logger = logging.getLogger(__name__)
 
 
 class IndustryTrendService:
@@ -118,7 +121,7 @@ class IndustryTrendService:
                 valid_count += 1
 
             except Exception as e:
-                print(f"處理 {stock['stock_id']} 時發生錯誤: {e}")
+                logger.error("處理 %s 時發生錯誤: %s", stock['stock_id'], e)
                 continue
 
         if valid_count > 0:
@@ -142,7 +145,7 @@ class IndustryTrendService:
                 if data and data.get("sample_stocks"):
                     industry_summaries.append(data)
             except Exception as e:
-                print(f"分析產業 {industry} 時發生錯誤: {e}")
+                logger.error("分析產業 %s 時發生錯誤: %s", industry, e)
                 continue
 
         return {
@@ -230,13 +233,13 @@ class IndustryTrendService:
             return result
 
         # 2. Gemini 失敗，嘗試 Groq
-        print("Gemini industry analysis failed, trying Groq...")
+        logger.warning("Gemini industry analysis failed, trying Groq...")
         result = self._call_groq(full_prompt)
         if result is not None:
             return result
 
         # 3. 全部失敗，返回基於數據的簡單分析
-        print("All AI providers failed for industry analysis, using simple analysis")
+        logger.warning("All AI providers failed for industry analysis, using simple analysis")
         return self._generate_simple_analysis(data)
 
     def _call_gemini(self, prompt: str) -> Optional[Dict]:
@@ -253,16 +256,16 @@ class IndustryTrendService:
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "quota" in error_str.lower():
-                print(f"Gemini quota exceeded (industry): {e}")
+                logger.warning("Gemini quota exceeded (industry): %s", e)
             else:
-                print(f"Gemini industry analysis error: {e}")
+                logger.error("Gemini industry analysis error: %s", e)
             return None
 
     def _call_groq(self, prompt: str) -> Optional[Dict]:
         """呼叫 Groq API"""
         groq_client = get_groq_client()
         if groq_client is None:
-            print("Groq client not available for industry analysis")
+            logger.warning("Groq client not available for industry analysis")
             return None
 
         try:
@@ -280,9 +283,9 @@ class IndustryTrendService:
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "rate" in error_str.lower():
-                print(f"Groq rate limit exceeded (industry): {e}")
+                logger.warning("Groq rate limit exceeded (industry): %s", e)
             else:
-                print(f"Groq industry analysis error: {e}")
+                logger.error("Groq industry analysis error: %s", e)
             return None
 
     def _generate_simple_analysis(self, data: Dict) -> Dict:
