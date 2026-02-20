@@ -19,6 +19,7 @@ from .fundamental import (
     FinancialStatement,
 )
 from .trading_diary import TradingDiaryEntry
+from .broker import BrokerAccount, BrokerPosition
 
 __all__ = [
     "User",
@@ -47,4 +48,6 @@ __all__ = [
     "MarginTrading",
     "FinancialStatement",
     "TradingDiaryEntry",
+    "BrokerAccount",
+    "BrokerPosition",
 ]

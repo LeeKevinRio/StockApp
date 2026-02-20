@@ -31,6 +31,7 @@ from app.routers import (
     fundamental_router,
     screener_router,
     admin_router,
+    broker_router,
 )
 from app.routers.predictions import router as predictions_router
 from app.routers.market_overview import router as market_overview_router
@@ -76,6 +77,7 @@ app.include_router(portfolio_router)
 app.include_router(fundamental_router)
 app.include_router(screener_router)
 app.include_router(admin_router)
+app.include_router(broker_router)
 app.include_router(predictions_router)
 app.include_router(market_overview_router)
 app.include_router(calendar_router)

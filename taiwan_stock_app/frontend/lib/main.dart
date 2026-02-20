@@ -13,6 +13,7 @@ import 'providers/notification_provider.dart';
 import 'providers/dashboard_provider.dart';
 import 'providers/portfolio_provider.dart';
 import 'providers/connectivity_provider.dart';
+import 'providers/broker_provider.dart';
 import 'widgets/common/offline_banner.dart';
 import 'screens/notification_center_screen.dart';
 import 'config/app_theme.dart';
@@ -34,6 +35,8 @@ import 'screens/terms_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/about_screen.dart';
+import 'screens/broker_screen.dart';
+import 'screens/broker_link_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -91,6 +94,9 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => ConnectivityProvider(),
         ),
+        ChangeNotifierProvider(
+          create: (_) => BrokerProvider(apiService),
+        ),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
@@ -120,6 +126,8 @@ class MyApp extends StatelessWidget {
               '/settings': (context) => const SettingsScreen(),
               '/onboarding': (context) => const OnboardingScreen(),
               '/about': (context) => const AboutScreen(),
+              '/broker': (context) => const BrokerScreen(),
+              '/broker-link': (context) => const BrokerLinkScreen(),
             },
             onGenerateRoute: (settings) {
               if (settings.name == '/stock-detail') {

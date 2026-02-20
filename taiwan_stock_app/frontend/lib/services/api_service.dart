@@ -18,6 +18,7 @@ import '../models/trading.dart';
 import '../models/social_sentiment.dart';
 import '../models/fundamental.dart';
 import '../models/screen_criteria.dart';
+import '../models/broker.dart';
 
 class ApiService {
   final String baseUrl;
@@ -1149,6 +1150,65 @@ class ApiService {
   Future<PerformanceReport> getAIPerformance({int days = 30}) async {
     final data = await getPredictionStatistics(days: days);
     return PerformanceReport.fromJson(data);
+  }
+
+  // ==================== 券商連動相關 ====================
+
+  Future<BrokerLinkResponse> linkBroker(String username, String password, String pin) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/api/broker/link'),
+      headers: _headers,
+      body: jsonEncode({'username': username, 'password': password, 'pin': pin}),
+    );
+    _checkResponse(response);
+    return BrokerLinkResponse.fromJson(_safeJsonDecode(response.body));
+  }
+
+  Future<BrokerLinkResponse> verifyBroker2FA(int accountId, String code) async {
+    final response = await _post(
+      Uri.parse('$baseUrl/api/broker/verify-2fa'),
+      headers: _headers,
+      body: jsonEncode({'account_id': accountId, 'code': code}),
+    );
+    _checkResponse(response);
+    return BrokerLinkResponse.fromJson(_safeJsonDecode(response.body));
+  }
+
+  Future<BrokerAccount> getBrokerStatus() async {
+    final response = await _get(
+      Uri.parse('$baseUrl/api/broker/status'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return BrokerAccount.fromJson(_safeJsonDecode(response.body));
+  }
+
+  Future<List<BrokerPosition>> getBrokerPositions() async {
+    final response = await _get(
+      Uri.parse('$baseUrl/api/broker/positions'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    final Map<String, dynamic> body = _safeJsonDecode(response.body);
+    final List<dynamic> data = body['positions'] ?? [];
+    return data.map((e) => BrokerPosition.fromJson(e)).toList();
+  }
+
+  Future<Map<String, dynamic>> syncBroker() async {
+    final response = await _post(
+      Uri.parse('$baseUrl/api/broker/sync'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return _safeJsonDecode(response.body);
+  }
+
+  Future<void> unlinkBroker() async {
+    final response = await _delete(
+      Uri.parse('$baseUrl/api/broker/unlink'),
+      headers: _headers,
+    );
+    _checkResponse(response);
   }
 
   // ==================== 錯誤處理 ====================

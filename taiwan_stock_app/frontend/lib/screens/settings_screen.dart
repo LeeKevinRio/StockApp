@@ -22,6 +22,9 @@ class SettingsScreen extends StatelessWidget {
           // 偏好
           _buildPreferencesSection(context),
           const Divider(height: 1),
+          // 券商連結
+          _buildBrokerSection(context),
+          const Divider(height: 1),
           // 關於
           _buildAboutSection(context),
           const Divider(height: 1),
@@ -141,6 +144,22 @@ class SettingsScreen extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildBrokerSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(context, '券商連結'),
+        ListTile(
+          leading: const Icon(Icons.account_balance),
+          title: const Text('連結券商帳戶'),
+          subtitle: const Text('同步 Firstrade 美股持倉'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.pushNamed(context, '/broker'),
+        ),
+      ],
     );
   }
 

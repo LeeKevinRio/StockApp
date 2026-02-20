@@ -13,6 +13,7 @@ from .portfolio import router as portfolio_router
 from .fundamental import router as fundamental_router
 from .screener import router as screener_router
 from .admin import router as admin_router
+from .broker import router as broker_router
 
 __all__ = [
     "auth_router",
@@ -27,4 +28,5 @@ __all__ = [
     "fundamental_router",
     "screener_router",
     "admin_router",
+    "broker_router",
 ]
