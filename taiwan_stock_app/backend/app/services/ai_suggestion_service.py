@@ -9,12 +9,15 @@ from datetime import date, timedelta
 import google.generativeai as genai
 import json
 import asyncio
+import logging
 import pandas as pd
 
 from app.data_fetchers import FinMindFetcher, USStockFetcher, MacroDataFetcher
 from app.data_fetchers.news_fetcher import NewsFetcher
 from app.config import settings
 from app.services.technical_indicators import TechnicalIndicators
+
+logger = logging.getLogger(__name__)
 
 # Groq client (lazy initialization)
 _groq_client = None
@@ -27,9 +30,9 @@ def get_groq_client():
             from groq import Groq
             _groq_client = Groq(api_key=settings.GROQ_API_KEY)
         except ImportError:
-            print("Groq package not installed. Run: pip install groq")
+            logger.warning("Groq package not installed. Run: pip install groq")
         except Exception as e:
-            print(f"Failed to initialize Groq client: {e}")
+            logger.error(f"Failed to initialize Groq client: {e}")
     return _groq_client
 
 
@@ -147,7 +150,7 @@ class AISuggestionService:
                 if 'min' in prices.columns:
                     prices['low'] = prices['min']
         except Exception as e:
-            print(f"Error getting price data for {stock_id}: {e}")
+            logger.error(f"Error getting price data for {stock_id}: {e}")
             prices = pd.DataFrame()
 
         technical = self._calculate_technical_indicators(prices)
@@ -156,13 +159,13 @@ class AISuggestionService:
         try:
             institutions = self.finmind.get_institutional_investors(stock_id, start_str, end_str)
         except Exception as e:
-            print(f"Error getting institutional data for {stock_id}: {e}")
+            logger.error(f"Error getting institutional data for {stock_id}: {e}")
             institutions = pd.DataFrame()
 
         try:
             margins = self.finmind.get_margin_trading(stock_id, start_str, end_str)
         except Exception as e:
-            print(f"Error getting margin data for {stock_id}: {e}")
+            logger.error(f"Error getting margin data for {stock_id}: {e}")
             margins = pd.DataFrame()
 
         chip_analysis = self._analyze_chip_data(institutions, margins)
@@ -279,7 +282,7 @@ class AISuggestionService:
             return result
 
         except Exception as e:
-            print(f"計算技術指標時發生錯誤: {e}")
+            logger.error(f"計算技術指標時發生錯誤: {e}")
             return {"error": str(e)}
 
     def _calculate_technical_score(self, tech: Dict) -> int:
@@ -412,7 +415,7 @@ class AISuggestionService:
                         result["short_change"] = int(short_change)
                         result["short_trend"] = "融券增加_看空力道增" if short_change > 0 else "融券減少_空頭回補"
                 except Exception as e:
-                    print(f"Error processing margin data: {e}")
+                    logger.error(f"Error processing margin data: {e}")
 
             # 計算籌碼面評分 (-100 到 +100)
             chip_score = self._calculate_chip_score(result)
@@ -644,7 +647,7 @@ class AISuggestionService:
                             "ROA偏低"
                         )
             except Exception as e:
-                print(f"Error getting balance sheet for {stock_id}: {e}")
+                logger.error(f"Error getting balance sheet for {stock_id}: {e}")
 
             # 股息資料
             div_data = self.finmind.get_dividend(stock_id, start_date, end_date)
@@ -1012,7 +1015,7 @@ class AISuggestionService:
                 )
                 result["sentiment_method"] = "ai"
             except Exception as e:
-                print(f"AI 語意分析失敗，使用關鍵字分析: {e}")
+                logger.warning(f"AI 語意分析失敗，使用關鍵字分析: {e}")
                 result["sentiment_method"] = "keyword"
 
             loop.close()
@@ -1089,7 +1092,7 @@ class AISuggestionService:
         try:
             return self.macro_fetcher.calculate_combined_macro_score()
         except Exception as e:
-            print(f"宏觀數據分析失敗: {e}")
+            logger.error(f"宏觀數據分析失敗: {e}")
             return {"macro_score": 0, "macro_signal": "no_data", "details": {}}
 
     def _analyze_social_sentiment(self, stock_id: str, db=None) -> Dict:
@@ -1158,7 +1161,7 @@ class AISuggestionService:
                     result['social_signal'] = 'positive' if avg > 0.1 else ('negative' if avg < -0.1 else 'neutral')
 
         except Exception as e:
-            print(f"社群情緒分析失敗: {e}")
+            logger.error(f"社群情緒分析失敗: {e}")
 
         return result
 
@@ -1268,7 +1271,7 @@ class AISuggestionService:
 
             return "\n".join(lines)
         except Exception as e:
-            print(f"Warning: Failed to get prediction history: {e}")
+            logger.warning(f"Failed to get prediction history: {e}")
             return ""
 
     def generate_suggestion(self, stock_id: str, stock_name: str, market: str = "TW", db=None) -> Dict:
@@ -1434,7 +1437,7 @@ class AISuggestionService:
             return result
 
         except Exception as e:
-            print(f"Error generating AI suggestion for {stock_id}: {e}")
+            logger.error(f"Error generating AI suggestion for {stock_id}: {e}")
             # Return mock suggestion when API fails
             return self._generate_mock_suggestion(stock_id, stock_name, market)
 
@@ -1450,14 +1453,14 @@ class AISuggestionService:
             return gemini_result
 
         # 2. Gemini 失敗，嘗試 Groq
-        print(f"Gemini failed for {stock_id}, trying Groq...")
+        logger.warning(f"Gemini failed for {stock_id}, trying Groq...")
         groq_result = self._call_groq(prompt)
         if groq_result is not None:
             groq_result["ai_provider"] = "Groq"
             return groq_result
 
         # 3. 全部失敗
-        print(f"All AI providers failed for {stock_id}, will use mock data")
+        logger.error(f"All AI providers failed for {stock_id}, will use mock data")
         return None
 
     def _call_gemini(self, prompt: str) -> Optional[Dict]:
@@ -1474,16 +1477,16 @@ class AISuggestionService:
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "quota" in error_str.lower():
-                print(f"Gemini quota exceeded: {e}")
+                logger.warning(f"Gemini quota exceeded: {e}")
             else:
-                print(f"Gemini API error: {e}")
+                logger.error(f"Gemini API error: {e}")
             return None
 
     def _call_groq(self, prompt: str) -> Optional[Dict]:
         """呼叫 Groq API"""
         groq_client = get_groq_client()
         if groq_client is None:
-            print("Groq client not available (API key not set or package not installed)")
+            logger.warning("Groq client not available (API key not set or package not installed)")
             return None
 
         try:
@@ -1507,9 +1510,9 @@ class AISuggestionService:
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "rate" in error_str.lower():
-                print(f"Groq rate limit exceeded: {e}")
+                logger.warning(f"Groq rate limit exceeded: {e}")
             else:
-                print(f"Groq API error: {e}")
+                logger.error(f"Groq API error: {e}")
             return None
 
     def _build_system_prompt(self, total_score: float, market: str = "TW") -> str:

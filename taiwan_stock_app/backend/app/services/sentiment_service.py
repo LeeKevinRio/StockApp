@@ -257,8 +257,8 @@ class SentimentService:
                 if post_data.get('posted_at'):
                     try:
                         posted_at = datetime.fromisoformat(str(post_data['posted_at']).replace('Z', '+00:00'))
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"解析貼文時間失敗: {e}")
 
                 social_post = SocialPost(
                     platform=platform,
@@ -339,7 +339,7 @@ class SentimentService:
             db.commit()
         except Exception as e:
             db.rollback()
-            print(f"儲存情緒數據失敗: {e}")
+            logger.error(f"儲存情緒數據失敗: {e}")
 
     async def _get_sentiment_trend(self, db: Session, stock_id: str, days: int) -> List[Dict]:
         """獲取情緒趨勢"""

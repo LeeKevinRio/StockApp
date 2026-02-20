@@ -6,10 +6,13 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
+import logging
 
 from app.models import PredictionRecord, Stock, Watchlist
 from app.services import StockDataService
 from app.services.trading_calendar import get_next_trading_date
+
+logger = logging.getLogger(__name__)
 
 
 class PredictionTracker:
@@ -196,7 +199,7 @@ class PredictionTracker:
                 updated_count += 1
 
             except Exception as e:
-                print(f"Error updating prediction for {record.stock_id}: {e}")
+                logger.error(f"Error updating prediction for {record.stock_id}: {e}")
                 continue
 
         db.commit()

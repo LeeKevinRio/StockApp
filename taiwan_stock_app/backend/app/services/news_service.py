@@ -264,7 +264,7 @@ class NewsService:
             return news
         except Exception as e:
             db.rollback()
-            print(f"儲存新聞失敗: {e}")
+            logger.error(f"儲存新聞失敗: {e}")
             return None
 
     def _news_to_dict(self, news: StockNews) -> dict:

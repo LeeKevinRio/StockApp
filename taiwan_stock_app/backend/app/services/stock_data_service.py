@@ -7,10 +7,13 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 import random
 import threading
+import logging
 
 from app.models import Stock, StockPrice
 from app.data_fetchers import FinMindFetcher, FugleFetcher, TWSEFetcher, USStockFetcher, GlobalNewsFetcher
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class PriceCache:
@@ -280,7 +283,7 @@ class StockDataService:
                     "updated_at": datetime.now(),
                 }
         except Exception as e:
-            print(f"US Stock API 失敗: {e}")
+            logger.error(f"US Stock API 失敗: {e}")
         return None
 
     def _get_tw_realtime_price(self, stock_id: str) -> dict:
@@ -313,7 +316,7 @@ class StockDataService:
                 "updated_at": datetime.now(),
             }
         except Exception as e:
-            print(f"TWSE API 失敗: {e}")
+            logger.warning(f"TWSE API 失敗: {e}")
 
         # 2. 回退到 Fugle（如果有配置）
         if self.fugle:
@@ -334,7 +337,7 @@ class StockDataService:
                     "updated_at": datetime.now(),
                 }
             except Exception as e:
-                print(f"Fugle API 失敗: {e}")
+                logger.warning(f"Fugle API 失敗: {e}")
 
         # 3. 最後使用 FinMind（延遲數據）
         try:
@@ -368,7 +371,7 @@ class StockDataService:
                 "updated_at": datetime.now(),
             }
         except Exception as e:
-            print(f"FinMind API 失敗: {e}")
+            logger.error(f"FinMind API 失敗: {e}")
             # Return mock data for testing
             return generate_mock_realtime_price(stock_id)
 
@@ -416,7 +419,7 @@ class StockDataService:
                         new_prices[stock_id] = price_data
                         results[stock_id] = price_data
                 except Exception as e:
-                    print(f"US Stock {stock_id} 報價失敗: {e}")
+                    logger.error(f"US Stock {stock_id} 報價失敗: {e}")
         else:
             # TW stocks - 使用 TWSE 批量 API（含上市+上櫃）
             try:
@@ -453,7 +456,7 @@ class StockDataService:
                     new_prices[stock_id] = price_data
                     results[stock_id] = price_data
             except Exception as e:
-                print(f"TWSE 批量報價失敗: {e}")
+                logger.error(f"TWSE 批量報價失敗: {e}")
 
             # 對批量查詢未命中的股票，逐一補查
             still_missing = [sid for sid in missing_ids if sid not in results]
@@ -465,7 +468,7 @@ class StockDataService:
                             new_prices[stock_id] = price_data
                             results[stock_id] = price_data
                     except Exception as e2:
-                        print(f"TW Stock {stock_id} 逐一補查失敗: {e2}")
+                        logger.error(f"TW Stock {stock_id} 逐一補查失敗: {e2}")
 
         # 快取新獲取的報價
         if new_prices:
@@ -588,7 +591,7 @@ class StockDataService:
                         "volume": int(row['volume']),
                     })
             except Exception as e:
-                print(f"FinMind history API 失敗: {e}")
+                logger.error(f"FinMind history API 失敗: {e}")
                 # Return mock data for testing
                 return generate_mock_stock_history(stock_id, days)
 
@@ -684,14 +687,14 @@ class StockDataService:
                 yf_news = self.us_fetcher.get_company_news(stock_id, limit // 2)
                 all_news.extend(yf_news)
             except Exception as e:
-                print(f"yfinance news error: {e}")
+                logger.error(f"yfinance news error: {e}")
 
             # 2. Get news from global sources (Yahoo Finance, MarketWatch, etc.)
             try:
                 global_news = self.global_news.fetch_stock_news(stock_id, limit)
                 all_news.extend(global_news)
             except Exception as e:
-                print(f"Global news error: {e}")
+                logger.error(f"Global news error: {e}")
 
             # Deduplicate by title
             seen = set()

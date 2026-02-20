@@ -4,11 +4,14 @@ AI Chat Service - AI 問答服務
 """
 from typing import List, Dict, Optional
 from datetime import date, timedelta
+import logging
 import google.generativeai as genai
 
 from app.data_fetchers import FinMindFetcher
 from app.config import settings
 from app.services.ai_suggestion_service import get_groq_client
+
+logger = logging.getLogger(__name__)
 
 
 class AIChatService:
@@ -171,7 +174,7 @@ class AIChatService:
 
         # 2. Gemini 失敗，嘗試 Groq
         if ai_response is None:
-            print("Gemini chat failed, trying Groq...")
+            logger.warning("Gemini chat failed, trying Groq...")
             ai_response = self._call_groq_chat(full_message, chat_history, system_prompt)
 
         # 3. 全部失敗
@@ -200,16 +203,16 @@ class AIChatService:
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "quota" in error_str.lower() or "ResourceExhausted" in error_str:
-                print(f"Gemini chat quota exceeded: {e}")
+                logger.warning(f"Gemini chat quota exceeded: {e}")
             else:
-                print(f"Gemini chat error: {e}")
+                logger.error(f"Gemini chat error: {e}")
             return None
 
     def _call_groq_chat(self, message: str, chat_history: Optional[List[Dict]] = None, system_prompt: Optional[str] = None) -> Optional[str]:
         """呼叫 Groq Chat API"""
         groq_client = get_groq_client()
         if groq_client is None:
-            print("Groq client not available (API key not set or package not installed)")
+            logger.warning("Groq client not available (API key not set or package not installed)")
             return None
 
         prompt = system_prompt or self._get_system_prompt()
@@ -238,9 +241,9 @@ class AIChatService:
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "rate" in error_str.lower():
-                print(f"Groq chat rate limit exceeded: {e}")
+                logger.warning(f"Groq chat rate limit exceeded: {e}")
             else:
-                print(f"Groq chat error: {e}")
+                logger.error(f"Groq chat error: {e}")
             return None
 
     def _get_stock_context(self, stock_id: str) -> str:
