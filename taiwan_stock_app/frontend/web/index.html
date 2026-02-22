@@ -32,8 +32,18 @@
   <title>台股智慧助手</title>
   <link rel="manifest" href="manifest.json">
 
-  <!-- Google Sign-In -->
-  <meta name="google-signin-client_id" content="506193160322-omn6g1hja95mv192ajdu0ospgndohh6o.apps.googleusercontent.com">
+  <!-- Google Sign-In: 僅在 localhost 或正式域名時啟用 -->
+  <script>
+    (function() {
+      var host = window.location.hostname;
+      if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.com') || host.endsWith('.app')) {
+        var meta = document.createElement('meta');
+        meta.name = 'google-signin-client_id';
+        meta.content = '506193160322-omn6g1hja95mv192ajdu0ospgndohh6o.apps.googleusercontent.com';
+        document.head.appendChild(meta);
+      }
+    })();
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
