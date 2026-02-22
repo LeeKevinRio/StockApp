@@ -6,14 +6,12 @@ Admin / BYOK 用戶不受限，Free 10 次/天，Pro 50 次/天
 from dataclasses import dataclass, field
 from datetime import date
 
-from fastapi import Depends, HTTPException
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.database import get_db
 from app.models.user import User
 from app.models.ai_usage import AIUsageDaily
 from app.models.user_ai_config import UserAIConfig
-from app.routers.auth import get_current_user
 
 DAILY_LIMITS = {
     "free": 10,
@@ -82,11 +80,8 @@ def _get_or_create_usage_row(db: Session, user_id: int) -> AIUsageDaily:
     return row
 
 
-def check_ai_quota(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> AIQuotaContext:
-    """FastAPI 依賴：回傳 AIQuotaContext，不直接 raise（讓 endpoint 決定何時檢查）"""
+def check_ai_quota(db: Session, current_user: User) -> AIQuotaContext:
+    """回傳 AIQuotaContext，不直接 raise（讓 endpoint 決定何時檢查）"""
     # Admin → 無限
     if current_user.is_admin:
         return AIQuotaContext(db=db, user_id=current_user.id, daily_limit=0, is_unlimited=True)

@@ -107,13 +107,14 @@ def get_ai_suggestions(
     generate_missing: bool = Query(False, description="是否自動生成缺少的建議（會較慢）"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    quota: AIQuotaContext = Depends(check_ai_quota),
 ):
     """
     取得 AI 每日建議（所有自選股，包含台股與美股）
 
     預設只返回已有的建議（快速），設定 generate_missing=true 才會生成新建議
     """
+    quota = check_ai_quota(db, current_user)
+
     # Get user's watchlist with stock info
     watchlist = (
         db.query(Watchlist, Stock)
@@ -232,7 +233,6 @@ def get_stock_suggestion(
     refresh: bool = Query(False, description="Force refresh, ignore cache"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    quota: AIQuotaContext = Depends(check_ai_quota),
 ):
     """
     取得單一股票 AI 建議
@@ -242,6 +242,7 @@ def get_stock_suggestion(
         market: 市場 - "TW"(台股) 或 "US"(美股)
         refresh: 是否強制刷新（忽略快取）
     """
+    quota = check_ai_quota(db, current_user)
     validate_stock_id(stock_id)
     try:
         # Get stock info based on market
@@ -636,9 +637,9 @@ def ai_chat(
     chat_request: AIChatRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    quota: AIQuotaContext = Depends(check_ai_quota),
 ):
     """AI 問答"""
+    quota = check_ai_quota(db, current_user)
     quota.ensure_available()
 
     # Get chat history
@@ -720,7 +721,9 @@ def get_chat_history(
 
 @router.get("/quota")
 def get_ai_quota(
-    quota: AIQuotaContext = Depends(check_ai_quota),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """查詢當前用戶的 AI 配額使用狀況"""
+    quota = check_ai_quota(db, current_user)
     return quota.to_dict()
