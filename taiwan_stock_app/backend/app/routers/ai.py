@@ -20,6 +20,7 @@ from app.services.prediction_tracker import PredictionTracker
 from app.services.trading_calendar import get_next_trading_date
 from app.routers.auth import get_current_user
 from app.validators import validate_stock_id
+from app.dependencies.ai_quota import check_ai_quota, AIQuotaContext
 
 prediction_tracker = PredictionTracker()
 
@@ -106,6 +107,7 @@ def get_ai_suggestions(
     generate_missing: bool = Query(False, description="是否自動生成缺少的建議（會較慢）"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    quota: AIQuotaContext = Depends(check_ai_quota),
 ):
     """
     取得 AI 每日建議（所有自選股，包含台股與美股）
@@ -171,6 +173,12 @@ def get_ai_suggestions(
         elif generate_missing:
             # Only generate new suggestion if explicitly requested
             try:
+                # 配額檢查：超額時 break，回傳已有結果
+                try:
+                    quota.ensure_available()
+                except HTTPException:
+                    break
+
                 # Create service instance based on user's subscription tier
                 suggestion_service = AISuggestionService.for_user(current_user, db)
                 suggestion_data = suggestion_service.generate_suggestion(
@@ -205,6 +213,7 @@ def get_ai_suggestions(
                     db.add(report)
                     db.commit()
 
+                quota.increment()
                 results.append(AISuggestion(**suggestion_data))
             except Exception as e:
                 db.rollback()  # Important: rollback on error
@@ -223,6 +232,7 @@ def get_stock_suggestion(
     refresh: bool = Query(False, description="Force refresh, ignore cache"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    quota: AIQuotaContext = Depends(check_ai_quota),
 ):
     """
     取得單一股票 AI 建議
@@ -311,6 +321,9 @@ def get_stock_suggestion(
                 suggestion_dict = _validate_prices(suggestion_dict, cp)
             return AISuggestion(**suggestion_dict)
 
+        # 配額檢查：無快取時才消耗配額
+        quota.ensure_available()
+
         # Generate new suggestion with market parameter
         # Create service instance based on user's subscription tier
         suggestion_service = AISuggestionService.for_user(current_user, db)
@@ -375,6 +388,8 @@ def get_stock_suggestion(
                 logger.info(f"Saved prediction record for {stock_id}")
         except Exception as pred_error:
             logger.warning(f"Failed to save prediction record: {pred_error}")
+
+        quota.increment()
 
         # Fix report_date format - convert string to date if needed
         if isinstance(suggestion_data.get("report_date"), str):
@@ -621,8 +636,11 @@ def ai_chat(
     chat_request: AIChatRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    quota: AIQuotaContext = Depends(check_ai_quota),
 ):
     """AI 問答"""
+    quota.ensure_available()
+
     # Get chat history
     history = (
         db.query(AIChatHistory)
@@ -651,6 +669,8 @@ def ai_chat(
                 detail="AI 服務配額已達上限，請稍後再試。(API quota exceeded, please try again later.)"
             )
         raise HTTPException(status_code=500, detail="AI 服務暫時不可用，請稍後再試")
+
+    quota.increment()
 
     # Save to database
     user_msg = AIChatHistory(
@@ -696,3 +716,11 @@ def get_chat_history(
         )
         for msg in history
     ]
+
+
+@router.get("/quota")
+def get_ai_quota(
+    quota: AIQuotaContext = Depends(check_ai_quota),
+):
+    """查詢當前用戶的 AI 配額使用狀況"""
+    return quota.to_dict()

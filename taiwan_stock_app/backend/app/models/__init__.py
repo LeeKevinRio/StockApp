@@ -21,6 +21,7 @@ from .fundamental import (
 from .trading_diary import TradingDiaryEntry
 from .broker import BrokerAccount, BrokerPosition
 from .user_ai_config import UserAIConfig
+from .ai_usage import AIUsageDaily
 
 __all__ = [
     "User",
@@ -52,4 +53,5 @@ __all__ = [
     "BrokerAccount",
     "BrokerPosition",
     "UserAIConfig",
+    "AIUsageDaily",
 ]
