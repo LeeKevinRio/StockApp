@@ -99,11 +99,16 @@ class PredictionTracker:
         """
         today = date.today()
 
-        # 查詢需要更新的預測記錄（目標日期 <= 今天，且還沒有實際結果）
-        # 這樣可以補回過去遺漏更新的記錄
+        # 查詢需要更新的預測記錄：
+        # 1. 目標日期 <= 今天，且還沒有實際結果（補回過去遺漏的）
+        # 2. 目標日期 == 今天，即使已有結果也重新更新（盤中價格持續變動）
+        from sqlalchemy import or_
         query = db.query(PredictionRecord).filter(
             PredictionRecord.target_date <= today,
-            PredictionRecord.actual_close_price.is_(None)
+            or_(
+                PredictionRecord.actual_close_price.is_(None),
+                PredictionRecord.target_date == today,  # 今天的預測隨時更新
+            )
         )
 
         if market:

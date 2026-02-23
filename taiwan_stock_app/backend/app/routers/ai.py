@@ -153,7 +153,7 @@ def get_ai_suggestions(
                 # Convert old format to new format
                 key_factors = [{"category": "分析", "factor": f, "impact": "neutral"} for f in key_factors]
 
-            # 從 DB 讀取時也做價格合理性驗證
+            # 從 DB 讀取時也做價格合理性驗證（包含所有欄位）
             suggestion_dict = {
                 "stock_id": existing_report.stock_id,
                 "name": stock.name,
@@ -166,10 +166,21 @@ def get_ai_suggestions(
                 "reasoning": existing_report.reasoning,
                 "key_factors": key_factors,
                 "report_date": existing_report.report_date,
+                "entry_price_min": existing_report.entry_price_min,
+                "entry_price_max": existing_report.entry_price_max,
+                "take_profit_targets": existing_report.take_profit_targets,
+                "risk_level": existing_report.risk_level,
+                "time_horizon": existing_report.time_horizon,
+                "predicted_change_percent": existing_report.predicted_change_percent,
+                "next_day_prediction": existing_report.next_day_prediction,
             }
             cp = float(existing_report.current_price or 0)
             if cp > 0:
                 suggestion_dict = _validate_prices(suggestion_dict, cp)
+            # 注入 target_date 到 next_day_prediction
+            ndp = suggestion_dict.get("next_day_prediction")
+            if isinstance(ndp, dict) and "target_date" not in ndp:
+                ndp["target_date"] = _get_next_trading_date_str(market)
             results.append(AISuggestion(**suggestion_dict))
         elif generate_missing:
             # Only generate new suggestion if explicitly requested
