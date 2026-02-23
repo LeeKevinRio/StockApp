@@ -180,3 +180,26 @@ def get_previous_trading_date(from_date: date = None, market: str = "TW") -> dat
     while not is_trading_day(d, market):
         d -= timedelta(days=1)
     return d
+
+
+def get_calendar_gap_days(from_date: date = None, market: str = "TW") -> int:
+    """
+    計算上一個交易日到下一個交易日之間的日曆天數差。
+
+    正常工作日 → 1 天
+    週末後開盤 → 3 天
+    長假後開盤 → 7-10+ 天（春節等）
+
+    Args:
+        from_date: 基準日期，預設為今天
+        market: 市場 "TW" 或 "US"
+
+    Returns:
+        日曆天數差
+    """
+    if from_date is None:
+        from_date = date.today()
+
+    prev = get_previous_trading_date(from_date, market)
+    next_td = get_next_trading_date(from_date, market)
+    return (next_td - prev).days

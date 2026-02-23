@@ -16,6 +16,7 @@ from app.data_fetchers import FinMindFetcher, USStockFetcher, MacroDataFetcher
 from app.data_fetchers.news_fetcher import NewsFetcher
 from app.config import settings
 from app.services.technical_indicators import TechnicalIndicators
+from app.services.trading_calendar import get_calendar_gap_days
 
 logger = logging.getLogger(__name__)
 
@@ -1183,8 +1184,12 @@ class AISuggestionService:
         past = float(prices.iloc[-days - 1]["close"])
         return round((current - past) / past * 100, 2)
 
-    def _generate_mock_suggestion(self, stock_id: str, stock_name: str, market: str = "TW") -> Dict:
-        """Generate a mock suggestion when API/data is unavailable"""
+    def _generate_mock_suggestion(self, stock_id: str, stock_name: str, market: str = "TW", data: Dict = None) -> Dict:
+        """
+        Generate a mock suggestion when API/data is unavailable.
+        如果有 data（技術面/籌碼面數據），則根據評分推導方向，避免純隨機。
+        信心度刻意降低（0.50~0.65），明確標記 ai_provider = "Mock"。
+        """
         import random
         import hashlib
 
@@ -1193,16 +1198,31 @@ class AISuggestionService:
         seed = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
         rng = random.Random(seed)
 
-        suggestions = ["BUY", "SELL"]  # 不給 HOLD
-        suggestion = rng.choice(suggestions)
-        confidence = round(rng.uniform(0.60, 0.85), 2)
-        mock_price = round(rng.uniform(50, 500), 2)
-
-        # 根據建議方向生成預測漲跌幅，讓方向與建議一致
-        if suggestion == "BUY":
-            predicted_change = round(rng.uniform(0.5, 3.0), 2)  # 正向預測
+        # 嘗試從數據推導方向
+        if data is not None:
+            tech_score = data.get('technical', {}).get('technical_score', 0) or 0
+            chip_score = data.get('chip', {}).get('chip_score', 0) or 0
+            combined = tech_score * 0.6 + chip_score * 0.4
+            if combined >= 5:
+                suggestion = "BUY"
+            elif combined <= -5:
+                suggestion = "SELL"
+            else:
+                suggestion = rng.choice(["BUY", "SELL"])
+            latest_price = data.get('latest_price', 0) or 0
         else:
-            predicted_change = round(rng.uniform(-3.0, -0.5), 2)  # 負向預測
+            suggestion = rng.choice(["BUY", "SELL"])
+            latest_price = 0
+
+        # Mock 信心度刻意降低
+        confidence = round(rng.uniform(0.50, 0.65), 2)
+        mock_price = latest_price if latest_price > 0 else round(rng.uniform(50, 500), 2)
+
+        # 根據建議方向生成預測漲跌幅（幅度保守）
+        if suggestion == "BUY":
+            predicted_change = round(rng.uniform(0.3, 1.5), 2)
+        else:
+            predicted_change = round(rng.uniform(-1.5, -0.3), 2)
 
         next_day_direction = "UP" if predicted_change > 0 else "DOWN"
 
@@ -1216,29 +1236,30 @@ class AISuggestionService:
             "confidence": confidence,
             "bullish_probability": confidence if suggestion == "BUY" else (1 - confidence),
             "current_price": mock_price,
-            "target_price": round(mock_price * 1.1, 2) if suggestion == "BUY" else round(mock_price * 0.9, 2),
-            "stop_loss_price": round(mock_price * 0.95, 2) if suggestion == "BUY" else round(mock_price * 1.05, 2),
-            "reasoning": f"[測試模式] 由於 Gemini API 配額已用完，此為模擬建議。股票代碼：{stock_id}",
+            "target_price": round(mock_price * 1.05, 2) if suggestion == "BUY" else round(mock_price * 0.95, 2),
+            "stop_loss_price": round(mock_price * 0.97, 2) if suggestion == "BUY" else round(mock_price * 1.03, 2),
+            "reasoning": f"[Mock 模式] AI API 暫時無法使用，此為基於技術面評分的簡易推導。信心度偏低，僅供參考。股票代碼：{stock_id}",
             "key_factors": [
-                {"category": "系統", "factor": "此為測試模式的模擬數據", "impact": "neutral"},
-                {"category": "配置", "factor": "Gemini API 配額已用完，等待重置", "impact": "neutral"},
-                {"category": "數據", "factor": "真實建議需要 AI 模型支持", "impact": "neutral"}
+                {"category": "系統", "factor": "AI API 無法使用，此為 Mock 模擬數據", "impact": "neutral"},
+                {"category": "數據", "factor": f"技術面評分: {data.get('technical', {}).get('technical_score', 'N/A') if data else 'N/A'}", "impact": "neutral"},
+                {"category": "提示", "factor": "信心度刻意降低，建議等待 AI 恢復後再做決策", "impact": "neutral"}
             ],
             "risk_level": "HIGH",
             "time_horizon": "短線(1-3天)",
             "predicted_change_percent": predicted_change,
+            "ai_provider": "Mock",
             "next_day_prediction": {
                 "direction": next_day_direction,
-                "probability": round(rng.uniform(0.55, 0.75), 2),
+                "probability": round(rng.uniform(0.50, 0.60), 2),
                 "predicted_change_percent": predicted_change,
-                "price_range_low": round(mock_price * (1 + predicted_change/100 - 0.02), 2),
-                "price_range_high": round(mock_price * (1 + predicted_change/100 + 0.02), 2),
-                "reasoning": f"[測試模式] {'技術指標顯示短期偏多' if next_day_direction == 'UP' else '技術指標顯示短期偏空'}"
+                "price_range_low": round(mock_price * (1 + predicted_change/100 - 0.015), 2),
+                "price_range_high": round(mock_price * (1 + predicted_change/100 + 0.015), 2),
+                "reasoning": f"[Mock 模式] {'技術面評分偏多' if next_day_direction == 'UP' else '技術面評分偏空'}（信心度低，僅供參考）"
             },
             "analysis_scores": {
-                "technical": 0,
-                "chip": None if market == "US" else 0,
-                "fundamental": 0,
+                "technical": data.get('technical', {}).get('technical_score', 0) if data else 0,
+                "chip": data.get('chip', {}).get('chip_score', 0) if data and market == "TW" else None,
+                "fundamental": data.get('fundamental', {}).get('fundamental_score', 0) if data else 0,
                 "news_sentiment": 0,
                 "social_sentiment": 0,
                 "macro": 0,
@@ -1284,6 +1305,28 @@ class AISuggestionService:
             logger.warning(f"Failed to get prediction history: {e}")
             return ""
 
+    def _get_holiday_gap_context(self, market: str = "TW") -> str:
+        """取得長假 gap 資訊，提醒 AI 調整預測幅度"""
+        try:
+            gap = get_calendar_gap_days(market=market)
+        except Exception:
+            return ""
+
+        if gap >= 4:
+            market_label = "台股" if market == "TW" else "美股"
+            if market == "TW":
+                range_hint = "±3%~±5%（台股），極端情況可達 ±5%~±8%"
+            else:
+                range_hint = "±2%~±4%（美股），極端情況可達 ±3%~±6%"
+            return (
+                f"\n## ⚠️ 長假缺口提醒\n"
+                f"- 上一個交易日到下一個交易日相隔 **{gap} 天**（長假後開盤）\n"
+                f"- {market_label}長假後首日通常波動放大 1.5x~2.5x\n"
+                f"- 建議預測幅度範圍：{range_hint}\n"
+                f"- 請將預測幅度乘以 1.5~2.0 倍修正\n"
+            )
+        return ""
+
     def generate_suggestion(self, stock_id: str, stock_name: str, market: str = "TW", db=None) -> Dict:
         """
         生成 AI 投資建議（多面向綜合分析）
@@ -1325,8 +1368,8 @@ class AISuggestionService:
             result = self._call_ai_with_fallback(full_prompt, stock_id, stock_name, market)
 
             if result is None:
-                # All AI providers failed, return mock
-                return self._generate_mock_suggestion(stock_id, stock_name, market)
+                # All AI providers failed, return mock（傳入 data 以利數據驅動）
+                return self._generate_mock_suggestion(stock_id, stock_name, market, data=data)
 
             result["stock_id"] = stock_id
             result["name"] = stock_name
@@ -1448,8 +1491,8 @@ class AISuggestionService:
 
         except Exception as e:
             logger.error(f"Error generating AI suggestion for {stock_id}: {e}")
-            # Return mock suggestion when API fails
-            return self._generate_mock_suggestion(stock_id, stock_name, market)
+            # Return mock suggestion when API fails（盡量傳入 data）
+            return self._generate_mock_suggestion(stock_id, stock_name, market, data=locals().get('data'))
 
     def _call_ai_with_fallback(self, prompt: str, stock_id: str, stock_name: str, market: str) -> Optional[Dict]:
         """
@@ -1592,6 +1635,18 @@ class AISuggestionService:
 - MACD 翻空 = 賣出訊號
 - MACD 翻多 = 買進訊號"""
 
+            # 偵測長假 gap
+            try:
+                gap_days = get_calendar_gap_days(market=market)
+            except Exception:
+                gap_days = 1
+
+            holiday_hint_us = ""
+            if gap_days >= 4:
+                holiday_hint_us = f"""
+   - ⚠️ **長假後開盤（休市 {gap_days} 天）**：波動幅度應放大 1.5x~2.5x
+   - 長假後預測範圍：±3%~±6%（美股），極端情況可達 ±8%"""
+
             prediction_section = f"""## 隔日預測計算規則（非常重要！）
 你必須根據以下數據計算每支股票「不同的」隔日預測：
 注意：美股交易日為週一至週五，休市日依照 NYSE/NASDAQ 假日（不包含台灣農曆年節）。
@@ -1606,7 +1661,7 @@ class AISuggestionService:
    - MACD 死亡交叉：-0.3% ~ -1.0%
    - VIX > 25（高恐慌）：波動可能擴大至 ±3%~±5%
    - 財報公布前後：波動可能更大
-   - 一般個股日波動在 ±1%~±4%，極端情況（財報/重大新聞）最多 ±8%
+   - 一般個股日波動在 ±1%~±4%，極端情況（財報/重大新聞）最多 ±8%{holiday_hint_us}
 
 2. **預測機率計算**：
    - 多個指標同向（技術+基本面+宏觀同看多/空）：0.65-0.80
@@ -1651,6 +1706,18 @@ class AISuggestionService:
 - MACD 翻空 = 賣出訊號
 - MACD 翻多 = 買進訊號"""
 
+            # 偵測長假 gap
+            try:
+                gap_days = get_calendar_gap_days(market=market)
+            except Exception:
+                gap_days = 1
+
+            holiday_hint_tw = ""
+            if gap_days >= 4:
+                holiday_hint_tw = f"""
+   - ⚠️ **長假後開盤（休市 {gap_days} 天）**：波動幅度應放大 1.5x~2.5x
+   - 長假後預測範圍：±3%~±5%（台股），極端情況可達 ±5%~±8%"""
+
             prediction_section = f"""## 隔日預測計算規則（非常重要！）
 你必須根據以下數據計算每支股票「不同的」隔日預測：
 
@@ -1663,7 +1730,7 @@ class AISuggestionService:
    - 外資大量賣超（>5000張）：額外減 -0.2% ~ -0.5%
    - MACD 黃金交叉：+0.1% ~ +0.5%
    - MACD 死亡交叉：-0.1% ~ -0.5%
-   - 一般個股日波動在 ±0.5%~±3%，極端情況最多 ±5%
+   - 一般個股日波動在 ±0.5%~±3%，極端情況最多 ±5%{holiday_hint_tw}
 
 2. **預測機率計算**：
    - 多個指標同向（技術+籌碼同看多/空）：0.65-0.80
@@ -1861,6 +1928,8 @@ class AISuggestionService:
 - 基準：使用近5日平均日波動幅度作為預測基準
 
 {self._get_prediction_history_context(stock_id, data.get('_db'))}
+
+{self._get_holiday_gap_context(market)}
 
 **你的隔日預測必須基於數據計算，預測值要貼近實際日常波動範圍！**
 

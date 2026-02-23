@@ -21,6 +21,19 @@ class PredictionTracker:
     def __init__(self):
         self.stock_service = StockDataService()
 
+    @staticmethod
+    def _dedup_records(records: list) -> list:
+        """
+        對 (stock_id, target_date) 去重，只保留最新 prediction_date 的記錄。
+        避免歷史重複預測膨脹誤差統計。
+        """
+        best = {}
+        for r in records:
+            key = (r.stock_id, r.target_date)
+            if key not in best or r.prediction_date > best[key].prediction_date:
+                best[key] = r
+        return list(best.values())
+
     def save_prediction(
         self,
         db: Session,
@@ -46,14 +59,15 @@ class PredictionTracker:
         today = date.today()
         tomorrow = get_next_trading_date(today, market=market)
 
-        # 檢查是否已存在今日預測
+        # 以 stock_id + target_date 去重：同一目標日只保留最新預測
         existing = db.query(PredictionRecord).filter(
             PredictionRecord.stock_id == stock_id,
-            PredictionRecord.prediction_date == today
+            PredictionRecord.target_date == tomorrow
         ).first()
 
         if existing:
-            # 更新現有記錄
+            # 更新現有記錄（含 prediction_date 更新為今天）
+            existing.prediction_date = today
             existing.predicted_direction = prediction_data.get("direction")
             existing.predicted_change_percent = prediction_data.get("predicted_change_percent")
             existing.predicted_probability = prediction_data.get("probability")
@@ -62,6 +76,13 @@ class PredictionTracker:
             existing.prediction_reasoning = prediction_data.get("reasoning")
             existing.base_close_price = base_close_price
             existing.ai_provider = ai_provider
+            # 清除舊的 actual 結果，讓它重新計算
+            existing.actual_close_price = None
+            existing.actual_change_percent = None
+            existing.actual_direction = None
+            existing.direction_correct = None
+            existing.within_range = None
+            existing.error_percent = None
             db.commit()
             return existing
 
@@ -242,7 +263,7 @@ class PredictionTracker:
         if stock_id:
             query = query.filter(PredictionRecord.stock_id == stock_id)
 
-        records = query.all()
+        records = self._dedup_records(query.all())
 
         if not records:
             return {
@@ -250,13 +271,33 @@ class PredictionTracker:
                 "direction_accuracy": 0,
                 "within_range_rate": 0,
                 "avg_error_percent": 0,
-                "records": []
+                "records": [],
+                "provider_breakdown": {}
             }
 
         total = len(records)
         direction_correct = sum(1 for r in records if r.direction_correct)
         within_range = sum(1 for r in records if r.within_range)
         total_error = sum(float(r.error_percent or 0) for r in records)
+
+        # 2c: provider_breakdown — 各 AI 提供者的統計
+        provider_stats = {}
+        for r in records:
+            prov = r.ai_provider or "Unknown"
+            if prov not in provider_stats:
+                provider_stats[prov] = {"total": 0, "correct": 0, "total_error": 0}
+            provider_stats[prov]["total"] += 1
+            if r.direction_correct:
+                provider_stats[prov]["correct"] += 1
+            provider_stats[prov]["total_error"] += float(r.error_percent or 0)
+
+        provider_breakdown = {}
+        for prov, s in provider_stats.items():
+            provider_breakdown[prov] = {
+                "total": s["total"],
+                "direction_accuracy": round((s["correct"] / s["total"]) * 100, 1) if s["total"] > 0 else 0,
+                "avg_error": round(s["total_error"] / s["total"], 2) if s["total"] > 0 else 0,
+            }
 
         # 詳細記錄
         record_details = []
@@ -283,6 +324,7 @@ class PredictionTracker:
             "direction_correct_count": direction_correct,
             "within_range_count": within_range,
             "period_days": days,
+            "provider_breakdown": provider_breakdown,
             "records": record_details
         }
 
@@ -299,11 +341,13 @@ class PredictionTracker:
         """
         start_date = date.today() - timedelta(days=days)
 
-        # 查詢有實際結果的預測
-        records = db.query(PredictionRecord).filter(
-            PredictionRecord.target_date >= start_date,
-            PredictionRecord.actual_close_price.isnot(None)
-        ).order_by(PredictionRecord.target_date.desc()).all()
+        # 查詢有實際結果的預測，並去重
+        records = self._dedup_records(
+            db.query(PredictionRecord).filter(
+                PredictionRecord.target_date >= start_date,
+                PredictionRecord.actual_close_price.isnot(None)
+            ).order_by(PredictionRecord.target_date.desc()).all()
+        )
 
         # 依股票分組
         stock_data = {}
@@ -382,9 +426,11 @@ class PredictionTracker:
         if target_date is None:
             target_date = date.today() - timedelta(days=1)
 
-        records = db.query(PredictionRecord).filter(
-            PredictionRecord.target_date == target_date
-        ).all()
+        records = self._dedup_records(
+            db.query(PredictionRecord).filter(
+                PredictionRecord.target_date == target_date
+            ).all()
+        )
 
         if not records:
             return {
