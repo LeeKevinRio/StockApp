@@ -1,13 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash",
-      "Read",
-      "Write",
-      "Edit",
-      "Glob",
-      "Grep",
-      "Task"
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "Task(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "NotebookEdit(*)",
+      "mcp__ide__*"
     ],
     "defaultMode": "bypassPermissions",
     "additionalDirectories": [
@@ -17,5 +21,6 @@
       "d:\\AIProject\\StockApp\\taiwan_stock_app\\frontend",
       "d:\\AIProject\\StockApp\\taiwan_stock_app"
     ]
-  }
+  },
+  "skipDangerousModePermissionPrompt": true
 }
