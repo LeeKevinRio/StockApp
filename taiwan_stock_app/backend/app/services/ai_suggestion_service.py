@@ -133,6 +133,7 @@ class AISuggestionService:
             "latest_price": latest_price,
             "price_change_5d": self._calculate_change(prices, 5) if len(prices) > 5 else 0,
             "price_change_20d": self._calculate_change(prices, 20) if len(prices) > 20 else 0,
+            "avg_daily_volatility": self._calculate_avg_daily_volatility(prices, 10),
             "technical": technical,
             "chip": chip_analysis,
             "fundamental": fundamental,
@@ -200,6 +201,7 @@ class AISuggestionService:
             "latest_price": float(prices.iloc[-1]["close"]) if len(prices) > 0 else 0,
             "price_change_5d": self._calculate_change(prices, 5),
             "price_change_20d": self._calculate_change(prices, 20),
+            "avg_daily_volatility": self._calculate_avg_daily_volatility(prices, 10),
             "technical": technical,
             "chip": chip_analysis,
             "fundamental": fundamental,
@@ -1184,47 +1186,92 @@ class AISuggestionService:
         past = float(prices.iloc[-days - 1]["close"])
         return round((current - past) / past * 100, 2)
 
+    def _calculate_avg_daily_volatility(self, prices, days: int = 10) -> float:
+        """計算近N日平均日波動率（每日 abs(日報酬率) 的平均值）"""
+        if len(prices) < 2:
+            return 1.0
+        try:
+            closes = prices['close'].astype(float).values
+            n = min(days + 1, len(closes))
+            recent = closes[-n:]
+            daily_returns = [abs((recent[i] - recent[i - 1]) / recent[i - 1]) * 100
+                            for i in range(1, len(recent)) if recent[i - 1] != 0]
+            if not daily_returns:
+                return 1.0
+            return round(sum(daily_returns) / len(daily_returns), 2)
+        except Exception:
+            return 1.0
+
     def _generate_mock_suggestion(self, stock_id: str, stock_name: str, market: str = "TW", data: Dict = None) -> Dict:
         """
         Generate a mock suggestion when API/data is unavailable.
-        如果有 data（技術面/籌碼面數據），則根據評分推導方向，避免純隨機。
-        信心度刻意降低（0.50~0.65），明確標記 ai_provider = "Mock"。
+        根據 tech_score + chip_score 推導方向，根據 avg_daily_volatility 計算幅度。
+        信心度根據指標一致性計算，明確標記 ai_provider = "Mock"。
         """
-        import random
         import hashlib
 
         # 使用 stock_id 和日期作為種子，讓同一股票同一天返回一致的結果
         seed_str = f"{stock_id}_{date.today().isoformat()}"
         seed = int(hashlib.md5(seed_str.encode()).hexdigest()[:8], 16)
-        rng = random.Random(seed)
 
-        # 嘗試從數據推導方向
+        # 從數據推導方向和幅度
+        tech_score = 0
+        chip_score = 0
+        fund_score = 0
+        news_score = 0
+        macro_score = 0
+        social_score = 0
+        avg_vol = 1.0
+        latest_price = 0
+
         if data is not None:
             tech_score = data.get('technical', {}).get('technical_score', 0) or 0
             chip_score = data.get('chip', {}).get('chip_score', 0) or 0
-            combined = tech_score * 0.6 + chip_score * 0.4
-            if combined >= 5:
-                suggestion = "BUY"
-            elif combined <= -5:
-                suggestion = "SELL"
-            else:
-                suggestion = rng.choice(["BUY", "SELL"])
+            fund_score = data.get('fundamental', {}).get('fundamental_score', 0) or 0
+            news_score = data.get('news_sentiment', {}).get('sentiment_score', 0) or 0
+            macro_score = data.get('macro', {}).get('macro_score', 0) or 0
+            social_score = data.get('social', {}).get('social_score', 0) or 0
+            avg_vol = data.get('avg_daily_volatility', 1.0) or 1.0
             latest_price = data.get('latest_price', 0) or 0
+
+        # 交易建議用綜合分數
+        if market == "TW":
+            combined = tech_score * 0.30 + chip_score * 0.20 + fund_score * 0.15 + news_score * 0.10 + social_score * 0.10 + macro_score * 0.15
         else:
-            suggestion = rng.choice(["BUY", "SELL"])
-            latest_price = 0
+            combined = tech_score * 0.35 + fund_score * 0.25 + news_score * 0.12 + social_score * 0.08 + macro_score * 0.20
 
-        # Mock 信心度刻意降低
-        confidence = round(rng.uniform(0.50, 0.65), 2)
-        mock_price = latest_price if latest_price > 0 else round(rng.uniform(50, 500), 2)
+        suggestion = "BUY" if combined >= 0 else "SELL"
 
-        # 根據建議方向生成預測漲跌幅（幅度保守）
-        if suggestion == "BUY":
-            predicted_change = round(rng.uniform(0.3, 1.5), 2)
+        # 隔日預測用短期分數（獨立於交易建議）
+        if market == "TW":
+            pred_score = tech_score * 0.35 + chip_score * 0.35 + news_score * 0.15 + social_score * 0.05 + fund_score * 0.05 + macro_score * 0.05
         else:
-            predicted_change = round(rng.uniform(-1.5, -0.3), 2)
+            pred_score = tech_score * 0.40 + fund_score * 0.15 + news_score * 0.15 + social_score * 0.05 + macro_score * 0.25
 
-        next_day_direction = "UP" if predicted_change > 0 else "DOWN"
+        # 根據 prediction_score 和 avg_daily_volatility 計算預測幅度
+        abs_pred = abs(pred_score)
+        if abs_pred > 50:
+            multiplier = 1.0
+        elif abs_pred > 20:
+            multiplier = 0.65
+        else:
+            multiplier = 0.4
+
+        predicted_change = round(avg_vol * multiplier * (1 if pred_score >= 0 else -1), 2)
+        next_day_direction = "UP" if predicted_change >= 0 else "DOWN"
+
+        # 信心度根據指標一致性計算
+        indicators = [tech_score, chip_score if market == "TW" else macro_score, news_score]
+        same_sign = sum(1 for s in indicators if (s > 0) == (pred_score > 0) and s != 0)
+        total_nonzero = sum(1 for s in indicators if s != 0)
+        if total_nonzero > 0:
+            consistency = same_sign / total_nonzero
+            confidence = round(0.50 + consistency * 0.15, 2)
+        else:
+            confidence = 0.50
+
+        mock_price = latest_price if latest_price > 0 else 100.0
+        range_margin = 0.015 if market == "TW" else 0.025
 
         return {
             "stock_id": stock_id,
@@ -1238,11 +1285,11 @@ class AISuggestionService:
             "current_price": mock_price,
             "target_price": round(mock_price * 1.05, 2) if suggestion == "BUY" else round(mock_price * 0.95, 2),
             "stop_loss_price": round(mock_price * 0.97, 2) if suggestion == "BUY" else round(mock_price * 1.03, 2),
-            "reasoning": f"[Mock 模式] AI API 暫時無法使用，此為基於技術面評分的簡易推導。信心度偏低，僅供參考。股票代碼：{stock_id}",
+            "reasoning": f"[Mock 模式] AI API 暫時無法使用，此為基於技術面+籌碼面評分的數據推導。信心度偏低，僅供參考。股票代碼：{stock_id}",
             "key_factors": [
-                {"category": "系統", "factor": "AI API 無法使用，此為 Mock 模擬數據", "impact": "neutral"},
-                {"category": "數據", "factor": f"技術面評分: {data.get('technical', {}).get('technical_score', 'N/A') if data else 'N/A'}", "impact": "neutral"},
-                {"category": "提示", "factor": "信心度刻意降低，建議等待 AI 恢復後再做決策", "impact": "neutral"}
+                {"category": "系統", "factor": "AI API 無法使用，此為 Mock 數據驅動推導", "impact": "neutral"},
+                {"category": "數據", "factor": f"技術面: {tech_score}, 籌碼面: {chip_score}, 預測分數: {round(pred_score, 1)}", "impact": "neutral"},
+                {"category": "波動", "factor": f"日均波動率: {avg_vol:.2f}%, 預測幅度: {predicted_change:+.2f}%", "impact": "neutral"}
             ],
             "risk_level": "HIGH",
             "time_horizon": "短線(1-3天)",
@@ -1250,25 +1297,27 @@ class AISuggestionService:
             "ai_provider": "Mock",
             "next_day_prediction": {
                 "direction": next_day_direction,
-                "probability": round(rng.uniform(0.50, 0.60), 2),
+                "probability": confidence,
                 "predicted_change_percent": predicted_change,
-                "price_range_low": round(mock_price * (1 + predicted_change/100 - 0.015), 2),
-                "price_range_high": round(mock_price * (1 + predicted_change/100 + 0.015), 2),
-                "reasoning": f"[Mock 模式] {'技術面評分偏多' if next_day_direction == 'UP' else '技術面評分偏空'}（信心度低，僅供參考）"
+                "price_range_low": round(mock_price * (1 + predicted_change / 100 - range_margin), 2),
+                "price_range_high": round(mock_price * (1 + predicted_change / 100 + range_margin), 2),
+                "reasoning": f"[Mock 模式] prediction_score={round(pred_score, 1)}, 日均波動={avg_vol:.2f}% → 預測 {predicted_change:+.2f}%（信心度低，僅供參考）"
             },
             "analysis_scores": {
-                "technical": data.get('technical', {}).get('technical_score', 0) if data else 0,
-                "chip": data.get('chip', {}).get('chip_score', 0) if data and market == "TW" else None,
-                "fundamental": data.get('fundamental', {}).get('fundamental_score', 0) if data else 0,
-                "news_sentiment": 0,
-                "social_sentiment": 0,
-                "macro": 0,
-                "total_weighted": 0
+                "technical": tech_score,
+                "chip": chip_score if market == "TW" else None,
+                "fundamental": fund_score,
+                "news_sentiment": news_score,
+                "social_sentiment": social_score,
+                "macro": macro_score,
+                "total_weighted": round(combined, 1),
+                "prediction_score": round(pred_score, 1),
+                "avg_daily_volatility": avg_vol
             }
         }
 
     def _get_prediction_history_context(self, stock_id: str, db=None) -> str:
-        """取得過去預測歷史，作為 AI 回饋參考"""
+        """取得過去預測歷史，作為 AI 回饋參考（含方向偏差和幅度偏差偵測）"""
         if db is None:
             return ""
 
@@ -1277,28 +1326,61 @@ class AISuggestionService:
             records = db.query(PredictionRecord).filter(
                 PredictionRecord.stock_id == stock_id,
                 PredictionRecord.actual_close_price.isnot(None)
-            ).order_by(PredictionRecord.target_date.desc()).limit(5).all()
+            ).order_by(PredictionRecord.target_date.desc()).limit(10).all()
 
             if not records:
                 return ""
 
             lines = ["## 過去預測回饋（請參考以改善準確度）"]
             total_error = 0
+            direction_correct_count = 0
+            up_count = 0
+            down_count = 0
+            pred_abs_sum = 0
+            actual_abs_sum = 0
+
             for r in reversed(records):
                 pred_change = float(r.predicted_change_percent or 0)
                 actual_change = float(r.actual_change_percent or 0)
                 error = float(r.error_percent or 0)
                 correct = "正確" if r.direction_correct else "錯誤"
                 total_error += error
+                if r.direction_correct:
+                    direction_correct_count += 1
+                if pred_change >= 0:
+                    up_count += 1
+                else:
+                    down_count += 1
+                pred_abs_sum += abs(pred_change)
+                actual_abs_sum += abs(actual_change)
                 lines.append(
                     f"- {r.target_date}: 預測 {pred_change:+.2f}% → 實際 {actual_change:+.2f}%（方向{correct}，誤差 {error:.2f}%）"
                 )
 
-            avg_error = total_error / len(records)
+            n = len(records)
+            avg_error = total_error / n
+            direction_accuracy = direction_correct_count / n
+
+            # 幅度偏差偵測
             if avg_error > 3:
-                lines.append(f"\n**注意：過去平均誤差 {avg_error:.1f}%，預測幅度明顯過大！請縮小預測範圍，更貼近近5日平均日波動。**")
+                lines.append(f"\n**⚠️ 幅度偏差嚴重：過去平均誤差 {avg_error:.1f}%，預測幅度明顯過大！請大幅縮小預測範圍，使用 avg_daily_volatility 作為基準。**")
             elif avg_error > 1.5:
                 lines.append(f"\n過去平均誤差 {avg_error:.1f}%，請微調預測幅度使其更接近實際波動。")
+
+            # 幅度倍率偵測
+            if actual_abs_sum > 0:
+                amplitude_ratio = pred_abs_sum / actual_abs_sum
+                if amplitude_ratio > 1.5:
+                    lines.append(f"**⚠️ 預測幅度平均是實際的 {amplitude_ratio:.1f} 倍！請將預測幅度縮小至目前的 {1/amplitude_ratio:.0%}。**")
+
+            # 方向偏差偵測
+            dominant_dir = "UP" if up_count > down_count else "DOWN"
+            dominant_pct = max(up_count, down_count) / n
+            if dominant_pct > 0.7 and direction_accuracy < 0.5:
+                lines.append(f"**⚠️ 方向偏差：過去 {n} 次預測中 {dominant_pct:.0%} 預測 {dominant_dir}，但方向準確率僅 {direction_accuracy:.0%}。請重新評估方向判斷，不要偏向單一方向！**")
+
+            # 整體準確度摘要
+            lines.append(f"\n統計摘要：{n} 筆記錄，方向準確率 {direction_accuracy:.0%}，平均誤差 {avg_error:.1f}%")
 
             return "\n".join(lines)
         except Exception as e:
@@ -1351,13 +1433,23 @@ class AISuggestionService:
             social_score = data.get('social', {}).get('social_score', 0)
             macro_score = data.get('macro', {}).get('macro_score', 0)
 
-            # 加權平均 - 6維度（含社群情緒）
+            # 加權平均 - 6維度（含社群情緒）— 用於交易建議（BUY/SELL）
             if market == "US":
                 # 美股權重: 技術35%, 基本面25%, 消息面12%, 社群8%, 宏觀面20%
                 total_score = (tech_score * 0.35) + (fund_score * 0.25) + (news_score * 0.12) + (social_score * 0.08) + (macro_score * 0.20)
             else:
                 # 台股權重: 技術30%, 籌碼20%, 基本面15%, 消息面10%, 社群10%, 宏觀面15%
                 total_score = (tech_score * 0.30) + (chip_score * 0.20) + (fund_score * 0.15) + (news_score * 0.10) + (social_score * 0.10) + (macro_score * 0.15)
+
+            # 隔日預測專用加權評分 — 側重短期因子
+            if market == "US":
+                # 美股預測權重: 技術40%, 基本面15%, 消息面15%, 社群5%, 宏觀25%
+                prediction_score = (tech_score * 0.40) + (fund_score * 0.15) + (news_score * 0.15) + (social_score * 0.05) + (macro_score * 0.25)
+            else:
+                # 台股預測權重: 技術35%, 籌碼35%, 消息面15%, 社群5%, 基本面5%, 宏觀5%
+                prediction_score = (tech_score * 0.35) + (chip_score * 0.35) + (news_score * 0.15) + (social_score * 0.05) + (fund_score * 0.05) + (macro_score * 0.05)
+
+            data['prediction_score'] = round(prediction_score, 1)
 
             # 組合 Prompt
             system_prompt = self._build_system_prompt(total_score, market)
@@ -1422,6 +1514,7 @@ class AISuggestionService:
 
                 # 修正 next_day_prediction 裡的價格
                 ndp = result.get("next_day_prediction")
+                range_margin = 0.015 if market == "TW" else 0.025
                 if isinstance(ndp, dict):
                     for pk in ("price_range_low", "price_range_high"):
                         pv = ndp.get(pk)
@@ -1431,9 +1524,9 @@ class AISuggestionService:
                                 if abs(pv - latest_price) / latest_price > max_dev or pv <= 0:
                                     pct = float(ndp.get("predicted_change_percent", 0) or 0)
                                     if pk == "price_range_low":
-                                        ndp[pk] = round(latest_price * (1 + pct / 100 - 0.015), 2)
+                                        ndp[pk] = round(latest_price * (1 + pct / 100 - range_margin), 2)
                                     else:
-                                        ndp[pk] = round(latest_price * (1 + pct / 100 + 0.015), 2)
+                                        ndp[pk] = round(latest_price * (1 + pct / 100 + range_margin), 2)
                             except (TypeError, ValueError):
                                 pass
 
@@ -1485,6 +1578,8 @@ class AISuggestionService:
                 "social_sentiment": social_score,
                 "macro": macro_score,
                 "total_weighted": round(total_score, 1),
+                "prediction_score": round(prediction_score, 1),
+                "avg_daily_volatility": data.get("avg_daily_volatility", 1.0),
                 "latest_price": data.get("latest_price", 0)
             }
 
@@ -1533,7 +1628,7 @@ class AISuggestionService:
             response = self.llm.generate_content(
                 prompt,
                 generation_config=genai.types.GenerationConfig(
-                    temperature=0.5,
+                    temperature=0.2,
                     response_mime_type="application/json",
                 )
             )
@@ -1566,7 +1661,7 @@ class AISuggestionService:
                     }
                 ],
                 model=settings.GROQ_MODEL,
-                temperature=0.5,
+                temperature=0.2,
                 response_format={"type": "json_object"},
             )
             response_text = chat_completion.choices[0].message.content
@@ -1670,8 +1765,8 @@ class AISuggestionService:
    - 單一強力訊號：0.55-0.70
 
 3. **價格區間計算**：
-   - price_range_low = 最新收盤價 × (1 + 預測漲跌幅% - 1.5%)
-   - price_range_high = 最新收盤價 × (1 + 預測漲跌幅% + 1.5%)
+   - price_range_low = 最新收盤價 × (1 + 預測漲跌幅% - 2.5%)
+   - price_range_high = 最新收盤價 × (1 + 預測漲跌幅% + 2.5%)
 
 **每支股票的預測必須不同！根據該股票的實際技術指標和基本面數據計算！**
 **預測幅度要貼近該股票近5日的實際波動範圍！**
@@ -1682,7 +1777,7 @@ class AISuggestionService:
 - stop_loss_price = 最新收盤價 × (1 - 停損幅%/100)
 - entry_price_min = 最新收盤價 × 0.98 ~ 0.99
 - entry_price_max = 最新收盤價 × 1.00 ~ 1.02
-- price_range_low/high = 最新收盤價 ± 2%
+- price_range_low/high = 最新收盤價 ± 2.5%
 
 **所有輸出價格都必須在最新收盤價的 ±15% 範圍內！偏離超過 15% 的價格視為錯誤！**"""
 
@@ -1739,8 +1834,8 @@ class AISuggestionService:
    - 單一強力訊號：0.55-0.70
 
 3. **價格區間計算**：
-   - price_range_low = 最新收盤價 × (1 + 預測漲跌幅% - 1.0%)
-   - price_range_high = 最新收盤價 × (1 + 預測漲跌幅% + 1.0%)
+   - price_range_low = 最新收盤價 × (1 + 預測漲跌幅% - 1.5%)
+   - price_range_high = 最新收盤價 × (1 + 預測漲跌幅% + 1.5%)
 
 **每支股票的預測必須不同！根據該股票的實際技術指標和籌碼數據計算！**
 **預測幅度不要超過近5日平均日波動的 1.5 倍！**"""
@@ -1756,6 +1851,13 @@ class AISuggestionService:
 **你必須給出 "{suggested_action}" 建議，信心度必須 >= {min_confidence}**
 
 {style_section}
+
+## 預測獨立性（極其重要！）
+- suggestion（BUY/SELL）= 交易建議，考量中期走勢，必須遵守上方強制規則
+- next_day_prediction = 隔日走勢預測，必須獨立判斷，**不受 suggestion 影響**
+- 即使 suggestion 是 BUY，若短期超買（RSI>70、KD高檔死叉），next_day_prediction.direction 可以是 DOWN
+- 即使 suggestion 是 SELL，若短期超賣（RSI<30、KD低檔金叉），next_day_prediction.direction 可以是 UP
+- 隔日預測判斷依據：prediction_score、RSI、MACD、布林通道位置、{'籌碼動向（外資/投信）' if market == 'TW' else 'VIX恐慌指數、宏觀面'}
 
 {prediction_section}
 
@@ -1778,11 +1880,11 @@ class AISuggestionService:
   "time_horizon": "短線(1-3天)" | "中線(1-2週)",
   "predicted_change_percent": 預期漲跌幅（根據訊號強度：弱訊號 ±0.5-1.5%，中訊號 ±1.5-3%，強訊號 ±3-5%）,
   "next_day_prediction": {{
-    "direction": "UP" | "DOWN",
+    "direction": "UP" 或 "DOWN"（獨立判斷，可以與 suggestion 不同！）,
     "probability": 根據指標同向性計算的機率（0.55-0.85）,
-    "predicted_change_percent": 根據上述規則計算的具體數值（精確到小數點後兩位，如 +1.23 或 -0.87）,
-    "price_range_low": 最新收盤價 × (1 + 預測漲跌幅 - 0.5%),
-    "price_range_high": 最新收盤價 × (1 + 預測漲跌幅 + 0.5%),
+    "predicted_change_percent": 根據 prediction_score 和 avg_daily_volatility 計算的具體數值（精確到小數點後兩位，如 +1.23 或 -0.87）,
+    "price_range_low": 最新收盤價 × (1 + 預測漲跌幅 - {'1.5%' if market == 'TW' else '2.5%'}),
+    "price_range_high": 最新收盤價 × (1 + 預測漲跌幅 + {'1.5%' if market == 'TW' else '2.5%'}),
     "reasoning": "{reasoning_hint}"
   }},
   "warnings": ["必要的風險警示"]
@@ -1790,9 +1892,10 @@ class AISuggestionService:
 
 重要：
 1. suggestion 必須是 "{suggested_action}"，confidence 必須 >= {min_confidence}。不要給 HOLD！
-2. next_day_prediction 的 predicted_change_percent 必須根據該股票的實際數據計算，每支股票都要不同！
-3. 不要給固定值如 -2.5%，要根據數據計算合理的預測值！
-4. target_price、stop_loss_price、entry_price_min/max 都必須基於最新收盤價計算，不能偏離太遠！"""
+2. next_day_prediction 是獨立的隔日預測，direction 可以與 suggestion 不同！
+3. next_day_prediction 的 predicted_change_percent 必須根據該股票的實際數據計算，每支股票都要不同！
+4. 不要給固定值如 -2.5%，要根據 prediction_score 和 avg_daily_volatility 計算合理的預測值！
+5. target_price、stop_loss_price、entry_price_min/max 都必須基於最新收盤價計算，不能偏離太遠！"""
 
     def _build_prompt(self, stock_id: str, stock_name: str, data: Dict, total_score: float, market: str = "TW") -> str:
         """組合分析 Prompt"""
@@ -1912,21 +2015,21 @@ class AISuggestionService:
 ## 近期新聞標題
 {json.dumps(news.get('recent_news', []), ensure_ascii=False, indent=2)}
 
-## 隔日預測計算參考
-請根據以下數據計算 next_day_prediction：
+## 隔日預測計算參考（獨立於交易建議！）
+請根據以下數據**獨立**計算 next_day_prediction（不受 suggestion 方向約束）：
 - 最新收盤價：{data['latest_price']}（用於計算 price_range_low、price_range_high、target_price、stop_loss_price）
-- 近5日平均日波動：約 {abs(data['price_change_5d'] / 5):.2f}%
+- **prediction_score（短期加權評分）：{data.get('prediction_score', 0)}**（正值偏多，負值偏空）
+- **avg_daily_volatility（真實日均波動率）：{data.get('avg_daily_volatility', 1.0):.2f}%**
 - RSI 值：{tech.get('rsi', 50)}（<30 偏多，>70 偏空）
 - {'外資5日淨買賣：' + str(chip.get('foreign_net_5d', 0)) + '張' if market == 'TW' else 'VIX 恐慌指數：' + str(macro.get('details', {}).get('vix', {}).get('value', 'N/A'))}
 - MACD 狀態：{tech.get('macd_status', 'N/A')}
 
-**重要：隔日預測的合理範圍**
-{'台股個股單日漲跌幅通常在 ±0.5%~±3% 之間' if market == 'TW' else '美股大型股單日漲跌幅通常在 ±1%~±5% 之間'}。請基於數據做出務實預測：
-- 弱訊號（指標分歧）：預測 {'±0.3% 至 ±1.0%' if market == 'TW' else '±0.5% 至 ±1.5%'}
-- 中等訊號（部分指標同向）：預測 {'±1.0% 至 ±2.0%' if market == 'TW' else '±1.5% 至 ±3.0%'}
-- 強訊號（多數指標同向{'+ 大量外資動向' if market == 'TW' else '+ 宏觀面配合'}）：預測 {'±2.0% 至 ±3.5%' if market == 'TW' else '±3.0% 至 ±5.0%'}
-- 極端訊號（RSI > 80 或 < 20{'，漲/跌停板' if market == 'TW' else '，財報驚喜/利空'}）：最多 {'±3.5% 至 ±5.0%' if market == 'TW' else '±5.0% 至 ±8.0%'}
-- 基準：使用近5日平均日波動幅度作為預測基準
+**隔日預測幅度指引（基於 avg_daily_volatility = vol）**
+根據 prediction_score 的信號強度，按 vol 縮放預測幅度：
+- 弱訊號（|prediction_score| < 20）：±(vol × 0.3 ~ 0.5)，即約 ±{data.get('avg_daily_volatility', 1.0) * 0.3:.2f}% ~ ±{data.get('avg_daily_volatility', 1.0) * 0.5:.2f}%
+- 中等訊號（|prediction_score| 20~50）：±(vol × 0.5 ~ 0.8)，即約 ±{data.get('avg_daily_volatility', 1.0) * 0.5:.2f}% ~ ±{data.get('avg_daily_volatility', 1.0) * 0.8:.2f}%
+- 強訊號（|prediction_score| > 50）：±(vol × 0.8 ~ 1.2)，即約 ±{data.get('avg_daily_volatility', 1.0) * 0.8:.2f}% ~ ±{data.get('avg_daily_volatility', 1.0) * 1.2:.2f}%
+- prediction_score > 0 → direction 傾向 UP；< 0 → 傾向 DOWN
 
 {self._get_prediction_history_context(stock_id, data.get('_db'))}
 
