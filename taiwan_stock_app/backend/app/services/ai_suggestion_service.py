@@ -134,6 +134,7 @@ class AISuggestionService:
             "price_change_5d": self._calculate_change(prices, 5) if len(prices) > 5 else 0,
             "price_change_20d": self._calculate_change(prices, 20) if len(prices) > 20 else 0,
             "avg_daily_volatility": self._calculate_avg_daily_volatility(prices, 10),
+            "recent_daily_returns": self._get_recent_daily_returns(prices, 10),
             "technical": technical,
             "chip": chip_analysis,
             "fundamental": fundamental,
@@ -202,6 +203,7 @@ class AISuggestionService:
             "price_change_5d": self._calculate_change(prices, 5),
             "price_change_20d": self._calculate_change(prices, 20),
             "avg_daily_volatility": self._calculate_avg_daily_volatility(prices, 10),
+            "recent_daily_returns": self._get_recent_daily_returns(prices, 10),
             "technical": technical,
             "chip": chip_analysis,
             "fundamental": fundamental,
@@ -1202,6 +1204,19 @@ class AISuggestionService:
         except Exception:
             return 1.0
 
+    def _get_recent_daily_returns(self, prices, days: int = 10) -> list:
+        """取得近N日每日漲跌幅（帶正負號），供 AI 判斷個股波動特性"""
+        if len(prices) < 2:
+            return []
+        try:
+            closes = prices['close'].astype(float).values
+            n = min(days + 1, len(closes))
+            recent = closes[-n:]
+            return [round((recent[i] - recent[i - 1]) / recent[i - 1] * 100, 2)
+                    for i in range(1, len(recent)) if recent[i - 1] != 0]
+        except Exception:
+            return []
+
     def _generate_mock_suggestion(self, stock_id: str, stock_name: str, market: str = "TW", data: Dict = None) -> Dict:
         """
         Generate a mock suggestion when API/data is unavailable.
@@ -1251,11 +1266,11 @@ class AISuggestionService:
         # 根據 prediction_score 和 avg_daily_volatility 計算預測幅度
         abs_pred = abs(pred_score)
         if abs_pred > 50:
-            multiplier = 1.0
+            multiplier = 1.8
         elif abs_pred > 20:
-            multiplier = 0.65
+            multiplier = 1.0
         else:
-            multiplier = 0.4
+            multiplier = 0.5
 
         predicted_change = round(avg_vol * multiplier * (1 if pred_score >= 0 else -1), 2)
         next_day_direction = "UP" if predicted_change >= 0 else "DOWN"
@@ -1661,7 +1676,7 @@ class AISuggestionService:
                     }
                 ],
                 model=settings.GROQ_MODEL,
-                temperature=0.2,
+                temperature=0.4,
                 response_format={"type": "json_object"},
             )
             response_text = chat_completion.choices[0].message.content
@@ -1744,42 +1759,36 @@ class AISuggestionService:
    - 長假後預測範圍：±3%~±6%（美股），極端情況可達 ±8%"""
 
             prediction_section = f"""## 隔日預測計算規則（非常重要！）
-你必須根據以下數據計算每支股票「不同的」隔日預測：
-注意：美股交易日為週一至週五，休市日依照 NYSE/NASDAQ 假日（不包含台灣農曆年節）。
+你必須根據提供的數據計算每支股票「不同的」隔日預測。
+注意：美股交易日為週一至週五，休市日依照 NYSE/NASDAQ 假日。
 
-1. **預測漲跌幅計算（必須貼近實際日常波動）**：
-   - 核心原則：以近5日平均日波動作為預測基準
-   - 美股大型股（NVDA/TSLA/AAPL 等）日常波動較台股大，通常 ±1%~±5%
-   - RSI > 70（超買）：預測下跌 -1.0% ~ -3.0%
-   - RSI < 30（超賣）：預測上漲 +1.0% ~ +3.0%
-   - RSI 40-60（中性）：根據基本面和宏觀面判斷 ±0.5% ~ ±1.5%
-   - MACD 黃金交叉：+0.3% ~ +1.0%
-   - MACD 死亡交叉：-0.3% ~ -1.0%
-   - VIX > 25（高恐慌）：波動可能擴大至 ±3%~±5%
-   - 財報公布前後：波動可能更大
-   - 一般個股日波動在 ±1%~±4%，極端情況（財報/重大新聞）最多 ±8%{holiday_hint_us}
+1. **預測漲跌幅（必須反映該股票的真實波動水準）**：
+   - **先觀察「近10日每日漲跌幅」數據**，了解這檔股票實際的日波動量級
+   - 美股無漲跌停限制，大型科技股（NVDA/TSLA/AMD等）單日 ±3%~±8% 很常見
+   - MEME 股或小型股波動更大，單日可達 ±10%~±20%
+   - 穩定藍籌股（AAPL/MSFT/GOOGL）波動較小，通常 ±1%~±3%
+   - VIX > 25（高恐慌）：所有股票波動放大 1.5x~2x
+   - 財報公布前後：波動可能是平常的 2~3 倍{holiday_hint_us}
 
 2. **預測機率計算**：
-   - 多個指標同向（技術+基本面+宏觀同看多/空）：0.65-0.80
-   - 指標分歧：0.50-0.60
-   - 單一強力訊號：0.55-0.70
+   - 多個指標強烈同向：0.70-0.85
+   - 多個指標同向：0.60-0.70
+   - 指標分歧：0.50-0.55
 
 3. **價格區間計算**：
    - price_range_low = 最新收盤價 × (1 + 預測漲跌幅% - 2.5%)
    - price_range_high = 最新收盤價 × (1 + 預測漲跌幅% + 2.5%)
 
-**每支股票的預測必須不同！根據該股票的實際技術指標和基本面數據計算！**
-**預測幅度要貼近該股票近5日的實際波動範圍！**
+**嚴禁多檔股票給出相同的預測數值！每支股票波動特性不同，預測值必須不同！**
 
-## 價格計算公式（必須嚴格遵守！）
+## 價格計算公式
 所有價格都必須基於最新收盤價計算：
 - target_price = 最新收盤價 × (1 + 預期漲幅%/100)
 - stop_loss_price = 最新收盤價 × (1 - 停損幅%/100)
 - entry_price_min = 最新收盤價 × 0.98 ~ 0.99
 - entry_price_max = 最新收盤價 × 1.00 ~ 1.02
-- price_range_low/high = 最新收盤價 ± 2.5%
 
-**所有輸出價格都必須在最新收盤價的 ±15% 範圍內！偏離超過 15% 的價格視為錯誤！**"""
+**所有輸出價格都必須在最新收盤價的 ±15% 範圍內！**"""
 
             reasoning_hint = f"說明計算依據：RSI=多少、MACD狀態、P/E估值、VIX恐慌指數等"
 
@@ -1815,30 +1824,27 @@ class AISuggestionService:
    - 長假後預測範圍：±3%~±5%（台股），極端情況可達 ±5%~±8%"""
 
             prediction_section = f"""## 隔日預測計算規則（非常重要！）
-你必須根據以下數據計算每支股票「不同的」隔日預測：
+你必須根據提供的數據計算每支股票「不同的」隔日預測。
 
-1. **預測漲跌幅計算（必須貼近實際日常波動）**：
-   - 核心原則：以近5日平均日波動作為預測基準
-   - RSI > 70（超買）：預測下跌 -0.5% ~ -2.0%
-   - RSI < 30（超賣）：預測上漲 +0.5% ~ +2.0%
-   - RSI 40-60（中性）：根據籌碼面判斷 ±0.3% ~ ±1.0%
-   - 外資大量買超（>5000張）：額外加 +0.2% ~ +0.5%
-   - 外資大量賣超（>5000張）：額外減 -0.2% ~ -0.5%
-   - MACD 黃金交叉：+0.1% ~ +0.5%
-   - MACD 死亡交叉：-0.1% ~ -0.5%
-   - 一般個股日波動在 ±0.5%~±3%，極端情況最多 ±5%{holiday_hint_tw}
+1. **預測漲跌幅（必須反映該股票的真實波動水準）**：
+   - **先觀察「近10日每日漲跌幅」數據**，了解這檔股票實際的日波動量級
+   - 台股漲跌停為 ±10%，強勢股可以接近漲停或跌停
+   - 高波動股（如生技、IC設計、面板）日波動 ±2%~±5% 很正常
+   - 權值股（台積電、聯發科）波動相對較小，通常 ±1%~±3%
+   - 小型股/投機股波動更大，可達 ±5%~±10%
+   - 外資大量買超（>10000張）+ 技術面看多 = 可能大漲 3%~7%
+   - 外資大量賣超（>10000張）+ 技術面看空 = 可能大跌 3%~7%{holiday_hint_tw}
 
 2. **預測機率計算**：
-   - 多個指標同向（技術+籌碼同看多/空）：0.65-0.80
-   - 指標分歧：0.50-0.60
-   - 單一強力訊號：0.55-0.70
+   - 多個指標強烈同向（技術+籌碼+消息）：0.70-0.85
+   - 多個指標同向：0.60-0.70
+   - 指標分歧：0.50-0.55
 
 3. **價格區間計算**：
    - price_range_low = 最新收盤價 × (1 + 預測漲跌幅% - 1.5%)
    - price_range_high = 最新收盤價 × (1 + 預測漲跌幅% + 1.5%)
 
-**每支股票的預測必須不同！根據該股票的實際技術指標和籌碼數據計算！**
-**預測幅度不要超過近5日平均日波動的 1.5 倍！**"""
+**嚴禁多檔股票給出相同的預測數值！每支股票波動特性不同，預測值必須不同！**"""
 
             reasoning_hint = f"說明計算依據：RSI=多少、外資買賣超多少張、MACD狀態等"
 
@@ -2017,19 +2023,26 @@ class AISuggestionService:
 
 ## 隔日預測計算參考（獨立於交易建議！）
 請根據以下數據**獨立**計算 next_day_prediction（不受 suggestion 方向約束）：
-- 最新收盤價：{data['latest_price']}（用於計算 price_range_low、price_range_high、target_price、stop_loss_price）
+- 最新收盤價：{data['latest_price']}
 - **prediction_score（短期加權評分）：{data.get('prediction_score', 0)}**（正值偏多，負值偏空）
-- **avg_daily_volatility（真實日均波動率）：{data.get('avg_daily_volatility', 1.0):.2f}%**
+- **avg_daily_volatility（日均波動率）：{data.get('avg_daily_volatility', 1.0):.2f}%**
 - RSI 值：{tech.get('rsi', 50)}（<30 偏多，>70 偏空）
 - {'外資5日淨買賣：' + str(chip.get('foreign_net_5d', 0)) + '張' if market == 'TW' else 'VIX 恐慌指數：' + str(macro.get('details', {}).get('vix', {}).get('value', 'N/A'))}
 - MACD 狀態：{tech.get('macd_status', 'N/A')}
 
-**隔日預測幅度指引（基於 avg_daily_volatility = vol）**
-根據 prediction_score 的信號強度，按 vol 縮放預測幅度：
-- 弱訊號（|prediction_score| < 20）：±(vol × 0.3 ~ 0.5)，即約 ±{data.get('avg_daily_volatility', 1.0) * 0.3:.2f}% ~ ±{data.get('avg_daily_volatility', 1.0) * 0.5:.2f}%
-- 中等訊號（|prediction_score| 20~50）：±(vol × 0.5 ~ 0.8)，即約 ±{data.get('avg_daily_volatility', 1.0) * 0.5:.2f}% ~ ±{data.get('avg_daily_volatility', 1.0) * 0.8:.2f}%
-- 強訊號（|prediction_score| > 50）：±(vol × 0.8 ~ 1.2)，即約 ±{data.get('avg_daily_volatility', 1.0) * 0.8:.2f}% ~ ±{data.get('avg_daily_volatility', 1.0) * 1.2:.2f}%
+**近10日每日實際漲跌幅（從舊到新）：**
+{data.get('recent_daily_returns', [])}
+觀察上面的數據：這檔股票實際的日波動幅度和模式是什麼？最近是放量還是縮量？趨勢還是震盪？
+
+**預測幅度規則（極重要！）**
+- 你的預測幅度必須反映這檔股票**真實的波動水準**，不要給所有股票類似的值！
+- 參考上方近10日漲跌幅，如果近期日波動經常在 ±2%~±5%，你的預測也應該在這個量級
+- {'台股漲跌停為 ±10%，如果多重強訊號同向，預測可以到 ±5%~±8%' if market == 'TW' else '美股無漲跌停限制，大型科技股單日 ±3%~±8% 很常見，財報日或重大事件可達 ±10%~±15%'}
+- **弱訊號**（|prediction_score| < 20，指標分歧）：預測幅度約為日均波動的 0.3~0.6 倍
+- **中等訊號**（|prediction_score| 20~50）：預測幅度約為日均波動的 0.6~1.2 倍
+- **強訊號**（|prediction_score| > 50，多數指標同向）：預測幅度約為日均波動的 1.2~2.0 倍
 - prediction_score > 0 → direction 傾向 UP；< 0 → 傾向 DOWN
+- **每支股票的預測值必須不同！不要出現多檔股票預測相同數值的情況！**
 
 {self._get_prediction_history_context(stock_id, data.get('_db'))}
 
