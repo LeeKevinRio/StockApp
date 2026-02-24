@@ -1383,7 +1383,8 @@ class AISuggestionService:
             # ===== 價格合理性驗證 =====
             # AI 有時會產出完全偏離的 target/stop_loss，在此自動修正
             if latest_price > 0:
-                max_dev = 0.20  # 短線預測最多偏離 20%
+                # 台股每日漲跌幅 ±10%，美股無限制但短線不應偏離太多
+                max_dev = 0.10 if market == "TW" else 0.20
                 for price_key in ("target_price", "stop_loss_price", "entry_price_min", "entry_price_max"):
                     val = result.get(price_key)
                     if val is not None:

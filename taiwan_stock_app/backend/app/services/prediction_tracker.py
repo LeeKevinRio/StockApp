@@ -10,7 +10,7 @@ import logging
 
 from app.models import PredictionRecord, Stock, Watchlist
 from app.services import StockDataService
-from app.services.trading_calendar import get_next_trading_date
+from app.services.trading_calendar import get_next_trading_date, get_previous_trading_date
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,48 @@ class PredictionTracker:
             if key not in best or r.prediction_date > best[key].prediction_date:
                 best[key] = r
         return list(best.values())
+
+    def _get_prev_trading_day_close(
+        self, db: Session, stock_id: str, target_date: date
+    ) -> Optional[float]:
+        """
+        取得 target_date 前一個交易日的收盤價，
+        用於修正因長假導致的陳舊 base_close_price。
+        """
+        prev_td = get_previous_trading_date(target_date, market="TW")
+        # 1. 先查 DB
+        from app.models import StockPrice as StockPriceModel
+        hist = db.query(StockPriceModel).filter(
+            StockPriceModel.stock_id == stock_id,
+            StockPriceModel.date == prev_td
+        ).first()
+        if hist and float(hist.close or 0) > 0:
+            return float(hist.close)
+
+        # 2. 查 FinMind（API 有時會多回傳後續日期，需精確篩選）
+        try:
+            prev_str = prev_td.strftime("%Y-%m-%d")
+            df = self.stock_service.finmind.get_stock_price(
+                stock_id, prev_str, prev_str
+            )
+            if len(df) > 0:
+                # 精確過濾到目標日期
+                exact = df[df["date"].astype(str) == prev_str]
+                row = exact.iloc[0] if len(exact) > 0 else df.iloc[0]
+                return float(row.get("close", 0))
+        except Exception:
+            pass
+
+        # 3. 查同 stock 已驗證的 PredictionRecord（prev_td 作為 target_date）
+        prev_pred = db.query(PredictionRecord).filter(
+            PredictionRecord.stock_id == stock_id,
+            PredictionRecord.target_date == prev_td,
+            PredictionRecord.actual_close_price.isnot(None)
+        ).first()
+        if prev_pred and float(prev_pred.actual_close_price or 0) > 0:
+            return float(prev_pred.actual_close_price)
+
+        return None
 
     def save_prediction(
         self,
@@ -199,8 +241,31 @@ class PredictionTracker:
                 if base_price <= 0 or actual_close <= 0:
                     continue
 
+                # === 台股 base_price 修正 ===
+                # 台股每日漲跌幅限制 ±10%，如果 base_price 過於陳舊
+                # （例如長假前的價格），會導致計算出超過 10% 的漲跌幅。
+                # 修正方式：用 target_date 前一個交易日的收盤價取代。
+                if record.market_region == "TW":
+                    raw_change = ((actual_close - base_price) / base_price) * 100
+                    if abs(raw_change) > 10.5:  # 超過漲跌停（含小數誤差）
+                        corrected_base = self._get_prev_trading_day_close(
+                            db, record.stock_id, target
+                        )
+                        if corrected_base and corrected_base > 0:
+                            logger.info(
+                                "修正 %s base_price: %.2f -> %.2f (原算 %.1f%%)",
+                                record.stock_id, base_price, corrected_base, raw_change
+                            )
+                            base_price = corrected_base
+                            record.base_close_price = corrected_base
+
                 # 計算實際漲跌幅
                 actual_change = ((actual_close - base_price) / base_price) * 100
+
+                # 台股漲跌幅上限安全夾（±10%），避免資料異常
+                if record.market_region == "TW" and abs(actual_change) > 10.5:
+                    actual_change = max(min(actual_change, 10.0), -10.0)
+
                 actual_direction = "UP" if actual_change >= 0 else "DOWN"
 
                 # 更新記錄
