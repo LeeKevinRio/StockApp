@@ -25,7 +25,7 @@ class ApiService {
   String? _authToken;
 
   /// HTTP 請求逾時時間
-  static const Duration _timeout = Duration(seconds: 30);
+  static const Duration _timeout = Duration(seconds: 60);
 
   ApiService({String? baseUrl}) : baseUrl = baseUrl ?? AppConfig.apiBaseUrl;
 

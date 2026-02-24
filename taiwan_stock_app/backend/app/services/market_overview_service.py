@@ -123,26 +123,36 @@ class MarketOverviewService:
             return stock_id
 
     def _prefetch_tw_quotes(self, stock_ids: List[str]):
-        """批量預取台股報價（TWSE API），快取結果"""
-        try:
-            results = self.twse.get_realtime_price(stock_ids)
-            for item in results:
-                sid = item["stock_id"]
-                price = item.get("price", 0)
-                yesterday = item.get("yesterday_close", 0)
-                change = price - yesterday if price and yesterday else 0
-                change_pct = (change / yesterday * 100) if yesterday > 0 else 0
-                self._tw_quote_cache[sid] = {
-                    "stock_id": sid,
-                    "name": item.get("name", sid),
-                    "price": round(price, 2),
-                    "change": round(change, 2),
-                    "change_percent": round(change_pct, 2),
-                    "volume": item.get("volume", 0),
-                }
-            logger.info(f"TWSE 批量預取成功: {len(results)} 支股票")
-        except Exception as e:
-            logger.warning(f"TWSE 批量預取失敗: {e}")
+        """批量預取台股報價（TWSE API），分批查詢避免超時"""
+        import time as _time
+        batch_size = 20  # TWSE API 每批最多查 20 支避免 URL 過長
+        unique_ids = list(set(stock_ids))
+
+        for i in range(0, len(unique_ids), batch_size):
+            batch = unique_ids[i:i + batch_size]
+            try:
+                results = self.twse.get_realtime_price(batch)
+                for item in results:
+                    sid = item["stock_id"]
+                    price = item.get("price", 0)
+                    yesterday = item.get("yesterday_close", 0)
+                    change = price - yesterday if price and yesterday else 0
+                    change_pct = (change / yesterday * 100) if yesterday > 0 else 0
+                    self._tw_quote_cache[sid] = {
+                        "stock_id": sid,
+                        "name": item.get("name", sid),
+                        "price": round(price, 2),
+                        "change": round(change, 2),
+                        "change_percent": round(change_pct, 2),
+                        "volume": item.get("volume", 0),
+                    }
+                logger.info(f"TWSE 批量預取第 {i // batch_size + 1} 批: {len(results)}/{len(batch)} 支")
+            except Exception as e:
+                logger.warning(f"TWSE 批量預取第 {i // batch_size + 1} 批失敗: {e}")
+
+            # TWSE 速率限制：批次之間等待 2 秒
+            if i + batch_size < len(unique_ids):
+                _time.sleep(2)
 
     def get_heatmap_data(self, market: str = "TW") -> Dict:
         """取得熱力圖數據（按產業分組），帶 TTL 快取（5 分鐘）"""
@@ -173,11 +183,12 @@ class MarketOverviewService:
             for stock_id in stock_ids[:6]:  # 每產業最多 6 支
                 try:
                     if market == "TW":
-                        quote = self._get_tw_quote(stock_id)
+                        # 熱力圖只用批量預取快取，不逐筆 fallback（避免超時）
+                        quote = self._tw_quote_cache.get(stock_id)
                     else:
                         quote = self.us_fetcher.get_realtime_quote(stock_id)
 
-                    if quote:
+                    if quote and quote.get("price", 0) > 0:
                         change_pct = quote.get("change_percent", 0) or 0
                         changes.append(change_pct)
                         sector_data["stocks"].append({
