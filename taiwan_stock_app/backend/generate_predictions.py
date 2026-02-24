@@ -55,14 +55,14 @@ def generate_all_predictions():
                     )
 
                     pred = suggestion["next_day_prediction"]
-                    print(f"  ✓ 預測: {pred.get('direction')} {pred.get('predicted_change_percent')}%")
+                    print(f"  [OK] prediction: {pred.get('direction')} {pred.get('predicted_change_percent')}%")
                     print(f"    AI: {ai_provider}")
                     success_count += 1
                 else:
-                    print(f"  ✗ 無法生成預測")
+                    print(f"  [FAIL] no prediction generated")
 
             except Exception as e:
-                print(f"  ✗ 錯誤: {e}")
+                print(f"  [ERR] {e}")
                 continue
 
         print(f"\n完成！成功生成 {success_count}/{len(processed)} 筆預測記錄")
