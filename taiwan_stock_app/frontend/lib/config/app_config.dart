@@ -12,9 +12,9 @@ class AppConfig {
   static String get apiBaseUrl {
     if (_envApiBaseUrl.isNotEmpty) return _envApiBaseUrl;
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:8002';
+      return 'http://10.0.2.2:8000';
     }
-    return 'http://localhost:8002';
+    return 'http://localhost:8000';
   }
 
   /// Web 用 Google Client ID（透過 --dart-define=GOOGLE_CLIENT_ID=xxx 傳入）
