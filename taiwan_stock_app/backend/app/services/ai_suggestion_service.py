@@ -6,7 +6,8 @@ AI Suggestion Service - 每日投資建議
 """
 from typing import Dict, List, Optional
 from datetime import date, timedelta
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 import json
 import asyncio
 import logging
@@ -45,7 +46,6 @@ class AISuggestionService:
         self.us_fetcher = USStockFetcher()
         self.news_fetcher = NewsFetcher()
         self.macro_fetcher = MacroDataFetcher()
-        genai.configure(api_key=settings.GOOGLE_API_KEY)
 
         # Select model based on subscription tier
         if subscription_tier == 'pro':
@@ -53,7 +53,7 @@ class AISuggestionService:
         else:
             self.model = settings.AI_MODEL_FREE
 
-        self.llm = genai.GenerativeModel(self.model)
+        self.gemini_client = genai.Client(api_key=settings.GOOGLE_API_KEY)
         self.subscription_tier = subscription_tier
         # BYOK: 用戶自訂 AI client（若有）
         self.ai_client = ai_client
@@ -1641,16 +1641,29 @@ class AISuggestionService:
         return None
 
     def _call_gemini(self, prompt: str) -> Optional[Dict]:
-        """呼叫 Gemini API"""
+        """呼叫 Gemini API（Pro 模型啟用 thinking 深度推理）"""
         try:
-            response = self.llm.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.2,
-                    response_mime_type="application/json",
-                )
+            config = genai_types.GenerateContentConfig(
+                temperature=0.3 if self.subscription_tier == 'pro' else 0.2,
+                response_mime_type="application/json",
             )
-            return json.loads(response.text)
+            # Pro 用戶啟用 thinking 模式，提升推理品質
+            if self.subscription_tier == 'pro':
+                config.thinking_config = genai_types.ThinkingConfig(
+                    thinking_budget=2048
+                )
+
+            response = self.gemini_client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=config,
+            )
+            # 從回應中提取非 thinking 的文字部分
+            response_text = ""
+            for part in response.candidates[0].content.parts:
+                if not getattr(part, 'thought', False):
+                    response_text += part.text
+            return json.loads(response_text)
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "quota" in error_str.lower():

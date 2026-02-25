@@ -5,7 +5,8 @@ AI Chat Service - AI 問答服務
 from typing import List, Dict, Optional
 from datetime import date, timedelta
 import logging
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 
 from app.data_fetchers import FinMindFetcher
 from app.config import settings
@@ -84,7 +85,6 @@ class AIChatService:
 
     def __init__(self, subscription_tier: str = 'free', ai_client=None):
         self.finmind = FinMindFetcher(settings.FINMIND_TOKEN)
-        genai.configure(api_key=settings.GOOGLE_API_KEY)
 
         # Select model based on subscription tier
         if subscription_tier == 'pro':
@@ -92,7 +92,7 @@ class AIChatService:
         else:
             self.model = settings.AI_MODEL_FREE
 
-        self.llm = genai.GenerativeModel(self.model)
+        self.gemini_client = genai.Client(api_key=settings.GOOGLE_API_KEY)
         self.subscription_tier = subscription_tier
         # BYOK: 用戶自訂 AI client（若有）
         self.ai_client = ai_client
@@ -218,17 +218,44 @@ class AIChatService:
         return {"response": ai_response, "related_stocks": related_stocks, "sources": sources}
 
     def _call_gemini_chat(self, message: str, history: List[Dict]) -> Optional[str]:
-        """呼叫 Gemini Chat API"""
+        """呼叫 Gemini Chat API（Pro 模型啟用 thinking 深度推理）"""
         try:
-            chat = self.llm.start_chat(history=history)
-            response = chat.send_message(
-                message,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=0.7,
-                    max_output_tokens=4096,
-                )
+            # 組合對話內容：歷史 + 當前訊息
+            contents = []
+            for msg in history:
+                role = msg.get("role", "user")
+                parts = msg.get("parts", [])
+                text = parts[0] if parts else ""
+                contents.append(genai_types.Content(
+                    role=role,
+                    parts=[genai_types.Part(text=text)]
+                ))
+            contents.append(genai_types.Content(
+                role="user",
+                parts=[genai_types.Part(text=message)]
+            ))
+
+            config = genai_types.GenerateContentConfig(
+                temperature=0.7,
+                max_output_tokens=4096,
             )
-            return response.text
+            # Pro 用戶啟用 thinking 模式
+            if self.subscription_tier == 'pro':
+                config.thinking_config = genai_types.ThinkingConfig(
+                    thinking_budget=2048
+                )
+
+            response = self.gemini_client.models.generate_content(
+                model=self.model,
+                contents=contents,
+                config=config,
+            )
+            # 提取非 thinking 的文字部分
+            result_text = ""
+            for part in response.candidates[0].content.parts:
+                if not getattr(part, 'thought', False):
+                    result_text += part.text
+            return result_text
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "quota" in error_str.lower() or "ResourceExhausted" in error_str:
