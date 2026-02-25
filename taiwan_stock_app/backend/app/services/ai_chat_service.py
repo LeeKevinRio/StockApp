@@ -124,6 +124,9 @@ class AIChatService:
         from app.services.ai_client_factory import AIClientFactory
 
         tier = getattr(user, 'subscription_tier', 'free') or 'free'
+        # 開發模式強制使用 Pro 模型
+        if settings.DEV_FORCE_PRO:
+            tier = 'pro'
         ai_client = None
         if db is not None:
             config = AIClientFactory.resolve_config(user, db)

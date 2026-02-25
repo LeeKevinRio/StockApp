@@ -49,6 +49,9 @@ class Settings:
     AI_MODEL_FREE: str = os.getenv("AI_MODEL_FREE", "gemini-2.0-flash")
     AI_MODEL_PRO: str = os.getenv("AI_MODEL_PRO", "gemini-2.5-pro")
 
+    # 開發模式：強制所有用戶使用 Pro 模型（上線前關掉）
+    DEV_FORCE_PRO: bool = os.getenv("DEV_FORCE_PRO", "false").lower() == "true"
+
     # Groq Model (fallback when Gemini quota exceeded)
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
