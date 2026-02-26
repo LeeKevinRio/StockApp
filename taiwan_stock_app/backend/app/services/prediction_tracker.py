@@ -178,6 +178,7 @@ class PredictionTracker:
             query = query.filter(PredictionRecord.market_region == market)
 
         records = query.all()
+        logger.info(f"update_actual_results: found {len(records)} records to check (market={market})")
         updated_count = 0
 
         for record in records:
@@ -187,12 +188,14 @@ class PredictionTracker:
                 actual_high = 0
                 actual_low = 0
 
+                logger.info(f"Processing {record.stock_id}: target={target}, today={today}, base={record.base_close_price}, market={record.market_region}")
                 if target == today:
                     # 今天的預測：用即時報價
                     price_data = self.stock_service.get_realtime_price(
                         record.stock_id,
                         market=record.market_region
                     )
+                    logger.info(f"  {record.stock_id} realtime: price_data={price_data is not None}, close={price_data.get('current_price') if price_data else 'N/A'}")
                     if price_data:
                         actual_close = float(price_data.get("current_price", 0))
                         actual_high = float(price_data.get("high", 0))
@@ -238,7 +241,20 @@ class PredictionTracker:
 
                 base_price = float(record.base_close_price or 0)
 
+                # base_price=0 修復：從即時報價的漲跌幅反推前一日收盤
+                if base_price <= 0 and actual_close > 0 and price_data:
+                    cp = float(price_data.get("change_percent", 0))
+                    if cp != 0:
+                        base_price = round(actual_close / (1 + cp / 100), 2)
+                    else:
+                        base_price = actual_close
+                    record.base_close_price = base_price
+                    logger.info(f"Auto-fix base_price for {record.stock_id}: {base_price}")
+
                 if base_price <= 0 or actual_close <= 0:
+                    logger.warning(
+                        f"Skip {record.stock_id} (target={target}): base={base_price}, actual_close={actual_close}"
+                    )
                     continue
 
                 # === 台股 base_price 修正 ===
