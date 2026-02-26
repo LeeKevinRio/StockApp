@@ -11,6 +11,7 @@ from google.genai import types as genai_types
 import json
 import asyncio
 import logging
+import traceback
 import pandas as pd
 
 from app.data_fetchers import FinMindFetcher, USStockFetcher, MacroDataFetcher
@@ -1604,7 +1605,7 @@ class AISuggestionService:
             return result
 
         except Exception as e:
-            logger.error(f"Error generating AI suggestion for {stock_id}: {e}")
+            logger.error(f"Error generating AI suggestion for {stock_id}: {e}\n{traceback.format_exc()}")
             # Return mock suggestion when API fails（盡量傳入 data）
             return self._generate_mock_suggestion(stock_id, stock_name, market, data=locals().get('data'))
 
@@ -1663,7 +1664,19 @@ class AISuggestionService:
             for part in response.candidates[0].content.parts:
                 if not getattr(part, 'thought', False):
                     response_text += part.text
-            return json.loads(response_text)
+            parsed = json.loads(response_text)
+            # Gemini 3 有時回傳 JSON array 包裹 → 取第一個元素
+            if isinstance(parsed, list):
+                if len(parsed) > 0 and isinstance(parsed[0], dict):
+                    logger.warning("Gemini returned list instead of dict, extracting first element")
+                    parsed = parsed[0]
+                else:
+                    logger.error(f"Gemini returned unexpected list: {parsed[:100]}")
+                    return None
+            if not isinstance(parsed, dict):
+                logger.error(f"Gemini returned non-dict type: {type(parsed)}")
+                return None
+            return parsed
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "quota" in error_str.lower():
