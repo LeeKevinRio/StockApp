@@ -46,10 +46,9 @@ class Settings:
     AI_MODEL: str = os.getenv("AI_MODEL", "gemini-2.5-flash")
 
     # AI Models by subscription tier
-    # Free: 2.5-flash 無 thinking | Pro: 2.5-flash + thinking 深度推理
-    # 若啟用 Google AI 付費方案，可將 Pro 改為 gemini-2.5-pro
+    # Free: 2.5-flash 無 thinking | Pro: 3-flash + thinking 深度推理
     AI_MODEL_FREE: str = os.getenv("AI_MODEL_FREE", "gemini-2.5-flash")
-    AI_MODEL_PRO: str = os.getenv("AI_MODEL_PRO", "gemini-2.5-flash")
+    AI_MODEL_PRO: str = os.getenv("AI_MODEL_PRO", "gemini-3-flash-preview")
 
     # 開發模式：強制所有用戶使用 Pro 模型（上線前關掉）
     DEV_FORCE_PRO: bool = os.getenv("DEV_FORCE_PRO", "false").lower() == "true"
