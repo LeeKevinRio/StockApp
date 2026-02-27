@@ -164,7 +164,7 @@ class _AIPerformanceScreenState extends State<AIPerformanceScreen> {
                   child: CircularProgressIndicator(
                     value: accuracy / 100,
                     strokeWidth: 12,
-                    backgroundColor: Colors.grey[200],
+                    backgroundColor: Colors.grey[800],
                     valueColor: AlwaysStoppedAnimation<Color>(color),
                   ),
                 ),
@@ -389,7 +389,7 @@ class _AIPerformanceScreenState extends State<AIPerformanceScreen> {
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: conf.accuracy / 100,
-                backgroundColor: Colors.grey[200],
+                backgroundColor: Colors.grey[800],
                 valueColor: AlwaysStoppedAnimation<Color>(color),
                 minHeight: 8,
               ),
@@ -450,7 +450,7 @@ class _AIPerformanceScreenState extends State<AIPerformanceScreen> {
                     horizontalInterval: 20,
                     getDrawingHorizontalLine: (value) {
                       return FlLine(
-                        color: Colors.grey[200]!,
+                        color: Colors.grey[800]!,
                         strokeWidth: 1,
                       );
                     },
@@ -604,7 +604,7 @@ class _AIPerformanceScreenState extends State<AIPerformanceScreen> {
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: ind.accuracy / 100,
-                backgroundColor: Colors.grey[200],
+                backgroundColor: Colors.grey[800],
                 valueColor: AlwaysStoppedAnimation<Color>(color),
                 minHeight: 8,
               ),

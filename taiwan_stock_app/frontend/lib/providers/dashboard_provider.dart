@@ -81,12 +81,23 @@ class DashboardProvider with ChangeNotifier {
         _loadAlertSummary(),
       ]);
 
+      final watchlistSummary = results[1] as WatchlistSummary;
+      final alertSummary = results[3] as AlertSummary;
+
       _dashboardData = DashboardData(
         marketOverview: results[0] as MarketOverview,
-        watchlistSummary: results[1] as WatchlistSummary,
+        watchlistSummary: WatchlistSummary(
+          totalStocks: watchlistSummary.totalStocks,
+          upCount: watchlistSummary.upCount,
+          downCount: watchlistSummary.downCount,
+          flatCount: watchlistSummary.flatCount,
+          alertTriggered: alertSummary.triggeredToday,
+          topGainers: watchlistSummary.topGainers,
+          topLosers: watchlistSummary.topLosers,
+        ),
         aiPicks: _dashboardData?.aiPicks ?? [],
         latestNews: results[2] as List<NewsItem>,
-        alertSummary: results[3] as AlertSummary,
+        alertSummary: alertSummary,
       );
 
       _lastRefresh = DateTime.now();
@@ -238,7 +249,7 @@ class DashboardProvider with ChangeNotifier {
         upCount: upCount,
         downCount: downCount,
         flatCount: flatCount,
-        alertTriggered: 0, // TODO: 從警報 API 獲取
+        alertTriggered: 0, // 實際值由 loadDashboard() 從 AlertSummary 回填
         topGainers: topGainers,
         topLosers: topLosers,
       );

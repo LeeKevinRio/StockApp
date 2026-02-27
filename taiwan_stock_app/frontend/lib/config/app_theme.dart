@@ -18,7 +18,7 @@ class AppTheme {
   static const Color chartMA20 = Color(0xFFAB47BC);
   static const Color chartMA60 = Color(0xFF66BB6A);
 
-  // ============ LIGHT THEME（深底金融風） ============
+  // ============ DEFAULT THEME（深色藍灰金融風） ============
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
@@ -206,7 +206,7 @@ class AppTheme {
     ),
   );
 
-  // ============ DARK THEME（更深的暗色） ============
+  // ============ DARK THEME（純黑暗色） ============
   static ThemeData darkTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,

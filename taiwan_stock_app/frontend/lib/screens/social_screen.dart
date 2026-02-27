@@ -725,7 +725,7 @@ class _SocialScreenState extends State<SocialScreen>
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
             value: ratio,
-            backgroundColor: Colors.grey[200],
+            backgroundColor: Colors.grey[800],
             valueColor: AlwaysStoppedAnimation<Color>(color),
             minHeight: 8,
           ),

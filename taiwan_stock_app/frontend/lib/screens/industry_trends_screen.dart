@@ -176,14 +176,14 @@ class _IndustryTrendsScreenState extends State<IndustryTrendsScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.grey[100],
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     trends.disclaimer,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey[600],
+                      color: Colors.grey[400],
                       height: 1.5,
                     ),
                   ),
