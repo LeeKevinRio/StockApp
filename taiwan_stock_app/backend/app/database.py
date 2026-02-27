@@ -4,13 +4,16 @@ Database configuration and session management
 from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
 import os
 import logging
 
 logger = logging.getLogger(__name__)
 
-# 使用絕對路徑，避免工作目錄不同導致連到不同 DB
+# 確保 .env 在讀取環境變數前載入
 _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_backend_dir, ".env"))
+
 _raw_url = os.getenv("DATABASE_URL", "sqlite:///./taiwan_stock.db")
 
 # Railway 給 postgres://，SQLAlchemy 2.x 要求 postgresql://
