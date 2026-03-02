@@ -1,3 +1,8 @@
+---
+name: stop
+description: 停止前後端開發伺服器
+---
+
 # 停止前後端開發伺服器
 
 停止所有 StockApp 相關的開發伺服器。

@@ -1,3 +1,9 @@
+---
+name: predict
+description: 觸發 AI 預測
+argument-hint: "[--all]"
+---
+
 # 觸發 AI 預測
 
 為所有自選股生成 AI 預測。
