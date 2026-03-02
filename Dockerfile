@@ -21,8 +21,7 @@ COPY taiwan_stock_app/backend/app ./app
 # 切換到非 root 使用者
 USER appuser
 
-# Expose port (Railway 動態指定)
-EXPOSE ${PORT:-8000}
+EXPOSE 8000
 
-# Run application — 使用 gunicorn + uvicorn workers
-CMD ["sh", "-c", "echo '=== Starting app on port ${PORT:-8000} ===' && python -c 'import app.main; print(\"Import OK\")' && gunicorn app.main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --preload --log-level info --access-logfile -"]
+# 使用 uvicorn 直接啟動（比 gunicorn 更簡單、省記憶體）
+CMD ["sh", "-c", "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info"]

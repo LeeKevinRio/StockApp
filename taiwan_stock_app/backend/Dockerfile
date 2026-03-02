@@ -21,10 +21,8 @@ COPY app ./app
 # 切換到非 root 使用者
 USER appuser
 
-# Expose port (Railway 動態指定)
 EXPOSE 8000
 
-# Run application — 使用 gunicorn + uvicorn workers
-# --preload: 預先載入 app 讓啟動錯誤立即顯示在 log
-# --log-level info: 顯示啟動過程
-CMD ["sh", "-c", "echo '=== Starting app on port ${PORT:-8000} ===' && python -c 'import app.main; print(\"Import OK\")' && gunicorn app.main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --preload --log-level info --access-logfile -"]
+# 使用 uvicorn 直接啟動（比 gunicorn 更簡單、省記憶體）
+# 錯誤會直接輸出到 stdout/stderr
+CMD ["sh", "-c", "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info"]
