@@ -3,6 +3,7 @@ Application configuration
 """
 import os
 import logging
+import secrets
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -69,8 +70,12 @@ settings = Settings()
 # 安全警告：檢查 JWT 密鑰是否為預設值
 _DEFAULT_SECRETS = {"your-secret-key-change-in-production", "your_jwt_secret_key_change_in_production", ""}
 if settings.IS_PRODUCTION and settings.JWT_SECRET in _DEFAULT_SECRETS:
-    raise RuntimeError(
-        "生產環境禁止使用預設 JWT_SECRET！請在環境變數中設定安全的隨機密鑰。"
+    # 生產環境缺少 JWT_SECRET：自動生成隨機密鑰（重啟後失效，用戶需重新登入）
+    _auto_secret = secrets.token_urlsafe(48)
+    settings.JWT_SECRET = _auto_secret
+    logger.critical(
+        "⚠️ 生產環境未設定 JWT_SECRET，已自動生成臨時密鑰（重啟後失效）。"
+        "請在 Railway 環境變數中設定永久的 JWT_SECRET！"
     )
 elif settings.JWT_SECRET in _DEFAULT_SECRETS:
     logger.warning(

@@ -25,4 +25,4 @@ USER appuser
 EXPOSE ${PORT:-8000}
 
 # Run application — 使用 gunicorn + uvicorn workers
-CMD ["sh", "-c", "gunicorn app.main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000}"]
+CMD ["sh", "-c", "echo '=== Starting app on port ${PORT:-8000} ===' && python -c 'import app.main; print(\"Import OK\")' && gunicorn app.main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --preload --log-level info --access-logfile -"]
