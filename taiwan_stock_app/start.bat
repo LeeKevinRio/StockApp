@@ -41,7 +41,7 @@ set FLUTTER_PATH=D:\AIProject\StockApp\taiwan_stock_app\flutter\bin\flutter.bat
 echo 正在啟動 Flutter Web 應用...
 echo 應用將在 Chrome 瀏覽器開啟，請稍候...
 echo.
-start "" cmd /k "%FLUTTER_PATH% run -d chrome --web-port 3000"
+start "" cmd /k "%FLUTTER_PATH% run -d chrome --web-port 5000"
 
 echo.
 echo ====================================
@@ -50,7 +50,7 @@ echo ====================================
 echo.
 echo 後端 API: http://localhost:8000
 echo API 文件: http://localhost:8000/docs
-echo 前端應用: http://localhost:3000
+echo 前端應用: http://localhost:5000
 echo.
 echo 測試帳號：
 echo   Email: test@example.com

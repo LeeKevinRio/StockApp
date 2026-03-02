@@ -8,6 +8,6 @@ cd /d "%~dp0frontend"
 
 echo 正在啟動 Flutter Web...
 echo.
-flutter run -d chrome --web-port 3000
+flutter run -d chrome --web-port 5000
 
 pause

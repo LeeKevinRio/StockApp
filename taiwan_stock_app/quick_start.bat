@@ -19,6 +19,6 @@ echo 正在啟動 Flutter Web (Debug 模式)...
 echo 請等待編譯完成，Chrome 會自動開啟
 echo.
 
-flutter run -d chrome --web-renderer html --web-port 3000
+flutter run -d chrome --web-renderer html --web-port 5000
 
 pause

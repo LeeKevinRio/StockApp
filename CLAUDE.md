@@ -20,6 +20,11 @@
 - 每次修改完成後，簡短提醒目前專案距離 App Store 上架還有哪些**最關鍵的差距**（1-3 點即可）
 - 完整審查流程請參考：`prompts/appstore-audit.md`
 
+## 固定 Port（禁止修改）
+- **前端 Flutter Web**：`5000`（所有啟動腳本、skill 皆固定此 port）
+- **後端 FastAPI**：`8000`
+- 修改程式碼時**嚴禁變更**上述 port，除非用戶明確要求
+
 ## 專案資訊
 - 遠端倉庫：https://github.com/LeeKevinRio/StockApp
 - 主分支：main

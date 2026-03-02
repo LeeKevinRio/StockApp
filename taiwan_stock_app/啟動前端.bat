@@ -17,7 +17,7 @@ echo.
 echo 提示：首次啟動可能需要 1-2 分鐘編譯
 echo.
 
-flutter run -d chrome --web-port 3000
+flutter run -d chrome --web-port 5000
 
 echo.
 echo Flutter 已結束

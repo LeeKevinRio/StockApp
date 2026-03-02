@@ -51,7 +51,7 @@ echo   請勿關閉此視窗
 echo ========================================
 echo.
 
-flutter run -d chrome --web-port 3000
+flutter run -d chrome --web-port 5000
 
 echo.
 echo ✅ 應用啟動中...

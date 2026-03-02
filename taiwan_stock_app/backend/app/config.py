@@ -60,7 +60,7 @@ class Settings:
     FRED_API_KEY: str = os.getenv("FRED_API_KEY", "")
 
     # CORS — 生產環境加入前端正式域名
-    _default_cors = "http://localhost:3000,http://localhost:8080,http://localhost:5000"
+    _default_cors = "http://localhost:5000,http://localhost:3000,http://localhost:8080"
     CORS_ORIGINS: list = os.getenv("CORS_ORIGINS", _default_cors).split(",")
 
 
