@@ -1491,6 +1491,27 @@ class AISuggestionService:
             latest_price = data.get("latest_price", 0) or 0
             result["current_price"] = latest_price
 
+            # ===== 清理 AI 回傳的百分比格式（可能帶 % 或 + 符號）=====
+            def _safe_pct(val, default=0):
+                """安全解析百分比值，處理 '+4.85%' 等格式"""
+                if val is None:
+                    return default
+                try:
+                    return float(val)
+                except (TypeError, ValueError):
+                    try:
+                        return float(str(val).replace('%', '').strip())
+                    except (TypeError, ValueError):
+                        return default
+
+            # 清理 result 層級的 predicted_change_percent
+            if 'predicted_change_percent' in result:
+                result['predicted_change_percent'] = _safe_pct(result['predicted_change_percent'], 3)
+            # 清理 next_day_prediction 內的 predicted_change_percent
+            _ndp_raw = result.get("next_day_prediction")
+            if isinstance(_ndp_raw, dict) and 'predicted_change_percent' in _ndp_raw:
+                _ndp_raw['predicted_change_percent'] = _safe_pct(_ndp_raw['predicted_change_percent'], 0)
+
             # ===== 價格合理性驗證 =====
             # AI 有時會產出完全偏離的 target/stop_loss，在此自動修正
             if latest_price > 0:
