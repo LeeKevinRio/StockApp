@@ -76,6 +76,21 @@ class PredictionTracker:
 
         return None
 
+    @staticmethod
+    def _detect_market(stock_id: str, market_hint: str = "TW") -> str:
+        """
+        根據股票代碼自動偵測市場，防止 market 標記錯誤。
+        台股代碼為純數字（含 ETF 如 00631L），美股為英文字母開頭。
+        """
+        # 純英文字母 → 美股
+        if stock_id.isalpha():
+            return "US"
+        # 純數字或數字開頭（如 2330, 00631L）→ 台股
+        if stock_id[0].isdigit():
+            return "TW"
+        # fallback 使用提示值
+        return market_hint
+
     def save_prediction(
         self,
         db: Session,
@@ -98,6 +113,12 @@ class PredictionTracker:
             base_close_price: 預測時的收盤價
             ai_provider: AI 提供者 (Gemini/Groq/Mock)
         """
+        # 防呆：自動修正 market 標記錯誤
+        detected = self._detect_market(stock_id, market)
+        if detected != market:
+            logger.warning("Market 自動修正: %s %s -> %s", stock_id, market, detected)
+            market = detected
+
         today = date.today()
         tomorrow = get_next_trading_date(today, market=market)
 
@@ -183,6 +204,12 @@ class PredictionTracker:
 
         for record in records:
             try:
+                # 防呆：修正 market_region 標記錯誤
+                detected = self._detect_market(record.stock_id, record.market_region)
+                if detected != record.market_region:
+                    logger.warning("修正 %s market: %s -> %s", record.stock_id, record.market_region, detected)
+                    record.market_region = detected
+
                 target = record.target_date
                 actual_close = 0
                 actual_high = 0
