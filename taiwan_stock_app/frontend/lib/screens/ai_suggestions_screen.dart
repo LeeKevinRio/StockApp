@@ -162,8 +162,8 @@ class _AISuggestionsScreenState extends State<AISuggestionsScreen>
   }
 
   bool _isTaiwanStock(String stockId) {
-    // Taiwan stocks are typically 4-digit numbers
-    return RegExp(r'^\d{4,6}$').hasMatch(stockId);
+    // 台股代碼：純數字(2330)或數字開頭含英文後綴(00631L, 00878)
+    return RegExp(r'^\d').hasMatch(stockId);
   }
 
   Widget _buildSuggestionsList(
