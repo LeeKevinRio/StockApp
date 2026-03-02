@@ -5,7 +5,6 @@ import logging
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from slowapi.errors import RateLimitExceeded
 
@@ -51,9 +50,9 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
-# --- HTTPS 強制重導（僅生產環境） ---
-if settings.IS_PRODUCTION:
-    app.add_middleware(HTTPSRedirectMiddleware)
+# 注意：不使用 HTTPSRedirectMiddleware
+# Railway/Render 等 PaaS 在 reverse proxy 層已處理 HTTPS
+# 在 app 層加 HTTPS redirect 會導致 healthcheck 失敗（內部 HTTP 請求被重導）
 
 # --- CORS middleware（收緊配置） ---
 app.add_middleware(
