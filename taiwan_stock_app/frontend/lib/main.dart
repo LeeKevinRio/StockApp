@@ -103,7 +103,7 @@ class MyApp extends StatelessWidget {
         builder: (context, themeProvider, child) {
           return MaterialApp(
             title: '台股智慧助手',
-            theme: AppTheme.lightTheme,
+            theme: AppTheme.defaultTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
             debugShowCheckedModeBanner: false,

@@ -249,7 +249,7 @@ class DashboardProvider with ChangeNotifier {
         upCount: upCount,
         downCount: downCount,
         flatCount: flatCount,
-        alertTriggered: 0, // 實際值由 loadDashboard() 從 AlertSummary 回填
+        alertTriggered: 0, // placeholder：由 loadDashboard() 用 alertSummary.triggeredToday 覆蓋
         topGainers: topGainers,
         topLosers: topLosers,
       );

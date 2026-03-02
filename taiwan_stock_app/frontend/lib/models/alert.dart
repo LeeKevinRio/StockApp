@@ -33,20 +33,22 @@ class PriceAlert {
 
   factory PriceAlert.fromJson(Map<String, dynamic> json) {
     return PriceAlert(
-      id: json['id'],
-      userId: json['user_id'],
-      stockId: json['stock_id'],
-      stockName: json['stock_name'],
-      alertType: json['alert_type'],
-      targetPrice: (json['target_price'] as num).toDouble(),
+      id: json['id'] as int? ?? 0,
+      userId: json['user_id'] as int? ?? 0,
+      stockId: json['stock_id'] as String? ?? '',
+      stockName: json['stock_name'] as String? ?? '',
+      alertType: json['alert_type'] as String? ?? 'above_price',
+      targetPrice: (json['target_price'] as num?)?.toDouble() ?? 0,
       percentChange: (json['percent_change'] as num?)?.toDouble(),
-      isActive: json['is_active'] ?? true,
-      isTriggered: json['is_triggered'] ?? false,
+      isActive: json['is_active'] as bool? ?? true,
+      isTriggered: json['is_triggered'] as bool? ?? false,
       triggeredAt: json['triggered_at'] != null
-          ? DateTime.parse(json['triggered_at'])
+          ? DateTime.tryParse(json['triggered_at'].toString())
           : null,
-      notes: json['notes'],
-      createdAt: DateTime.parse(json['created_at']),
+      notes: json['notes'] as String?,
+      createdAt: json['created_at'] != null
+          ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
+          : DateTime.now(),
     );
   }
 

@@ -92,22 +92,37 @@ class _TradingScreenState extends State<TradingScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('載入失敗: $_error'),
+                      const Icon(Icons.error_outline, size: 48, color: Colors.grey),
+                      const SizedBox(height: 12),
+                      Text('載入失敗', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                          _error!,
+                          style: Theme.of(context).textTheme.bodySmall,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                       const SizedBox(height: 16),
-                      ElevatedButton(
+                      ElevatedButton.icon(
                         onPressed: _loadData,
-                        child: const Text('重試'),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('重試'),
                       ),
                     ],
                   ),
                 )
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildAccountTab(),
-                    _buildPositionsTab(),
-                    _buildOrdersTab(),
-                  ],
+              : RefreshIndicator(
+                  onRefresh: _loadData,
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildAccountTab(),
+                      _buildPositionsTab(),
+                      _buildOrdersTab(),
+                    ],
+                  ),
                 ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showOrderDialog(context),

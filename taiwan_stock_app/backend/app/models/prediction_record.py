@@ -1,7 +1,7 @@
 """
 Prediction Record Model - 追蹤 AI 預測準確度
 """
-from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, Boolean, Text
+from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, Boolean, Text, Index
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -9,6 +9,11 @@ from app.database import Base
 class PredictionRecord(Base):
     """AI 預測記錄表 - 用於追蹤預測準確度"""
     __tablename__ = "prediction_records"
+    __table_args__ = (
+        Index('idx_pred_stock_target', 'stock_id', 'target_date'),
+        Index('idx_pred_target_actual', 'target_date', 'actual_close_price'),
+        Index('idx_pred_market_target', 'market_region', 'target_date'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     stock_id = Column(String(10), nullable=False, index=True)

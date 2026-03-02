@@ -19,7 +19,7 @@ class AppTheme {
   static const Color chartMA60 = Color(0xFF66BB6A);
 
   // ============ DEFAULT THEME（深色藍灰金融風） ============
-  static ThemeData lightTheme = ThemeData(
+  static ThemeData defaultTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
     primaryColor: primaryColor,
@@ -300,14 +300,14 @@ class AppTheme {
       titleMedium: TextStyle(color: Color(0xFFE0E0E0), fontWeight: FontWeight.w500),
       bodyLarge: TextStyle(color: Color(0xFFE0E0E0)),
       bodyMedium: TextStyle(color: Color(0xFFBDBDBD)),
-      bodySmall: TextStyle(color: Color(0xFF9E9E9E)),
+      bodySmall: TextStyle(color: Color(0xFFB0B0B0)),
       labelLarge: TextStyle(color: Color(0xFFE0E0E0), fontWeight: FontWeight.w500),
-      labelSmall: TextStyle(color: Color(0xFF9E9E9E)),
+      labelSmall: TextStyle(color: Color(0xFFB0B0B0)),
     ),
     iconTheme: const IconThemeData(color: Color(0xFFBDBDBD)),
     tabBarTheme: const TabBarThemeData(
       labelColor: Color(0xFF66BB6A),
-      unselectedLabelColor: Color(0xFF757575),
+      unselectedLabelColor: Color(0xFF8E8E8E),
       indicatorColor: Color(0xFF66BB6A),
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(

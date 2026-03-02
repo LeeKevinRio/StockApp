@@ -1277,22 +1277,92 @@ class ApiService {
         final body = jsonDecode(response.body);
         message = body['detail'] ?? 'Unknown error';
       } catch (_) {
-        message = '伺服器錯誤 (HTTP ${response.statusCode})';
+        message = response.statusCode >= 500
+            ? '伺服器暫時無法處理請求，請稍後重試'
+            : '請求失敗 (HTTP ${response.statusCode})';
       }
-      throw ApiException(
-        statusCode: response.statusCode,
-        message: message,
-      );
+
+      switch (response.statusCode) {
+        case 401:
+          throw ApiException(
+            statusCode: 401,
+            message: '登入已過期，請重新登入',
+            errorType: ApiErrorType.unauthorized,
+          );
+        case 403:
+          throw ApiException(
+            statusCode: 403,
+            message: '權限不足，無法執行此操作',
+            errorType: ApiErrorType.forbidden,
+          );
+        case 429:
+          throw ApiException(
+            statusCode: 429,
+            message: '請求過於頻繁，請稍後再試',
+            errorType: ApiErrorType.rateLimited,
+          );
+        default:
+          throw ApiException(
+            statusCode: response.statusCode,
+            message: message,
+            errorType: response.statusCode >= 500
+                ? ApiErrorType.serverError
+                : ApiErrorType.clientError,
+          );
+      }
     }
   }
+
+  // ==================== 帶重試的請求 ====================
+
+  /// 帶指數退避重試的 GET 請求（適用於可能暫時失敗的 API）
+  Future<http.Response> _getWithRetry(
+    Uri url, {
+    Map<String, String>? headers,
+    int maxRetries = 2,
+  }) async {
+    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        final response = await _get(url, headers: headers);
+        if (response.statusCode >= 500 && attempt < maxRetries) {
+          await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+          continue;
+        }
+        return response;
+      } on TimeoutException {
+        if (attempt == maxRetries) rethrow;
+        await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+      }
+    }
+    throw TimeoutException('請求逾時，請檢查網路連線');
+  }
+}
+
+/// API 錯誤類型
+enum ApiErrorType {
+  unauthorized,  // 401 - 需重新登入
+  forbidden,     // 403 - 權限不足
+  rateLimited,   // 429 - 請求頻率限制
+  clientError,   // 4xx - 客戶端錯誤
+  serverError,   // 5xx - 伺服器錯誤
+  network,       // 網路錯誤
 }
 
 class ApiException implements Exception {
   final int statusCode;
   final String message;
+  final ApiErrorType errorType;
 
-  ApiException({required this.statusCode, required this.message});
+  ApiException({
+    required this.statusCode,
+    required this.message,
+    this.errorType = ApiErrorType.clientError,
+  });
+
+  bool get isUnauthorized => errorType == ApiErrorType.unauthorized;
+  bool get isRateLimited => errorType == ApiErrorType.rateLimited;
+  bool get isServerError => errorType == ApiErrorType.serverError;
 
   @override
-  String toString() => 'ApiException: $statusCode - $message';
+  String toString() => message;
 }

@@ -89,16 +89,20 @@ def generate_daily_predictions():
 
                 # 儲存預測記錄
                 if suggestion and suggestion.get("next_day_prediction"):
+                    latest_price = suggestion.get("analysis_scores", {}).get("latest_price")
+                    if not latest_price or float(latest_price) <= 0:
+                        logger.warning("跳過 %s 預測：無有效價格資料 (latest_price=%s)", stock.stock_id, latest_price)
+                        continue
                     prediction_tracker.save_prediction(
                         db=db,
                         stock_id=stock.stock_id,
                         stock_name=stock.name,
                         market=market,
                         prediction_data=suggestion["next_day_prediction"],
-                        base_close_price=suggestion.get("analysis_scores", {}).get("latest_price", 0) or 0,
+                        base_close_price=float(latest_price),
                         ai_provider=suggestion.get("ai_provider", "Unknown")
                     )
-                    logger.info("Generated prediction for %s", stock.stock_id)
+                    logger.info("Generated prediction for %s (base_price=%.2f)", stock.stock_id, float(latest_price))
             except Exception as e:
                 logger.error("Error generating prediction for %s: %s", stock.stock_id, e)
                 continue
@@ -130,16 +134,22 @@ def fetch_market_news_task():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-        fetched_count = 0
-        for stock_id in stock_ids:
-            try:
-                loop.run_until_complete(
-                    news_service.get_stock_news(db, stock_id, limit=5, use_cache=False)
-                )
-                fetched_count += 1
-            except Exception as e:
-                logger.warning("新聞抓取失敗 %s: %s", stock_id, e)
+        async def _fetch_all_news():
+            """並行抓取多支股票新聞"""
+            tasks = [
+                news_service.get_stock_news(db, sid, limit=5, use_cache=False)
+                for sid in stock_ids
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            count = 0
+            for sid, result in zip(stock_ids, results):
+                if isinstance(result, Exception):
+                    logger.warning("新聞抓取失敗 %s: %s", sid, result)
+                else:
+                    count += 1
+            return count
 
+        fetched_count = loop.run_until_complete(_fetch_all_news())
         loop.close()
         logger.info("Fetched news for %d/%d stocks", fetched_count, len(stock_ids))
     except Exception as e:
@@ -161,19 +171,22 @@ def fetch_social_data_task():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-        # 抓取熱門討論股票
-        loop.run_until_complete(sentiment_service.get_hot_stocks(db, limit=20))
+        async def _fetch_all_social():
+            """並行抓取社群數據"""
+            # 先抓取熱門討論股票
+            await sentiment_service.get_hot_stocks(db, limit=20)
+            # 再並行抓取自選股的社群數據
+            watchlist_stocks = db.query(Watchlist.stock_id).distinct().limit(10).all()
+            tasks = [
+                sentiment_service.get_stock_sentiment(db, sid)
+                for (sid,) in watchlist_stocks
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for (sid,), result in zip(watchlist_stocks, results):
+                if isinstance(result, Exception):
+                    logger.warning("社群數據抓取失敗 %s: %s", sid, result)
 
-        # 抓取自選股的社群數據
-        watchlist_stocks = db.query(Watchlist.stock_id).distinct().limit(10).all()
-        for (stock_id,) in watchlist_stocks:
-            try:
-                loop.run_until_complete(
-                    sentiment_service.get_stock_sentiment(db, stock_id)
-                )
-            except Exception as e:
-                logger.warning("社群數據抓取失敗 %s: %s", stock_id, e)
-
+        loop.run_until_complete(_fetch_all_social())
         loop.close()
         logger.info("Social data fetch completed")
     except Exception as e:
