@@ -436,13 +436,14 @@ class PredictionTracker:
             "records": record_details
         }
 
-    def get_all_stocks_statistics(self, db: Session, days: int = 30) -> Dict:
+    def get_all_stocks_statistics(self, db: Session, days: int = 30, market: str = None) -> Dict:
         """
         獲取所有股票的預測統計（依股票分組）
 
         Args:
             db: Database session
             days: 統計天數
+            market: 市場過濾 (TW/US/None=all)
 
         Returns:
             各股票的統計數據
@@ -450,11 +451,14 @@ class PredictionTracker:
         start_date = date.today() - timedelta(days=days)
 
         # 查詢有實際結果的預測，並去重
+        query = db.query(PredictionRecord).filter(
+            PredictionRecord.target_date >= start_date,
+            PredictionRecord.actual_close_price.isnot(None)
+        )
+        if market:
+            query = query.filter(PredictionRecord.market_region == market)
         records = self._dedup_records(
-            db.query(PredictionRecord).filter(
-                PredictionRecord.target_date >= start_date,
-                PredictionRecord.actual_close_price.isnot(None)
-            ).order_by(PredictionRecord.target_date.desc()).all()
+            query.order_by(PredictionRecord.target_date.desc()).all()
         )
 
         # 依股票分組
@@ -523,22 +527,24 @@ class PredictionTracker:
             "stocks": stocks,
         }
 
-    def get_daily_summary(self, db: Session, target_date: date = None) -> Dict:
+    def get_daily_summary(self, db: Session, target_date: date = None, market: str = None) -> Dict:
         """
         獲取特定日期的預測摘要
 
         Args:
             db: Database session
             target_date: 目標日期（預設昨天）
+            market: 市場過濾 (TW/US/None=all)
         """
         if target_date is None:
             target_date = date.today() - timedelta(days=1)
 
-        records = self._dedup_records(
-            db.query(PredictionRecord).filter(
-                PredictionRecord.target_date == target_date
-            ).all()
+        query = db.query(PredictionRecord).filter(
+            PredictionRecord.target_date == target_date
         )
+        if market:
+            query = query.filter(PredictionRecord.market_region == market)
+        records = self._dedup_records(query.all())
 
         if not records:
             return {
@@ -589,20 +595,24 @@ class PredictionTracker:
             "predictions": predictions
         }
 
-    def get_predictions_made_on(self, db: Session, prediction_date: date = None) -> list:
+    def get_predictions_made_on(self, db: Session, prediction_date: date = None, market: str = None) -> list:
         """
         取得某天產生的所有預測（不論 target_date）
 
         Args:
             db: Database session
             prediction_date: 預測產生日期
+            market: 市場過濾 (TW/US/None=all)
         """
         if prediction_date is None:
             prediction_date = date.today()
 
-        records = db.query(PredictionRecord).filter(
+        query = db.query(PredictionRecord).filter(
             PredictionRecord.prediction_date == prediction_date
-        ).all()
+        )
+        if market:
+            query = query.filter(PredictionRecord.market_region == market)
+        records = query.all()
 
         results = []
         for r in records:

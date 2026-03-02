@@ -396,11 +396,11 @@ class ApiService {
     return _safeJsonDecode(response.body);
   }
 
-  Future<Map<String, dynamic>> getYesterdayPredictions() async {
-    final response = await _get(
-      Uri.parse('$baseUrl/api/predictions/yesterday'),
-      headers: _headers,
-    );
+  Future<Map<String, dynamic>> getYesterdayPredictions({String? market}) async {
+    final params = <String, String>{};
+    if (market != null) params['market'] = market;
+    final uri = Uri.parse('$baseUrl/api/predictions/yesterday').replace(queryParameters: params.isNotEmpty ? params : null);
+    final response = await _get(uri, headers: _headers);
     _checkResponse(response);
     return _safeJsonDecode(response.body);
   }
@@ -423,20 +423,20 @@ class ApiService {
     return _safeJsonDecode(response.body);
   }
 
-  Future<Map<String, dynamic>> getTodayPredictions() async {
-    final response = await _get(
-      Uri.parse('$baseUrl/api/predictions/today'),
-      headers: _headers,
-    );
+  Future<Map<String, dynamic>> getTodayPredictions({String? market}) async {
+    final params = <String, String>{};
+    if (market != null) params['market'] = market;
+    final uri = Uri.parse('$baseUrl/api/predictions/today').replace(queryParameters: params.isNotEmpty ? params : null);
+    final response = await _get(uri, headers: _headers);
     _checkResponse(response);
     return _safeJsonDecode(response.body);
   }
 
-  Future<Map<String, dynamic>> getAllStocksPredictionStats({int days = 30}) async {
-    final response = await _get(
-      Uri.parse('$baseUrl/api/predictions/all-stocks?days=$days'),
-      headers: _headers,
-    );
+  Future<Map<String, dynamic>> getAllStocksPredictionStats({int days = 30, String? market}) async {
+    final params = <String, String>{'days': days.toString()};
+    if (market != null) params['market'] = market;
+    final uri = Uri.parse('$baseUrl/api/predictions/all-stocks').replace(queryParameters: params);
+    final response = await _get(uri, headers: _headers);
     _checkResponse(response);
     return _safeJsonDecode(response.body);
   }

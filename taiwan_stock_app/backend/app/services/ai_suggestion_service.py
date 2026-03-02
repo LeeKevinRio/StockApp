@@ -1549,6 +1549,54 @@ class AISuggestionService:
                             except (TypeError, ValueError):
                                 pass
 
+            # ===== 預測幅度校正（防止 AI 所有股票給相似值）=====
+            ndp = result.get("next_day_prediction")
+            if isinstance(ndp, dict) and latest_price > 0:
+                avg_vol = data.get('avg_daily_volatility', 1.0) or 1.0
+                pred_score = data.get('prediction_score', 0) or 0
+                ai_change = float(ndp.get('predicted_change_percent', 0) or 0)
+
+                # 用 prediction_score 決定信號強度倍數
+                abs_score = abs(pred_score)
+                if abs_score < 20:
+                    multiplier = 0.3 + (abs_score / 20) * 0.3  # 0.3~0.6
+                elif abs_score < 50:
+                    multiplier = 0.6 + ((abs_score - 20) / 30) * 0.6  # 0.6~1.2
+                else:
+                    multiplier = 1.2 + min((abs_score - 50) / 50, 1.0) * 0.8  # 1.2~2.0
+
+                # 校正方向：以 prediction_score 決定方向
+                direction_sign = 1 if pred_score >= 0 else -1
+                # 如果 AI 給出的方向和 prediction_score 一致，保留 AI 的方向
+                if ai_change != 0 and (ai_change > 0) == (pred_score >= 0):
+                    direction_sign = 1 if ai_change > 0 else -1
+
+                calibrated_change = round(avg_vol * multiplier * direction_sign, 2)
+
+                # 台股限制 ±10%，美股限制 ±20%
+                max_change = 10.0 if market == "TW" else 20.0
+                calibrated_change = max(-max_change, min(max_change, calibrated_change))
+
+                # 只在 AI 值太雷同（過於接近默認值 ±2~3%）時才用校正值
+                if abs(ai_change) < 0.1 or abs(ai_change - calibrated_change) > avg_vol * 0.5:
+                    ndp['predicted_change_percent'] = calibrated_change
+                    ndp['direction'] = 'UP' if calibrated_change >= 0 else 'DOWN'
+                    # 重新計算價格區間
+                    range_margin = 0.015 if market == "TW" else 0.025
+                    ndp['price_range_low'] = round(latest_price * (1 + calibrated_change / 100 - range_margin), 2)
+                    ndp['price_range_high'] = round(latest_price * (1 + calibrated_change / 100 + range_margin), 2)
+                    logger.info("預測校正 %s: AI=%.2f%% → 校正=%.2f%% (vol=%.2f%%, score=%.1f)",
+                                stock_id, ai_change, calibrated_change, avg_vol, pred_score)
+
+                # 機率也應根據信號強度調整，不要全部 0.70
+                if abs_score >= 50:
+                    calibrated_prob = round(0.72 + min(abs_score - 50, 50) / 500, 2)  # 0.72~0.82
+                elif abs_score >= 20:
+                    calibrated_prob = round(0.60 + (abs_score - 20) / 250, 2)  # 0.60~0.72
+                else:
+                    calibrated_prob = round(0.52 + abs_score / 200, 2)  # 0.52~0.62
+                ndp['probability'] = calibrated_prob
+
             # 強制覆蓋 AI 的建議和信心度（高風險經紀人模式）
             # 根據綜合評分強制設定
             if total_score >= 40:
@@ -1705,7 +1753,7 @@ class AISuggestionService:
                     }
                 ],
                 model=settings.GROQ_MODEL,
-                temperature=0.4,
+                temperature=0.7,
                 response_format={"type": "json_object"},
             )
             response_text = chat_completion.choices[0].message.content

@@ -19,6 +19,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
   String? _error;
   int _selectedDays = 30;
   int _selectedTab = 0; // 0: 概覽, 1: 依股票
+  String? _selectedMarket; // null: 全部, 'TW': 台股, 'US': 美股
 
   @override
   void initState() {
@@ -35,10 +36,10 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
     try {
       final apiService = context.read<ApiService>();
       final results = await Future.wait([
-        apiService.getPredictionStatistics(days: _selectedDays),
-        apiService.getYesterdayPredictions(),
-        apiService.getTodayPredictions(),
-        apiService.getAllStocksPredictionStats(days: _selectedDays),
+        apiService.getPredictionStatistics(days: _selectedDays, market: _selectedMarket),
+        apiService.getYesterdayPredictions(market: _selectedMarket),
+        apiService.getTodayPredictions(market: _selectedMarket),
+        apiService.getAllStocksPredictionStats(days: _selectedDays, market: _selectedMarket),
       ]);
 
       if (mounted) {
@@ -114,6 +115,42 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
   Widget _buildContent() {
     return Column(
       children: [
+        // 市場篩選器
+        Container(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              const Icon(Icons.filter_list, size: 18, color: Colors.grey),
+              const SizedBox(width: 8),
+              const Text('市場：', style: TextStyle(fontSize: 13, color: Colors.grey)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SegmentedButton<String?>(
+                  segments: const [
+                    ButtonSegment(value: null, label: Text('全部')),
+                    ButtonSegment(value: 'TW', label: Text('台股')),
+                    ButtonSegment(value: 'US', label: Text('美股')),
+                  ],
+                  selected: {_selectedMarket},
+                  onSelectionChanged: (values) {
+                    setState(() {
+                      _selectedMarket = values.first;
+                    });
+                    _loadData();
+                  },
+                  style: ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                    textStyle: WidgetStatePropertyAll(
+                      const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
         // Tab 選擇器
         Container(
           color: Theme.of(context).cardColor,

@@ -74,6 +74,7 @@ def get_daily_predictions(
 
 @router.get("/yesterday")
 def get_yesterday_predictions(
+    market: Optional[str] = Query(None, description="市場過濾: TW or US"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -82,13 +83,13 @@ def get_yesterday_predictions(
     """
     # 自動更新尚未驗證的預測結果
     try:
-        tracker.update_actual_results(db=db)
+        tracker.update_actual_results(db=db, market=market)
     except Exception as e:
         logger.warning(f"Auto-update prediction results failed: {e}")
 
     yesterday = get_previous_trading_date()
 
-    return tracker.get_daily_summary(db=db, target_date=yesterday)
+    return tracker.get_daily_summary(db=db, target_date=yesterday, market=market)
 
 
 @router.post("/update-results")
@@ -127,6 +128,7 @@ def get_stock_predictions(
 @router.get("/all-stocks")
 def get_all_stocks_statistics(
     days: int = Query(30, ge=1, le=365, description="統計天數"),
+    market: Optional[str] = Query(None, description="市場過濾: TW or US"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -142,15 +144,16 @@ def get_all_stocks_statistics(
     """
     # 自動更新尚未驗證的預測結果
     try:
-        tracker.update_actual_results(db=db)
+        tracker.update_actual_results(db=db, market=market)
     except Exception as e:
         logger.warning(f"Auto-update prediction results failed: {e}")
 
-    return tracker.get_all_stocks_statistics(db=db, days=days)
+    return tracker.get_all_stocks_statistics(db=db, days=days, market=market)
 
 
 @router.get("/today")
 def get_today_predictions(
+    market: Optional[str] = Query(None, description="市場過濾: TW or US"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -161,15 +164,15 @@ def get_today_predictions(
     """
     # 自動更新尚未驗證的預測結果
     try:
-        tracker.update_actual_results(db=db)
+        tracker.update_actual_results(db=db, market=market)
     except Exception as e:
         logger.warning(f"Auto-update prediction results failed: {e}")
 
     # 目標日期為今天的（可驗證的）
-    target_today = tracker.get_daily_summary(db=db, target_date=date.today())
+    target_today = tracker.get_daily_summary(db=db, target_date=date.today(), market=market)
 
     # 今天產生的預測（包含尚未到期的）
-    made_today = tracker.get_predictions_made_on(db=db, prediction_date=date.today())
+    made_today = tracker.get_predictions_made_on(db=db, prediction_date=date.today(), market=market)
 
     return {
         **target_today,
