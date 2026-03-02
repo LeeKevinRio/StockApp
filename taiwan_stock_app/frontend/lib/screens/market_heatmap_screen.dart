@@ -37,23 +37,24 @@ class _MarketHeatmapScreenState extends State<MarketHeatmapScreen>
     setState(() {
       _isLoading = true;
       _error = null;
+      _rankingsData = null;
     });
 
     try {
       final api = context.read<ApiService>();
       final market = context.read<MarketProvider>().marketCode;
-      final results = await Future.wait([
-        api.getMarketHeatmap(market: market),
-        api.getMarketRankings(market: market, category: _rankCategory),
-      ]);
 
+      // 先載入 heatmap（通常很快），讓 UI 先顯示
+      final heatmap = await api.getMarketHeatmap(market: market);
       if (mounted) {
         setState(() {
-          _heatmapData = results[0];
-          _rankingsData = results[1];
+          _heatmapData = heatmap;
           _isLoading = false;
         });
       }
+
+      // 背景載入 rankings（首次冷啟動可能需要 30 秒）
+      _loadRankings(api, market);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -61,6 +62,23 @@ class _MarketHeatmapScreenState extends State<MarketHeatmapScreen>
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _loadRankings(ApiService api, String market) async {
+    try {
+      final rankings = await api.getMarketRankings(
+        market: market,
+        category: _rankCategory,
+      );
+      if (mounted) {
+        setState(() {
+          _rankingsData = rankings;
+        });
+      }
+    } catch (e) {
+      // Rankings 載入失敗不影響 heatmap 顯示
+      debugPrint('Rankings load failed: $e');
     }
   }
 
@@ -259,6 +277,16 @@ class _MarketHeatmapScreenState extends State<MarketHeatmapScreen>
   }
 
   Widget _buildRankingsList() {
+    if (_rankingsData == null) {
+      return const Center(child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 12),
+          Text('排行榜載入中...', style: TextStyle(color: Colors.grey)),
+        ],
+      ));
+    }
     final stocks = (_rankingsData?['stocks'] as List?) ?? [];
     if (stocks.isEmpty) {
       return const Center(child: Text('暫無數據'));
