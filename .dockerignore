@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+
+# Frontend (不需要在後端 Docker 中)
+taiwan_stock_app/frontend
+
+# IDE
+.vscode
+.idea
+.claude
+
+# Database files
+*.db
+*.sqlite3
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+
+# Environment
+taiwan_stock_app/backend/.env
+taiwan_stock_app/backend/.env.*
+!taiwan_stock_app/backend/.env.example
+
+# Docs
+doc/
+prompts/
+*.md
+
+# Test files
+taiwan_stock_app/backend/tests/
+test_*.py
+test_*.html
+test_*.json
+
+# Misc
+nul
+taiwan_stock_app/backend/nul
+taiwan_stock_app/backend/test.db
+taiwan_stock_app/backend/env.txt
