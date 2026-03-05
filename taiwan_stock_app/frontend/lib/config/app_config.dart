@@ -7,14 +7,19 @@ class AppConfig {
     defaultValue: '',
   );
 
+  /// Railway 雲端後端 URL
+  static const String _railwayUrl = 'https://stockapp-production-0b90.up.railway.app';
+
   /// 根據平台自動選擇 API base URL
-  /// Android 模擬器的 localhost 指向模擬器自己，要用 10.0.2.2 連 host
+  /// Web/本機開發 → localhost | Android 模擬器 → 10.0.2.2 | iOS 真機 → Railway 雲端
   static String get apiBaseUrl {
     if (_envApiBaseUrl.isNotEmpty) return _envApiBaseUrl;
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    if (kIsWeb) return 'http://localhost:8000';
+    if (defaultTargetPlatform == TargetPlatform.android) {
       return 'http://10.0.2.2:8000';
     }
-    return 'http://localhost:8000';
+    // iOS 真機連不到 localhost，預設走 Railway 雲端
+    return _railwayUrl;
   }
 
   /// Web 用 Google Client ID（透過 --dart-define=GOOGLE_CLIENT_ID=xxx 傳入）
