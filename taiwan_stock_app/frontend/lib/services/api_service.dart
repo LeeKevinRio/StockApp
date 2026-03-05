@@ -1336,6 +1336,46 @@ class ApiService {
     }
     throw TimeoutException('請求逾時，請檢查網路連線');
   }
+
+  // ===== 策略回測 =====
+
+  /// 取得可用策略列表
+  Future<List<Map<String, dynamic>>> getBacktestStrategies() async {
+    final url = Uri.parse('$baseUrl/api/strategy-backtest/strategies');
+    final response = await _get(url, headers: _headers);
+    _checkResponse(response);
+    final data = _safeJsonDecode(response.body);
+    final list = data['strategies'] as List<dynamic>? ?? [];
+    return list.cast<Map<String, dynamic>>();
+  }
+
+  /// 執行策略回測
+  Future<Map<String, dynamic>> runBacktest({
+    required String stockId,
+    required String strategy,
+    required String startDate,
+    required String endDate,
+    String market = 'TW',
+    Map<String, dynamic> params = const {},
+    double initialCapital = 1000000,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/strategy-backtest/run');
+    final response = await _post(
+      url,
+      headers: _headers,
+      body: jsonEncode({
+        'stock_id': stockId,
+        'market': market,
+        'strategy': strategy,
+        'params': params,
+        'start_date': startDate,
+        'end_date': endDate,
+        'initial_capital': initialCapital,
+      }),
+    );
+    _checkResponse(response);
+    return _safeJsonDecode(response.body) as Map<String, dynamic>;
+  }
 }
 
 /// API 錯誤類型

@@ -38,6 +38,7 @@ import 'screens/about_screen.dart';
 import 'screens/broker_screen.dart';
 import 'screens/broker_link_screen.dart';
 import 'screens/ai_settings_screen.dart';
+import 'screens/backtest_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -122,6 +123,7 @@ class MyApp extends StatelessWidget {
               '/calendar': (context) => const CalendarScreen(),
               '/stock-compare': (context) => const StockCompareScreen(),
               '/trading-diary': (context) => const TradingDiaryScreen(),
+              '/backtest': (context) => const BacktestScreen(),
               '/privacy': (context) => const PrivacyPolicyScreen(),
               '/terms': (context) => const TermsScreen(),
               '/settings': (context) => const SettingsScreen(),
