@@ -16,6 +16,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
   Map<String, dynamic>? _todayData;
   Map<String, dynamic>? _allStocksData;
   bool _isLoading = true;
+  bool _isGenerating = false; // 正在背景批次生成預測
   String? _error;
   int _selectedDays = 30;
   int _selectedTab = 0; // 0: 概覽, 1: 依股票
@@ -24,7 +25,43 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadDataAndGenerate();
+  }
+
+  /// 進入頁面時：先觸發批次預測（generate_missing），再載入統計資料
+  Future<void> _loadDataAndGenerate() async {
+    setState(() {
+      _isLoading = true;
+      _isGenerating = true;
+      _error = null;
+    });
+
+    try {
+      final apiService = context.read<ApiService>();
+
+      // 1. 先觸發批次預測生成（會為所有自選股產生今日缺少的預測）
+      try {
+        await apiService.getAISuggestions(generateMissing: true);
+      } catch (e) {
+        // 批次生成失敗不阻擋頁面載入，僅 log
+        debugPrint('批次預測生成失敗: $e');
+      }
+
+      if (mounted) {
+        setState(() => _isGenerating = false);
+      }
+
+      // 2. 載入統計資料（此時已包含剛生成的預測）
+      await _loadData();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+          _isGenerating = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadData() async {
@@ -79,12 +116,23 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
+            onPressed: _loadDataAndGenerate,
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  if (_isGenerating) ...[
+                    const SizedBox(height: 16),
+                    const Text('正在為自選股生成今日預測...', style: TextStyle(color: Colors.grey)),
+                  ],
+                ],
+              ),
+            )
           : _error != null
               ? _buildError()
               : _buildContent(),
@@ -103,7 +151,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
           Text(_error!, textAlign: TextAlign.center),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed: _loadData,
+            onPressed: _loadDataAndGenerate,
             icon: const Icon(Icons.refresh),
             label: const Text('重試'),
           ),
@@ -210,7 +258,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
         // 內容區域
         Expanded(
           child: RefreshIndicator(
-            onRefresh: _loadData,
+            onRefresh: _loadDataAndGenerate,
             child: _selectedTab == 0 ? _buildOverviewTab() : _buildStocksTab(),
           ),
         ),
