@@ -390,7 +390,7 @@ class _ScreenerScreenState extends State<ScreenerScreen> {
             const SizedBox(height: 8),
             Text(
               '或選擇快速篩選策略',
-              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+              style: TextStyle(color: Theme.of(context).hintColor, fontSize: 14),
             ),
           ],
         ),
@@ -461,7 +461,7 @@ class _ScreenerScreenState extends State<ScreenerScreen> {
                         ),
                         Text(
                           '${stock.stockId}${stock.industry != null ? ' • ${stock.industry}' : ''}',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                          style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 12),
                         ),
                       ],
                     ),
@@ -483,7 +483,7 @@ class _ScreenerScreenState extends State<ScreenerScreen> {
                 const SizedBox(height: 8),
                 Text(
                   '市值: ${stock.formattedMarketCap}',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 12),
                 ),
               ],
             ],

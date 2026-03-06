@@ -138,7 +138,7 @@ class _BrokerLinkScreenState extends State<BrokerLinkScreen> {
               ? (_step > step
                   ? const Icon(Icons.check, size: 16, color: Colors.white)
                   : Text('${step + 1}', style: const TextStyle(color: Colors.white, fontSize: 12)))
-              : Text('${step + 1}', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+              : Text('${step + 1}', style: TextStyle(color: Theme.of(context).hintColor, fontSize: 12)),
         ),
         const SizedBox(height: 4),
         Text(label, style: TextStyle(fontSize: 11, color: isActive ? theme.colorScheme.primary : Colors.grey)),

@@ -187,7 +187,7 @@ class _NotificationList extends StatelessWidget {
             Text(
               emptyMessage,
               style: TextStyle(
-                color: Colors.grey.shade600,
+                color: Theme.of(context).textTheme.bodySmall?.color,
                 fontSize: 16,
               ),
             ),

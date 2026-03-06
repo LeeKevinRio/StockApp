@@ -368,7 +368,7 @@ class _SocialScreenState extends State<SocialScreen>
               Flexible(
                 child: Text(
                   stock.stockName!,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 14),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -453,7 +453,7 @@ class _SocialScreenState extends State<SocialScreen>
                     children: [
                       Text(
                         post.board ?? (isTaiwan ? 'PTT' : 'Reddit'),
-                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                        style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
                       ),
                       const SizedBox(width: 8),
                       if (isTaiwan) ...[
@@ -484,14 +484,14 @@ class _SocialScreenState extends State<SocialScreen>
                           const SizedBox(width: 2),
                           Text(
                             '${post.commentCount}',
-                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                            style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
                           ),
                         ],
                       ],
                       const Spacer(),
                       Text(
                         post.timeAgo,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                        style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
                       ),
                       const SizedBox(width: 4),
                       const Icon(Icons.open_in_new, size: 12, color: Colors.grey),

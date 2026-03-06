@@ -18,9 +18,9 @@ class SkeletonLoader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 兩個主題都是深色背景，統一使用深色骨架
-    final baseColor = Colors.grey.shade800;
-    final highlightColor = Colors.grey.shade700;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDark ? Colors.grey.shade800 : Colors.grey.shade300;
+    final highlightColor = isDark ? Colors.grey.shade700 : Colors.grey.shade100;
 
     return Shimmer.fromColors(
       baseColor: baseColor,
