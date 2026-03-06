@@ -357,7 +357,7 @@ class SuggestionCard extends StatelessWidget {
             // 隔天漲跌預測區塊
             if (suggestion.nextDayPrediction != null) ...[
               const SizedBox(height: 12),
-              _buildNextDayPrediction(suggestion.nextDayPrediction!, currencySymbol, isTaiwan),
+              _buildNextDayPrediction(context, suggestion.nextDayPrediction!, currencySymbol, isTaiwan),
             ],
             if (suggestion.currentPrice != null ||
                 suggestion.targetPrice != null ||
@@ -503,7 +503,7 @@ class SuggestionCard extends StatelessWidget {
   }
 
   /// 建構隔天預測區塊
-  Widget _buildNextDayPrediction(NextDayPrediction prediction, String currency, bool isTaiwan) {
+  Widget _buildNextDayPrediction(BuildContext context, NextDayPrediction prediction, String currency, bool isTaiwan) {
     final isUp = prediction.direction == 'UP';
     final directionColor = isUp ? Colors.red : Colors.green;
     final directionIcon = isUp ? Icons.arrow_upward : Icons.arrow_downward;
