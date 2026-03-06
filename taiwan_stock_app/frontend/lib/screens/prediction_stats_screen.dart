@@ -1438,7 +1438,7 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
                     const SizedBox(height: 4),
                     Text(
                       '請先查看股票的 AI 建議，系統會自動記錄預測',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
                     ),
                   ],
                 ),

@@ -233,7 +233,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   label,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey[600],
+                    color: Theme.of(context).textTheme.bodySmall?.color,
                   ),
                 ),
               ],
@@ -264,7 +264,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 Text(
                   '共 ${_users.length} 位用戶',
                   style: TextStyle(
-                    color: Colors.grey[600],
+                    color: Theme.of(context).textTheme.bodySmall?.color,
                   ),
                 ),
               ],
@@ -356,7 +356,7 @@ class _AdminScreenState extends State<AdminScreen> {
                     fontWeight: FontWeight.bold,
                     color: user['subscription_tier'] == 'pro'
                         ? Colors.black
-                        : Colors.grey.shade700,
+                        : Theme.of(context).hintColor,
                   ),
                 ),
               ),

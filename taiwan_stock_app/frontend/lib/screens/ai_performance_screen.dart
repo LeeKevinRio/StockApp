@@ -93,7 +93,7 @@ class _AIPerformanceScreenState extends State<AIPerformanceScreen> {
           const SizedBox(height: 16),
           Text(
             '暫無績效數據',
-            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 16, color: Theme.of(context).textTheme.bodySmall?.color),
           ),
         ],
       ),
@@ -208,7 +208,7 @@ class _AIPerformanceScreenState extends State<AIPerformanceScreen> {
               '評估覆蓋率: ${report.evaluationCoverage.toStringAsFixed(1)}%',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[600],
+                color: Theme.of(context).textTheme.bodySmall?.color,
               ),
             ),
           ],
@@ -231,7 +231,7 @@ class _AIPerformanceScreenState extends State<AIPerformanceScreen> {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey[600],
+            color: Theme.of(context).textTheme.bodySmall?.color,
           ),
         ),
       ],
@@ -335,7 +335,7 @@ class _AIPerformanceScreenState extends State<AIPerformanceScreen> {
             '($total)',
             style: TextStyle(
               fontSize: 12,
-              color: Colors.grey[600],
+              color: Theme.of(context).textTheme.bodySmall?.color,
             ),
           ),
         ],
@@ -412,7 +412,7 @@ class _AIPerformanceScreenState extends State<AIPerformanceScreen> {
             '(${conf.total})',
             style: TextStyle(
               fontSize: 12,
-              color: Colors.grey[600],
+              color: Theme.of(context).textTheme.bodySmall?.color,
             ),
           ),
         ],
@@ -464,7 +464,7 @@ class _AIPerformanceScreenState extends State<AIPerformanceScreen> {
                           return Text(
                             '${value.toInt()}%',
                             style: TextStyle(
-                              color: Colors.grey[600],
+                              color: Theme.of(context).textTheme.bodySmall?.color,
                               fontSize: 10,
                             ),
                           );
@@ -484,7 +484,7 @@ class _AIPerformanceScreenState extends State<AIPerformanceScreen> {
                           return Text(
                             '${date.month}/${date.day}',
                             style: TextStyle(
-                              color: Colors.grey[600],
+                              color: Theme.of(context).textTheme.bodySmall?.color,
                               fontSize: 10,
                             ),
                           );

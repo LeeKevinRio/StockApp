@@ -85,7 +85,7 @@ class _IndustryTrendsScreenState extends State<IndustryTrendsScreen> {
                               ? '請檢查網路連線或後端服務狀態。'
                               : '伺服器發生錯誤，請稍後再試。',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey[600]),
+                      style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
@@ -127,7 +127,7 @@ class _IndustryTrendsScreenState extends State<IndustryTrendsScreen> {
                 // 分析日期
                 Text(
                   '分析日期：${trends.analysisDate}',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 12),
                 ),
                 const SizedBox(height: 16),
 
@@ -183,7 +183,7 @@ class _IndustryTrendsScreenState extends State<IndustryTrendsScreen> {
                     trends.disclaimer,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey[400],
+                      color: Theme.of(context).hintColor,
                       height: 1.5,
                     ),
                   ),
@@ -294,7 +294,7 @@ class _IndustryTrendsScreenState extends State<IndustryTrendsScreen> {
             const SizedBox(height: 12),
             Text(
               industry.reasoning,
-              style: TextStyle(color: Colors.grey[700], height: 1.5),
+              style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, height: 1.5),
             ),
             const SizedBox(height: 12),
             _buildTagList('關鍵因素', industry.keyFactors, Colors.blue),
@@ -354,7 +354,7 @@ class _IndustryTrendsScreenState extends State<IndustryTrendsScreen> {
             const SizedBox(height: 12),
             Text(
               industry.reasoning,
-              style: TextStyle(color: Colors.grey[700], height: 1.5),
+              style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, height: 1.5),
             ),
             const SizedBox(height: 12),
             _buildTagList('關鍵因素', industry.keyFactors, Colors.blue),
@@ -378,7 +378,7 @@ class _IndustryTrendsScreenState extends State<IndustryTrendsScreen> {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey[600],
+            color: Theme.of(context).textTheme.bodySmall?.color,
             fontWeight: FontWeight.w500,
           ),
         ),
