@@ -149,7 +149,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           const SizedBox(height: 16),
           Text(
             p.subtitle,
-            style: TextStyle(fontSize: 16, color: Colors.grey[600], height: 1.5),
+            style: const TextStyle(fontSize: 16, height: 1.5),
             textAlign: TextAlign.center,
           ),
         ],
@@ -277,9 +277,8 @@ class _DisclaimerItem extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 14,
-              color: Colors.grey.shade800,
               height: 1.5,
             ),
           ),

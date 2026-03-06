@@ -117,7 +117,7 @@ class _AISuggestionsScreenState extends State<AISuggestionsScreen>
                               ? '請檢查網路連線或確認後端服務是否已啟動。'
                               : '伺服器發生錯誤，請稍後再試。',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey[600]),
+                      style: TextStyle(color: Theme.of(context).hintColor),
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
@@ -287,7 +287,7 @@ class SuggestionCard extends StatelessWidget {
                         suggestion.reportDate.toString().substring(0, 10),
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey[600],
+                          color: Theme.of(context).textTheme.bodySmall?.color,
                         ),
                       ),
                     ],
@@ -414,7 +414,7 @@ class SuggestionCard extends StatelessWidget {
             Text(
               suggestion.reasoning,
               style: TextStyle(
-                color: Colors.grey[700],
+                color: Theme.of(context).textTheme.bodyMedium?.color,
                 height: 1.5,
               ),
             ),
@@ -456,7 +456,7 @@ class SuggestionCard extends StatelessWidget {
                               factor.factor,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey[700],
+                                color: Theme.of(context).textTheme.bodySmall?.color,
                               ),
                             ),
                           ],
@@ -574,7 +574,7 @@ class SuggestionCard extends StatelessWidget {
                   children: [
                     Text(
                       isTaiwan ? '預測漲跌幅' : 'Change',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -594,7 +594,7 @@ class SuggestionCard extends StatelessWidget {
                   children: [
                     Text(
                       isTaiwan ? '預測信心度' : 'Confidence',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -615,7 +615,7 @@ class SuggestionCard extends StatelessWidget {
                     children: [
                       Text(
                         isTaiwan ? '預測區間' : 'Range',
-                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -638,7 +638,7 @@ class SuggestionCard extends StatelessWidget {
               prediction.reasoning,
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.grey.shade600,
+                color: Theme.of(context).textTheme.bodySmall?.color,
                 fontStyle: FontStyle.italic,
               ),
             ),

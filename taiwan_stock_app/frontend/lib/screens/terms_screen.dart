@@ -30,8 +30,8 @@ class TermsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '最後更新日期：2025 年 1 月 1 日',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+              '最後更新日期：2026 年 2 月',
+              style: TextStyle(fontSize: 14, color: Theme.of(context).textTheme.bodySmall?.color),
             ),
             const SizedBox(height: 24),
             _buildSection(

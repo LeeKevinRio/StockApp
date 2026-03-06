@@ -38,7 +38,7 @@ class AboutScreen extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   '版本 1.0.0',
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 14, color: theme.textTheme.bodySmall?.color),
                 ),
               ],
             ),
@@ -113,7 +113,7 @@ class AboutScreen extends StatelessWidget {
           Center(
             child: Text(
               '© 2026 台股智慧助手. All rights reserved.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              style: TextStyle(fontSize: 12, color: theme.textTheme.bodySmall?.color),
             ),
           ),
           const SizedBox(height: 16),
@@ -133,10 +133,10 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.bold,
-          color: Colors.grey,
+          color: Theme.of(context).colorScheme.primary,
         ),
       ),
     );
@@ -178,7 +178,7 @@ class _InfoRow extends StatelessWidget {
             width: 100,
             child: Text(
               label,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              style: TextStyle(fontSize: 13, color: Theme.of(context).textTheme.bodySmall?.color),
             ),
           ),
           Expanded(

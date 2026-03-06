@@ -173,7 +173,7 @@ def privacy_policy():
 <style>body{font-family:-apple-system,sans-serif;max-width:800px;margin:0 auto;padding:20px;line-height:1.8;color:#333}h1{color:#1a73e8}h2{color:#444;margin-top:2em}</style></head>
 <body>
 <h1>隱私權政策</h1>
-<p>最後更新日期：2026 年 2 月</p>
+<p>最後更新日期：2026 年 3 月</p>
 
 <h2>1. 資料蒐集</h2>
 <p>台股智慧助手（以下簡稱「本應用」）蒐集以下資料以提供服務：</p>

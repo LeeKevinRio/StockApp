@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'providers/auth_provider.dart';
@@ -104,8 +105,8 @@ class MyApp extends StatelessWidget {
         builder: (context, themeProvider, child) {
           return MaterialApp(
             title: '台股智慧助手',
-            theme: AppTheme.defaultTheme,
-            darkTheme: AppTheme.darkTheme,
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.defaultTheme,
             themeMode: themeProvider.themeMode,
             debugShowCheckedModeBanner: false,
             initialRoute: '/splash',
@@ -176,6 +177,18 @@ class _SplashScreenState extends State<_SplashScreen> {
   }
 
   Future<void> _checkAuth() async {
+    // 首次啟動導向 Onboarding（含投資免責聲明，金融類 App Store 要求）
+    final prefs = await SharedPreferences.getInstance();
+    final hasOnboarded = prefs.getBool('onboarding_completed') ?? false;
+
+    if (!mounted) return;
+
+    if (!hasOnboarded) {
+      await prefs.setBool('onboarding_completed', true);
+      Navigator.of(context).pushReplacementNamed('/onboarding');
+      return;
+    }
+
     final authProvider = context.read<AuthProvider>();
     final isLoggedIn = await authProvider.checkAuth();
 

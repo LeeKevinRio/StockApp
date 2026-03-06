@@ -269,16 +269,54 @@ def delete_account(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """刪除使用者帳號及所有關聯資料"""
-    from app.models import Portfolio, AIReport
+    """刪除使用者帳號及所有關聯資料（Apple App Store 要求完整資料刪除）"""
+    from app.models import (
+        Portfolio, Position, Transaction, AIReport, AIChatHistory,
+        PriceAlert, Watchlist, WatchlistGroup,
+        TradingDiaryEntry, VirtualAccount, VirtualPosition, VirtualOrder,
+        BrokerAccount, BrokerPosition, UserAIConfig, AIUsageDaily,
+    )
 
     user_id = current_user.id
 
-    # 手動刪除沒有 ondelete CASCADE 的關聯資料
+    # 刪除所有關聯資料（按外鍵依賴順序）
+    # 投資組合相關
+    portfolios = db.query(Portfolio).filter(Portfolio.user_id == user_id).all()
+    for p in portfolios:
+        db.query(Transaction).filter(Transaction.portfolio_id == p.id).delete()
+        db.query(Position).filter(Position.portfolio_id == p.id).delete()
     db.query(Portfolio).filter(Portfolio.user_id == user_id).delete()
-    db.query(AIReport).filter(AIReport.user_id == user_id).delete()
 
-    # 刪除使用者（其他有 CASCADE 的關聯會自動刪除）
+    # AI 相關
+    db.query(AIReport).filter(AIReport.user_id == user_id).delete()
+    db.query(AIChatHistory).filter(AIChatHistory.user_id == user_id).delete()
+    db.query(AIUsageDaily).filter(AIUsageDaily.user_id == user_id).delete()
+    db.query(UserAIConfig).filter(UserAIConfig.user_id == user_id).delete()
+
+    # 自選股
+    db.query(Watchlist).filter(Watchlist.user_id == user_id).delete()
+    db.query(WatchlistGroup).filter(WatchlistGroup.user_id == user_id).delete()
+
+    # 警示
+    db.query(PriceAlert).filter(PriceAlert.user_id == user_id).delete()
+
+    # 交易日記
+    db.query(TradingDiaryEntry).filter(TradingDiaryEntry.user_id == user_id).delete()
+
+    # 模擬交易
+    accounts = db.query(VirtualAccount).filter(VirtualAccount.user_id == user_id).all()
+    for acc in accounts:
+        db.query(VirtualOrder).filter(VirtualOrder.account_id == acc.id).delete()
+        db.query(VirtualPosition).filter(VirtualPosition.account_id == acc.id).delete()
+    db.query(VirtualAccount).filter(VirtualAccount.user_id == user_id).delete()
+
+    # 券商
+    broker_accounts = db.query(BrokerAccount).filter(BrokerAccount.user_id == user_id).all()
+    for ba in broker_accounts:
+        db.query(BrokerPosition).filter(BrokerPosition.broker_account_id == ba.id).delete()
+    db.query(BrokerAccount).filter(BrokerAccount.user_id == user_id).delete()
+
+    # 刪除使用者
     db.delete(current_user)
     db.commit()
 

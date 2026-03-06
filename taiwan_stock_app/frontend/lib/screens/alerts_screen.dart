@@ -104,7 +104,7 @@ class _AlertsScreenState extends State<AlertsScreen>
               '暫無告警',
               style: TextStyle(
                 fontSize: 16,
-                color: Colors.grey[600],
+                color: Theme.of(context).hintColor,
               ),
             ),
           ],
@@ -209,7 +209,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                           Text(
                             alert.alertTypeName,
                             style: TextStyle(
-                              color: Colors.grey[600],
+                              color: Theme.of(context).textTheme.bodySmall?.color,
                               fontSize: 12,
                             ),
                           ),
@@ -278,7 +278,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                   Text(
                     alert.notes!,
                     style: TextStyle(
-                      color: Colors.grey[600],
+                      color: Theme.of(context).textTheme.bodySmall?.color,
                       fontSize: 13,
                     ),
                   ),
@@ -288,7 +288,7 @@ class _AlertsScreenState extends State<AlertsScreen>
                   Text(
                     '觸發時間: ${_formatDateTime(alert.triggeredAt!)}',
                     style: TextStyle(
-                      color: Colors.grey[500],
+                      color: Theme.of(context).hintColor,
                       fontSize: 12,
                     ),
                   ),

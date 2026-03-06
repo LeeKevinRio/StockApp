@@ -63,5 +63,17 @@
 		<string>zh-Hant</string>
 		<string>en</string>
 	</array>
+	<!-- App Transport Security — 允許 HTTPS（預設），開發時允許 localhost HTTP -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<!-- 通知權限說明 -->
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>台股智慧助手需要傳送通知來提醒您股價警示和 AI 分析結果。</string>
+	<!-- 相機權限（未來擴充用） -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

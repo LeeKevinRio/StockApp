@@ -131,14 +131,14 @@ class _PortfolioScreenState extends State<PortfolioScreen>
             '尚無投資組合',
             style: TextStyle(
               fontSize: 18,
-              color: Colors.grey[600],
+              color: Theme.of(context).hintColor,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             '點擊右上角 + 創建您的第一個投資組合',
             style: TextStyle(
-              color: Colors.grey[500],
+              color: Theme.of(context).textTheme.bodySmall?.color,
             ),
           ),
           const SizedBox(height: 24),
@@ -328,7 +328,7 @@ class _PortfolioScreenState extends State<PortfolioScreen>
           children: [
             Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
-            Text('暫無持倉', style: TextStyle(color: Colors.grey[600])),
+            Text('暫無持倉', style: TextStyle(color: Theme.of(context).hintColor)),
           ],
         ),
       );
@@ -375,7 +375,7 @@ class _PortfolioScreenState extends State<PortfolioScreen>
                         Text(
                           '${position.quantity} 股',
                           style: TextStyle(
-                            color: Colors.grey[600],
+                            color: Theme.of(context).textTheme.bodySmall?.color,
                             fontSize: 13,
                           ),
                         ),
@@ -438,7 +438,7 @@ class _PortfolioScreenState extends State<PortfolioScreen>
         Text(
           label,
           style: TextStyle(
-            color: Colors.grey[600],
+            color: Theme.of(context).textTheme.bodySmall?.color,
             fontSize: 12,
           ),
         ),
@@ -462,7 +462,7 @@ class _PortfolioScreenState extends State<PortfolioScreen>
           children: [
             Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
-            Text('暫無交易記錄', style: TextStyle(color: Colors.grey[600])),
+            Text('暫無交易記錄', style: TextStyle(color: Theme.of(context).hintColor)),
           ],
         ),
       );
@@ -518,7 +518,7 @@ class _PortfolioScreenState extends State<PortfolioScreen>
               _formatDate(tx.transactionDate),
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[500],
+                color: Theme.of(context).hintColor,
               ),
             ),
           ],

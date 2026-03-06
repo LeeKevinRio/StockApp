@@ -252,14 +252,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Image.network(
-                            'https://www.google.com/favicon.ico',
-                            width: 20,
-                            height: 20,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(Icons.g_mobiledata, size: 24);
-                            },
-                          ),
+                        : const Icon(Icons.g_mobiledata, size: 24),
                     label: const Text('使用 Google 帳號登入'),
                   ),
                 ),
