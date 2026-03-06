@@ -535,7 +535,7 @@ class _PortfolioScreenState extends State<PortfolioScreen>
           children: [
             Icon(Icons.pie_chart_outline, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
-            Text('暫無配置數據', style: TextStyle(color: Colors.grey[600])),
+            Text('暫無配置數據', style: TextStyle(color: Theme.of(context).hintColor)),
           ],
         ),
       );
@@ -618,7 +618,7 @@ class _PortfolioScreenState extends State<PortfolioScreen>
             Icon(Icons.analytics_outlined, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text('需要至少有持倉和交易記錄才能進行分析',
-                style: TextStyle(color: Colors.grey[600])),
+                style: TextStyle(color: Theme.of(context).hintColor)),
           ],
         ),
       );
@@ -910,7 +910,7 @@ class _PortfolioScreenState extends State<PortfolioScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+              Text(label, style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 14)),
               if (subtitle != null)
                 Text(subtitle, style: TextStyle(color: color ?? Colors.grey, fontSize: 11)),
             ],

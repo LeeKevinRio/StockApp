@@ -173,7 +173,7 @@ class _NewsScreenState extends State<NewsScreen>
             const SizedBox(height: 16),
             Text(
               'Loading $source news...',
-              style: const TextStyle(color: Colors.grey),
+              style: TextStyle(color: Theme.of(context).hintColor),
             ),
           ],
         ),
@@ -205,7 +205,7 @@ class _NewsScreenState extends State<NewsScreen>
           children: [
             const Icon(Icons.newspaper, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
-            Text(emptyMessage, style: const TextStyle(color: Colors.grey)),
+            Text(emptyMessage, style: TextStyle(color: Theme.of(context).hintColor)),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: onRefresh,
@@ -276,9 +276,9 @@ class _NewsScreenState extends State<NewsScreen>
                   if (news.publishedAt != null)
                     Text(
                       _formatDate(news.publishedAt!),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey,
+                        color: Theme.of(context).hintColor,
                       ),
                     ),
                 ],
@@ -299,7 +299,7 @@ class _NewsScreenState extends State<NewsScreen>
                   news.summary!,
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey[600],
+                    color: Theme.of(context).textTheme.bodySmall?.color,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -339,7 +339,7 @@ class _NewsScreenState extends State<NewsScreen>
                         'Tap to read',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.grey[400],
+                          color: Theme.of(context).hintColor,
                         ),
                       ),
                     ],

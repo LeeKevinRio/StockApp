@@ -166,7 +166,7 @@ class _TradingDiaryScreenState extends State<TradingDiaryScreen>
                       const SizedBox(height: 16),
                       Text(
                         _searchQuery.isNotEmpty ? '找不到符合的日記' : '尚無交易日記',
-                        style: const TextStyle(color: Colors.grey),
+                        style: TextStyle(color: Theme.of(context).hintColor),
                       ),
                     ],
                   ),
@@ -240,7 +240,7 @@ class _TradingDiaryScreenState extends State<TradingDiaryScreen>
                   Text(stockId, style: const TextStyle(fontWeight: FontWeight.bold)),
                 ],
                 const Spacer(),
-                Text(dateDisplay, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                Text(dateDisplay, style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor)),
                 PopupMenuButton<String>(
                   itemBuilder: (context) => [
                     const PopupMenuItem(value: 'delete', child: Text('刪除', style: TextStyle(color: Colors.red))),
@@ -281,7 +281,7 @@ class _TradingDiaryScreenState extends State<TradingDiaryScreen>
             // 筆記
             if (notes != null && notes.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text(notes, style: TextStyle(color: Colors.grey[700], height: 1.4)),
+              Text(notes, style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color, height: 1.4)),
             ],
             // 教訓
             if (lesson != null && lesson.isNotEmpty) ...[
@@ -506,7 +506,7 @@ class _TradingDiaryScreenState extends State<TradingDiaryScreen>
       ),
       child: Column(
         children: [
-          Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          Text(label, style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor)),
           const SizedBox(height: 4),
           Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
         ],
@@ -631,7 +631,7 @@ class _TradingDiaryScreenState extends State<TradingDiaryScreen>
               ],
             ),
             const SizedBox(height: 4),
-            Text('了解哪種情緒下交易表現最好', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            Text('了解哪種情緒下交易表現最好', style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
             const Divider(),
             ...emotionPnls.entries.map((e) {
               final avg = e.value.reduce((a, b) => a + b) / e.value.length;
@@ -666,7 +666,7 @@ class _TradingDiaryScreenState extends State<TradingDiaryScreen>
                           ),
                           Text(
                             '勝率 ${winRate.toStringAsFixed(0)}% (${e.value.length}筆)',
-                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                            style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
                           ),
                         ],
                       ),
