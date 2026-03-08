@@ -60,8 +60,8 @@ class Settings:
     # FRED API (宏觀經濟數據)
     FRED_API_KEY: str = os.getenv("FRED_API_KEY", "")
 
-    # CORS — 生產環境加入 Railway 域名（Web 前端部署時需要）
-    _default_cors = "http://localhost:5000,http://localhost:3000,http://localhost:8080,https://stockapp-production-0b90.up.railway.app"
+    # CORS — 生產環境加入雲端域名（Web 前端部署時需要）
+    _default_cors = "http://localhost:5000,http://localhost:3000,http://localhost:8080,https://stockapp-production-0b90.up.railway.app,https://stockapp-backend.onrender.com"
     CORS_ORIGINS: list = os.getenv("CORS_ORIGINS", _default_cors).split(",")
 
 

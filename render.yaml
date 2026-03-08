@@ -1,0 +1,36 @@
+# Render Blueprint — 自動部署設定
+# 使用方式：在 Render Dashboard 點 "New" → "Blueprint" → 連結此 repo
+# https://render.com/docs/infrastructure-as-code
+
+services:
+  - type: web
+    name: stockapp-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: singapore  # 離台灣最近的 Render 節點
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: PORT
+        value: "8000"
+      - key: DATABASE_URL
+        sync: false  # 部署時手動填入（使用現有 Railway PostgreSQL）
+      - key: JWT_SECRET
+        generateValue: true  # Render 自動生成安全密鑰
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: FINMIND_TOKEN
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: FRED_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: "http://localhost:5000,http://localhost:3000,http://localhost:8080"
+    healthCheckPath: /health

@@ -7,19 +7,25 @@ class AppConfig {
     defaultValue: '',
   );
 
-  /// Railway 雲端後端 URL
-  static const String _railwayUrl = 'https://stockapp-production-0b90.up.railway.app';
+  /// Render 雲端後端 URL
+  static const String _cloudUrl = 'https://stockapp-backend.onrender.com';
+
+  /// 是否使用本機後端（預設走雲端，本機開發用 --dart-define=USE_LOCAL=true）
+  static const bool _useLocal = bool.fromEnvironment('USE_LOCAL', defaultValue: false);
 
   /// 根據平台自動選擇 API base URL
-  /// Web/本機開發 → localhost | Android 模擬器 → 10.0.2.2 | iOS 真機 → Railway 雲端
+  /// 預設走 Render 雲端 | 本機開發加 --dart-define=USE_LOCAL=true 走 localhost
   static String get apiBaseUrl {
     if (_envApiBaseUrl.isNotEmpty) return _envApiBaseUrl;
-    if (kIsWeb) return 'http://localhost:8000';
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'http://10.0.2.2:8000';
+    if (_useLocal) {
+      if (kIsWeb) return 'http://localhost:8000';
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        return 'http://10.0.2.2:8000';
+      }
+      return 'http://localhost:8000';
     }
-    // iOS 真機連不到 localhost，預設走 Railway 雲端
-    return _railwayUrl;
+    // 預設走 Render 雲端後端
+    return _cloudUrl;
   }
 
   /// Web 用 Google Client ID（透過 --dart-define=GOOGLE_CLIENT_ID=xxx 傳入）
