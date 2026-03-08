@@ -8,7 +8,7 @@ class AppConfig {
   );
 
   /// Render 雲端後端 URL
-  static const String _cloudUrl = 'https://stockapp-backend.onrender.com';
+  static const String _cloudUrl = 'https://stockapp-backend-ein8.onrender.com';
 
   /// 是否使用本機後端（預設走雲端，本機開發用 --dart-define=USE_LOCAL=true）
   static const bool _useLocal = bool.fromEnvironment('USE_LOCAL', defaultValue: false);

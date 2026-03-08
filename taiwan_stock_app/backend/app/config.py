@@ -61,7 +61,7 @@ class Settings:
     FRED_API_KEY: str = os.getenv("FRED_API_KEY", "")
 
     # CORS — 生產環境加入雲端域名（Web 前端部署時需要）
-    _default_cors = "http://localhost:5000,http://localhost:3000,http://localhost:8080,https://stockapp-production-0b90.up.railway.app,https://stockapp-backend.onrender.com"
+    _default_cors = "http://localhost:5000,http://localhost:3000,http://localhost:8080,https://stockapp-production-0b90.up.railway.app,https://stockapp-backend-ein8.onrender.com"
     CORS_ORIGINS: list = os.getenv("CORS_ORIGINS", _default_cors).split(",")
 
 
