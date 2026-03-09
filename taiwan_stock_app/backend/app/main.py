@@ -160,7 +160,17 @@ def health_check():
         except Exception as e:
             logger.error(f"Health check DB error: {e}")
             db_status = "connection_failed"
-    return {"status": "healthy", "database": db_status}
+    # 額外檢查：資料表與使用者數量
+    table_info = {}
+    if engine is not None and db_status == "connected":
+        try:
+            with engine.connect() as conn:
+                for table in ["users", "watchlist_items", "portfolios"]:
+                    result = conn.execute(text(f"SELECT COUNT(*) FROM {table}"))
+                    table_info[table] = result.scalar()
+        except Exception:
+            table_info["error"] = "tables may not exist"
+    return {"status": "healthy", "database": db_status, "tables": table_info}
 
 
 @app.get("/privacy", response_class=HTMLResponse)
