@@ -29,6 +29,7 @@ _db_available = False
 engine = None
 try:
     from app.database import create_tables, engine
+    import app.models  # 確保所有 model 在 create_tables 前被 import
     _db_available = True
     print("=== Database module imported OK ===", flush=True)
 except Exception as e:
@@ -165,7 +166,7 @@ def health_check():
     if engine is not None and db_status == "connected":
         try:
             with engine.connect() as conn:
-                for table in ["users", "watchlist_items", "portfolios"]:
+                for table in ["users", "watchlist", "portfolios"]:
                     result = conn.execute(text(f"SELECT COUNT(*) FROM {table}"))
                     table_info[table] = result.scalar()
         except Exception:
