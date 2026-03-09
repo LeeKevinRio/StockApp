@@ -36,6 +36,7 @@ jobs:
         working-directory: taiwan_stock_app/frontend
         run: |
           flutter build web --release \
+            --base-href=/StockApp/ \
             --dart-define=API_BASE_URL=https://stockapp-backend-ein8.onrender.com
 
       - name: Upload artifact
