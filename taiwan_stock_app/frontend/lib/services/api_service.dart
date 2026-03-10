@@ -383,6 +383,35 @@ class ApiService {
     return _safeJsonDecode(response.body);
   }
 
+  // ==================== AI 潛力股掃描 ====================
+
+  /// 取得 AI 推薦潛力股（完整掃描）
+  Future<Map<String, dynamic>> getAIDiscovery({
+    String market = 'TW',
+    bool refresh = false,
+    int topN = 5,
+  }) async {
+    final params = <String, String>{
+      'market': market,
+      'refresh': refresh.toString(),
+      'top_n': topN.toString(),
+    };
+    final uri = Uri.parse('$baseUrl/api/ai/discovery').replace(queryParameters: params);
+    final response = await _get(uri, headers: _headers);
+    _checkResponse(response);
+    return _safeJsonDecode(response.body);
+  }
+
+  /// 快速取得 AI 推薦（僅讀快取，不觸發掃描）
+  Future<Map<String, dynamic>> getAIDiscoveryQuick({String market = 'TW'}) async {
+    final uri = Uri.parse('$baseUrl/api/ai/discovery/quick').replace(
+      queryParameters: {'market': market},
+    );
+    final response = await _get(uri, headers: _headers);
+    _checkResponse(response);
+    return _safeJsonDecode(response.body);
+  }
+
   // ==================== 預測準確度追蹤 ====================
 
   Future<Map<String, dynamic>> getPredictionStatistics({int days = 30, String? market, String? stockId}) async {

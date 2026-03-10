@@ -6,6 +6,7 @@ import '../providers/notification_provider.dart';
 import '../widgets/dashboard/market_overview_card.dart';
 import '../widgets/dashboard/watchlist_summary_card.dart';
 import '../widgets/dashboard/ai_picks_card.dart';
+import '../widgets/dashboard/ai_discovery_card.dart';
 import '../widgets/dashboard/quick_actions_card.dart';
 import '../widgets/common/skeleton_loader.dart';
 
@@ -216,11 +217,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           const SizedBox(height: 12),
 
-          // AI 精選推薦卡片
+          // AI 精選推薦卡片（自選股分析）
           AIPicksCard(
             picks: dashboardProvider.aiPicks,
             isLoading: dashboardProvider.isLoadingAI,
             onViewAll: () => _navigateToAISuggestions(context),
+            onPickTap: (pick) => _navigateToStock(context, pick.stockId, pick.market),
+          ),
+
+          const SizedBox(height: 12),
+
+          // AI 潛力股掃描卡片（全市場掃描）
+          AIDiscoveryCard(
+            picks: dashboardProvider.discoveryPicks,
+            marketSummary: dashboardProvider.discoveryMarketSummary,
+            isLoading: dashboardProvider.isLoadingDiscovery,
+            hasScanned: dashboardProvider.hasScannedDiscovery,
+            onScan: () => dashboardProvider.scanDiscovery(),
+            onRefresh: () => dashboardProvider.scanDiscovery(refresh: true),
             onPickTap: (pick) => _navigateToStock(context, pick.stockId, pick.market),
           ),
 

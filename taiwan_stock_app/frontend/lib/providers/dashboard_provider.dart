@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/dashboard_data.dart';
 import '../models/watchlist_item.dart';
 import '../models/ai_suggestion.dart';
+import '../widgets/dashboard/ai_discovery_card.dart';
 import '../services/api_service.dart';
 
 /// Dashboard 儀表板狀態管理 Provider
@@ -11,9 +12,15 @@ class DashboardProvider with ChangeNotifier {
   DashboardData? _dashboardData;
   bool _isLoading = false;
   bool _isLoadingAI = false;
+  bool _isLoadingDiscovery = false;
+  bool _hasScannedDiscovery = false;
   String? _error;
   String _currentMarket = 'TW';
   DateTime? _lastRefresh;
+
+  // AI 潛力股掃描結果
+  List<AIDiscoveryPick> _discoveryPicks = [];
+  String _discoveryMarketSummary = '';
 
   DashboardProvider(this._apiService);
 
@@ -25,6 +32,18 @@ class DashboardProvider with ChangeNotifier {
 
   /// AI 精選是否正在加載
   bool get isLoadingAI => _isLoadingAI;
+
+  /// AI 潛力股是否正在加載
+  bool get isLoadingDiscovery => _isLoadingDiscovery;
+
+  /// 是否已掃描過
+  bool get hasScannedDiscovery => _hasScannedDiscovery;
+
+  /// AI 潛力股推薦
+  List<AIDiscoveryPick> get discoveryPicks => _discoveryPicks;
+
+  /// 市場掃描摘要
+  String get discoveryMarketSummary => _discoveryMarketSummary;
 
   /// 錯誤信息
   String? get error => _error;
@@ -54,7 +73,59 @@ class DashboardProvider with ChangeNotifier {
   void setMarket(String market) {
     if (_currentMarket != market) {
       _currentMarket = market;
+      _discoveryPicks = [];
+      _discoveryMarketSummary = '';
+      _hasScannedDiscovery = false;
       loadDashboard(forceRefresh: true);
+    }
+  }
+
+  /// 觸發 AI 潛力股掃描
+  Future<void> scanDiscovery({bool refresh = false}) async {
+    _isLoadingDiscovery = true;
+    notifyListeners();
+
+    try {
+      final data = await _apiService.getAIDiscovery(
+        market: _currentMarket,
+        refresh: refresh,
+        topN: 5,
+      );
+      _discoveryPicks = (data['picks'] as List<dynamic>?)
+              ?.map((e) => AIDiscoveryPick.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [];
+      _discoveryMarketSummary = data['market_summary'] as String? ?? '';
+      _hasScannedDiscovery = true;
+    } catch (e) {
+      if (kDebugMode) {
+        print('AI Discovery scan error: $e');
+      }
+      _discoveryMarketSummary = '掃描失敗，請稍後再試';
+    } finally {
+      _isLoadingDiscovery = false;
+      notifyListeners();
+    }
+  }
+
+  /// 快速載入已快取的潛力股（不觸發掃描）
+  Future<void> _loadDiscoveryQuick() async {
+    try {
+      final data = await _apiService.getAIDiscoveryQuick(market: _currentMarket);
+      final picks = (data['picks'] as List<dynamic>?)
+              ?.map((e) => AIDiscoveryPick.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [];
+      if (picks.isNotEmpty) {
+        _discoveryPicks = picks;
+        _discoveryMarketSummary = data['market_summary'] as String? ?? '';
+        _hasScannedDiscovery = true;
+        notifyListeners();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('AI Discovery quick load error: $e');
+      }
     }
   }
 
@@ -106,6 +177,8 @@ class DashboardProvider with ChangeNotifier {
 
       // AI 精選獨立異步加載（不阻塞 Dashboard 渲染）
       _loadAIPicksAsync();
+      // 嘗試快速載入已快取的 AI 潛力股
+      _loadDiscoveryQuick();
     } catch (e) {
       _error = e.toString();
       _isLoading = false;
