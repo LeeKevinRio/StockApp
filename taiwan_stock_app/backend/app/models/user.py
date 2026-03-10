@@ -21,6 +21,9 @@ class User(Base):
     google_id = Column(String(255), unique=True, nullable=True, index=True)
     avatar_url = Column(String(500), nullable=True)
 
+    # Activity tracking
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+
     # Subscription fields
     subscription_tier = Column(String(20), default='free')  # 'free' or 'pro'
     is_admin = Column(Boolean, default=False)

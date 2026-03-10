@@ -72,67 +72,41 @@ def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
-@router.post("/register", response_model=Token)
-@limiter.limit("5/minute")
-def register(request: Request, user_data: UserCreate, db: Session = Depends(get_db)):
-    """Register new user"""
-    # Check if user already exists
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+def _check_email_whitelist(email: str):
+    """檢查 email 是否在白名單中（正式開放前限制登入）"""
+    if settings.ALLOWED_EMAILS and email not in settings.ALLOWED_EMAILS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="目前僅開放特定帳號登入，正式上線後將開放註冊"
+        )
 
-    # Create new user
-    user = User(
-        email=user_data.email,
-        password_hash=hash_password(user_data.password),
-        display_name=user_data.display_name,
-        auth_provider='local',
-    )
-    db.add(user)
+
+def _update_last_login(user: User, db: Session):
+    """更新使用者最後登入時間"""
+    user.last_login_at = datetime.utcnow()
     db.commit()
     db.refresh(user)
 
-    # Create access token
-    access_token = create_access_token(user.id)
 
-    return Token(
-        access_token=access_token,
-        user=UserResponse(
-            id=user.id,
-            email=user.email,
-            display_name=user.display_name,
-            created_at=user.created_at,
-            auth_provider=user.auth_provider,
-            avatar_url=user.avatar_url,
-            subscription_tier=user.subscription_tier,
-            is_admin=user.is_admin,
-        ),
+@router.post("/register", response_model=Token)
+@limiter.limit("5/minute")
+def register(request: Request, user_data: UserCreate, db: Session = Depends(get_db)):
+    """Register new user（正式開放前暫停）"""
+    # 正式開放前禁止帳號密碼註冊
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="註冊功能尚未開放，請使用 Google 帳號登入"
     )
 
 
 @router.post("/login", response_model=Token)
 @limiter.limit("5/minute")
 def login(request: Request, user_data: UserLogin, db: Session = Depends(get_db)):
-    """Login user"""
-    user = db.query(User).filter(User.email == user_data.email).first()
-    if not user or not user.password_hash or not verify_password(user_data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Incorrect email or password")
-
-    # Create access token
-    access_token = create_access_token(user.id)
-
-    return Token(
-        access_token=access_token,
-        user=UserResponse(
-            id=user.id,
-            email=user.email,
-            display_name=user.display_name,
-            created_at=user.created_at,
-            auth_provider=user.auth_provider,
-            avatar_url=user.avatar_url,
-            subscription_tier=user.subscription_tier,
-            is_admin=user.is_admin,
-        ),
+    """Login user（正式開放前暫停）"""
+    # 正式開放前禁止帳號密碼登入
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="帳號密碼登入尚未開放，請使用 Google 帳號登入"
     )
 
 
@@ -144,6 +118,9 @@ def google_auth(request: Request, auth_data: GoogleAuthRequest, db: Session = De
     google_user = oauth_service.verify_google_token(auth_data.id_token)
     if not google_user:
         raise HTTPException(status_code=401, detail="Invalid Google token")
+
+    # 白名單檢查
+    _check_email_whitelist(google_user['email'])
 
     # Check if user exists by google_id
     user = db.query(User).filter(User.google_id == google_user['google_id']).first()
@@ -174,6 +151,9 @@ def google_auth(request: Request, auth_data: GoogleAuthRequest, db: Session = De
         db.commit()
         db.refresh(user)
 
+    # 更新最後登入時間
+    _update_last_login(user, db)
+
     # Create access token
     access_token = create_access_token(user.id)
 
@@ -197,6 +177,9 @@ def google_auth(request: Request, auth_data: GoogleAuthRequest, db: Session = De
 def google_auth_with_access_token(request: Request, token_data: GoogleAccessTokenRequest, db: Session = Depends(get_db)):
     """Google OAuth 登入 (使用 Access Token) - 用於 Web 平台"""
     import hashlib
+
+    # 白名單檢查
+    _check_email_whitelist(token_data.email)
 
     # 使用 email 作為唯一識別 (因為 Web 無法取得 google_id)
     # 產生一個基於 email 的偽 google_id
@@ -230,6 +213,9 @@ def google_auth_with_access_token(request: Request, token_data: GoogleAccessToke
 
         db.commit()
         db.refresh(user)
+
+    # 更新最後登入時間
+    _update_last_login(user, db)
 
     # Create access token
     access_token = create_access_token(user.id)

@@ -56,6 +56,7 @@ class AdminUserResponse(BaseModel):
     avatar_url: Optional[str]
     subscription_tier: str
     is_admin: bool
+    last_login_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

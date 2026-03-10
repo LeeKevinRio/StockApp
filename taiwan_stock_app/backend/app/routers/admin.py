@@ -1,6 +1,7 @@
 """
 Admin router - 管理員功能
 """
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
@@ -20,8 +21,8 @@ def list_users(
     db: Session = Depends(get_db),
     admin_user: User = Depends(get_admin_user),
 ):
-    """列出所有用戶（僅管理員）"""
-    users = db.query(User).offset(skip).limit(limit).all()
+    """列出所有用戶（僅管理員），依最後登入時間排序"""
+    users = db.query(User).order_by(User.last_login_at.desc().nullslast()).offset(skip).limit(limit).all()
     return [
         AdminUserResponse(
             id=user.id,
@@ -34,6 +35,7 @@ def list_users(
             avatar_url=user.avatar_url,
             subscription_tier=user.subscription_tier or 'free',
             is_admin=user.is_admin or False,
+            last_login_at=user.last_login_at,
         )
         for user in users
     ]
@@ -61,6 +63,7 @@ def get_user(
         avatar_url=user.avatar_url,
         subscription_tier=user.subscription_tier or 'free',
         is_admin=user.is_admin or False,
+        last_login_at=user.last_login_at,
     )
 
 
@@ -91,6 +94,7 @@ def update_user_subscription(
         avatar_url=user.avatar_url,
         subscription_tier=user.subscription_tier or 'free',
         is_admin=user.is_admin or False,
+        last_login_at=user.last_login_at,
     )
 
 
@@ -128,6 +132,7 @@ def update_user_admin_status(
         avatar_url=user.avatar_url,
         subscription_tier=user.subscription_tier or 'free',
         is_admin=user.is_admin or False,
+        last_login_at=user.last_login_at,
     )
 
 
@@ -136,12 +141,24 @@ def get_admin_stats(
     db: Session = Depends(get_db),
     admin_user: User = Depends(get_admin_user),
 ):
-    """取得管理員統計資訊"""
+    """取得管理員統計資訊（含活躍度）"""
     total_users = db.query(User).count()
     pro_users = db.query(User).filter(User.subscription_tier == 'pro').count()
     free_users = db.query(User).filter(User.subscription_tier == 'free').count()
     google_users = db.query(User).filter(User.auth_provider == 'google').count()
     local_users = db.query(User).filter(User.auth_provider == 'local').count()
+
+    # 活躍度統計
+    now = datetime.utcnow()
+    active_today = db.query(User).filter(
+        User.last_login_at >= now - timedelta(days=1)
+    ).count()
+    active_7d = db.query(User).filter(
+        User.last_login_at >= now - timedelta(days=7)
+    ).count()
+    active_30d = db.query(User).filter(
+        User.last_login_at >= now - timedelta(days=30)
+    ).count()
 
     return {
         "total_users": total_users,
@@ -149,4 +166,7 @@ def get_admin_stats(
         "free_users": free_users,
         "google_users": google_users,
         "local_users": local_users,
+        "active_today": active_today,
+        "active_7d": active_7d,
+        "active_30d": active_30d,
     }

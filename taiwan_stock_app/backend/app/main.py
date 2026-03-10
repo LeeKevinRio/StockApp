@@ -125,6 +125,16 @@ def on_startup():
         try:
             create_tables()
             print("=== Database tables created OK ===", flush=True)
+            # 自動遷移：新增 last_login_at 欄位（如果不存在）
+            try:
+                from sqlalchemy import text
+                with engine.connect() as conn:
+                    conn.execute(text(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ"
+                    ))
+                    conn.commit()
+            except Exception as mig_e:
+                logger.warning(f"Migration skipped: {mig_e}")
         except Exception as e:
             logger.error(f"Database table creation failed (app will still start): {e}")
             print(f"=== WARNING: create_tables failed: {e} ===", flush=True)

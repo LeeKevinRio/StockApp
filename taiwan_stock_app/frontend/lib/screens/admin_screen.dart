@@ -86,6 +86,36 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  /// 將最後登入時間格式化為相對時間
+  String _formatLastLogin(String? lastLoginAt) {
+    if (lastLoginAt == null) return '從未登入';
+    try {
+      final dt = DateTime.parse(lastLoginAt).toLocal();
+      final now = DateTime.now();
+      final diff = now.difference(dt);
+
+      if (diff.inMinutes < 1) return '剛剛';
+      if (diff.inMinutes < 60) return '${diff.inMinutes} 分鐘前';
+      if (diff.inHours < 24) return '${diff.inHours} 小時前';
+      if (diff.inDays < 7) return '${diff.inDays} 天前';
+      if (diff.inDays < 30) return '${(diff.inDays / 7).floor()} 週前';
+      return '${dt.month}/${dt.day}';
+    } catch (_) {
+      return '未知';
+    }
+  }
+
+  /// 判斷用戶是否為活躍狀態（24小時內登入）
+  bool _isActiveRecently(String? lastLoginAt) {
+    if (lastLoginAt == null) return false;
+    try {
+      final dt = DateTime.parse(lastLoginAt);
+      return DateTime.now().toUtc().difference(dt).inHours < 24;
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
@@ -134,6 +164,8 @@ class _AdminScreenState extends State<AdminScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildStatsSection(),
+                        const SizedBox(height: 16),
+                        _buildActivitySection(),
                         const SizedBox(height: 24),
                         _buildUsersSection(),
                       ],
@@ -193,6 +225,60 @@ class _AdminScreenState extends State<AdminScreen> {
                   Icons.email,
                   Colors.green,
                 ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 活躍度統計區塊
+  Widget _buildActivitySection() {
+    if (_stats == null) return const SizedBox.shrink();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '用戶活躍度',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _buildStatCard(
+                  '今日活躍',
+                  '${_stats!['active_today'] ?? 0}',
+                  Icons.flash_on,
+                  Colors.orange,
+                ),
+                const SizedBox(width: 16),
+                _buildStatCard(
+                  '7日活躍',
+                  '${_stats!['active_7d'] ?? 0}',
+                  Icons.date_range,
+                  Colors.teal,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _buildStatCard(
+                  '30日活躍',
+                  '${_stats!['active_30d'] ?? 0}',
+                  Icons.calendar_month,
+                  Colors.purple,
+                ),
+                const SizedBox(width: 16),
+                const Expanded(child: SizedBox.shrink()),
               ],
             ),
           ],
@@ -290,20 +376,43 @@ class _AdminScreenState extends State<AdminScreen> {
     final authProvider = context.read<AuthProvider>();
     final currentUserId = authProvider.user?.id;
     final isCurrentUser = user['id'] == currentUserId;
+    final lastLogin = user['last_login_at'] as String?;
+    final isActive = _isActiveRecently(lastLogin);
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(
-        backgroundColor: Colors.blue.shade100,
-        backgroundImage: user['avatar_url'] != null
-            ? NetworkImage(user['avatar_url'])
-            : null,
-        child: user['avatar_url'] == null
-            ? Text(
-                (user['email'] as String).substring(0, 1).toUpperCase(),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              )
-            : null,
+      leading: Stack(
+        children: [
+          CircleAvatar(
+            backgroundColor: Colors.blue.shade100,
+            backgroundImage: user['avatar_url'] != null
+                ? NetworkImage(user['avatar_url'])
+                : null,
+            child: user['avatar_url'] == null
+                ? Text(
+                    (user['email'] as String).substring(0, 1).toUpperCase(),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  )
+                : null,
+          ),
+          // 線上狀態指示器
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: isActive ? Colors.green : Colors.grey,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Theme.of(context).cardColor,
+                  width: 2,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       title: Row(
         children: [
@@ -377,6 +486,21 @@ class _AdminScreenState extends State<AdminScreen> {
                         ? Colors.red.shade700
                         : Colors.blue.shade700,
                   ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // 最後登入時間
+              Icon(
+                Icons.access_time,
+                size: 12,
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
+              const SizedBox(width: 2),
+              Text(
+                _formatLastLogin(lastLogin),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isActive ? Colors.green : Theme.of(context).textTheme.bodySmall?.color,
                 ),
               ),
             ],

@@ -60,6 +60,12 @@ class Settings:
     # FRED API (宏觀經濟數據)
     FRED_API_KEY: str = os.getenv("FRED_API_KEY", "")
 
+    # 登入白名單（正式開放前僅允許指定 Google 帳號）
+    # 設為空字串則不限制
+    ALLOWED_EMAILS: list = [
+        e.strip() for e in os.getenv("ALLOWED_EMAILS", "kavinleejn@gmail.com").split(",") if e.strip()
+    ]
+
     # CORS — 生產環境加入雲端域名（Web 前端部署時需要）
     _default_cors = "http://localhost:5000,http://localhost:3000,http://localhost:8080,https://stockapp-production-0b90.up.railway.app,https://stockapp-backend-ein8.onrender.com,https://leekevinrio.github.io"
     CORS_ORIGINS: list = os.getenv("CORS_ORIGINS", _default_cors).split(",")
