@@ -211,30 +211,17 @@ class USStockFetcher:
         """
         Search for US stocks by symbol or name
 
-        Note: yfinance doesn't have a native search API,
-        so we match against popular stocks and try the query as a symbol
+        Strategy:
+        1. Try the query as a direct symbol first (supports any valid ticker)
+        2. Use yfinance Search API for broader results
+        3. Fallback to matching against popular stocks list
         """
         query = query.upper().strip()
         results = []
+        seen_symbols = set()
 
-        # First, try to find matches in popular stocks
-        for symbol in self.POPULAR_STOCKS:
-            if query in symbol:
-                info = self.get_stock_info(symbol)
-                if info:
-                    results.append({
-                        "stock_id": symbol,
-                        "symbol": symbol,
-                        "name": info.get("name", symbol),
-                        "industry": info.get("industry", ""),
-                        "exchange": info.get("exchange", ""),
-                        "market_region": "US"
-                    })
-                    if len(results) >= limit:
-                        break
-
-        # If no matches found, try the query as a direct symbol
-        if len(results) == 0 and len(query) >= 1:
+        # 1. Always try the query as a direct symbol first
+        if len(query) >= 1:
             info = self.get_stock_info(query)
             if info:
                 results.append({
@@ -245,6 +232,54 @@ class USStockFetcher:
                     "exchange": info.get("exchange", ""),
                     "market_region": "US"
                 })
+                seen_symbols.add(query)
+
+        # 2. Use yfinance Search API for broader results
+        if len(results) < limit:
+            try:
+                search_result = yf.Search(query, max_results=limit)
+                quotes = getattr(search_result, 'quotes', [])
+                for q in quotes:
+                    symbol = q.get('symbol', '').upper()
+                    # 只包含美股（排除非美股交易所）
+                    exchange = q.get('exchange', '')
+                    exchDisp = q.get('exchDisp', '')
+                    quoteType = q.get('quoteType', '')
+                    # 排除台股、港股、日股等非美股
+                    if any(x in exchange for x in ['TAI', 'HKG', 'TYO', 'SHH', 'SHZ', 'TWO']):
+                        continue
+                    if symbol and symbol not in seen_symbols:
+                        results.append({
+                            "stock_id": symbol,
+                            "symbol": symbol,
+                            "name": q.get('shortname', q.get('longname', symbol)),
+                            "industry": q.get('industry', ''),
+                            "exchange": exchDisp or exchange,
+                            "market_region": "US"
+                        })
+                        seen_symbols.add(symbol)
+                        if len(results) >= limit:
+                            break
+            except Exception as e:
+                logger.warning(f"yfinance Search API failed for '{query}': {e}")
+
+        # 3. Fallback: match against popular stocks list
+        if len(results) < limit:
+            for symbol in self.POPULAR_STOCKS:
+                if query in symbol and symbol not in seen_symbols:
+                    info = self.get_stock_info(symbol)
+                    if info:
+                        results.append({
+                            "stock_id": symbol,
+                            "symbol": symbol,
+                            "name": info.get("name", symbol),
+                            "industry": info.get("industry", ""),
+                            "exchange": info.get("exchange", ""),
+                            "market_region": "US"
+                        })
+                        seen_symbols.add(symbol)
+                        if len(results) >= limit:
+                            break
 
         return results[:limit]
 
