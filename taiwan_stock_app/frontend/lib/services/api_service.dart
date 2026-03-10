@@ -385,7 +385,7 @@ class ApiService {
 
   // ==================== AI 潛力股掃描 ====================
 
-  /// 取得 AI 推薦潛力股（完整掃描）
+  /// 取得 AI 推薦潛力股（完整掃描，需要較長時間）
   Future<Map<String, dynamic>> getAIDiscovery({
     String market = 'TW',
     bool refresh = false,
@@ -397,7 +397,9 @@ class ApiService {
       'top_n': topN.toString(),
     };
     final uri = Uri.parse('$baseUrl/api/ai/discovery').replace(queryParameters: params);
-    final response = await _get(uri, headers: _headers);
+    // 掃描全市場需要較長時間（60-120 秒），使用 3 分鐘超時
+    final response = await http.get(uri, headers: _headers)
+        .timeout(const Duration(minutes: 3));
     _checkResponse(response);
     return _safeJsonDecode(response.body);
   }

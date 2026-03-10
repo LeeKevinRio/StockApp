@@ -47,6 +47,45 @@ US_CANDIDATE_STOCKS = {
 }
 
 
+# 股票名稱對照表（避免每次查 API）
+STOCK_NAMES = {
+    # 台股
+    "2330": "台積電", "2303": "聯電", "2454": "聯發科", "2408": "南亞科",
+    "3034": "聯詠", "6770": "力積電", "3443": "創意", "5274": "信驊",
+    "2449": "京元電子", "3529": "力旺", "2382": "廣達", "3231": "緯創",
+    "6669": "緯穎", "2324": "仁寶", "3017": "奇鋐", "2356": "英業達",
+    "3036": "文曄", "2317": "鴻海", "2308": "台達電", "2357": "華碩",
+    "2395": "研華", "3711": "日月光", "2327": "國巨", "2345": "智邦",
+    "3037": "欣興", "3044": "健鼎", "8046": "南電", "3189": "景碩",
+    "2368": "金像電", "6153": "嘉聯益", "2344": "華邦電", "3481": "群創",
+    "8299": "群聯", "3006": "晶豪科", "2882": "國泰金", "2881": "富邦金",
+    "2886": "兆豐金", "2891": "中信金", "2892": "第一金", "2884": "玉山金",
+    "2880": "華南金", "5880": "合庫金", "2002": "中鋼", "1301": "台塑",
+    "1303": "南亞", "1326": "台化", "1101": "台泥", "1216": "統一",
+    "2603": "長榮", "2609": "陽明", "2615": "萬海", "2618": "長榮航",
+    "2412": "中華電", "4904": "遠傳", "3045": "台灣大",
+    "6446": "藥華藥", "4743": "合一", "6472": "保瑞", "4726": "永昕",
+    "1795": "美時", "3576": "聯合再生", "6244": "茂迪", "3691": "碩禾",
+    "00631L": "元大台灣50正2", "0050": "元大台灣50", "0056": "元大高股息",
+    "00878": "國泰永續高股息", "00919": "群益台灣精選高息",
+    # 美股
+    "AAPL": "Apple", "GOOGL": "Alphabet", "MSFT": "Microsoft",
+    "AMZN": "Amazon", "META": "Meta", "NVDA": "NVIDIA", "AMD": "AMD",
+    "AVGO": "Broadcom", "TSM": "台積電ADR", "QCOM": "Qualcomm",
+    "MRVL": "Marvell", "ARM": "ARM Holdings", "SMCI": "Super Micro",
+    "CRM": "Salesforce", "SNOW": "Snowflake", "PLTR": "Palantir",
+    "NOW": "ServiceNow", "PANW": "Palo Alto", "CRWD": "CrowdStrike",
+    "NET": "Cloudflare", "TSLA": "Tesla", "NFLX": "Netflix",
+    "UBER": "Uber", "ABNB": "Airbnb", "SHOP": "Shopify", "DASH": "DoorDash",
+    "JPM": "JPMorgan", "GS": "Goldman Sachs", "V": "Visa", "MA": "Mastercard",
+    "AXP": "American Express", "LLY": "Eli Lilly", "UNH": "UnitedHealth",
+    "ABBV": "AbbVie", "MRK": "Merck", "ISRG": "Intuitive Surgical",
+    "XOM": "ExxonMobil", "CVX": "Chevron", "COP": "ConocoPhillips",
+    "COIN": "Coinbase", "RBLX": "Roblox", "HOOD": "Robinhood",
+    "SOFI": "SoFi", "DKNG": "DraftKings", "ROKU": "Roku",
+}
+
+
 class AIDiscoveryService:
     """AI 潛力股掃描服務"""
 
@@ -361,10 +400,12 @@ class AIDiscoveryService:
         enriched = []
         for pick in picks[:top_n]:
             # 補充候選股的技術數據
-            cand = next((c for c in candidates if c["symbol"] == pick.get("symbol")), None)
+            symbol = pick.get("symbol", "")
+            cand = next((c for c in candidates if c["symbol"] == symbol), None)
+            name = pick.get("name", "") or STOCK_NAMES.get(symbol, symbol)
             enriched.append({
-                "stock_id": pick.get("symbol", ""),
-                "name": pick.get("name", ""),
+                "stock_id": symbol,
+                "name": name,
                 "current_price": pick.get("current_price", cand["close"] if cand else 0),
                 "predicted_change_pct": pick.get("predicted_change_pct", 0),
                 "probability": min(0.95, max(0.5, pick.get("probability", 0.6))),
@@ -440,14 +481,15 @@ class AIDiscoveryService:
         picks = []
         for c in candidates[:top_n]:
             close = c["close"]
+            symbol = c["symbol"]
             # 簡單估算目標價：技術分數越高，預期漲幅越大
             est_change = min(10, max(2, (c["score"] - 40) * 0.2))
             target = round(close * (1 + est_change / 100), 2)
             stop_loss = round(close * 0.95, 2)
 
             picks.append({
-                "stock_id": c["symbol"],
-                "name": c["symbol"],
+                "stock_id": symbol,
+                "name": STOCK_NAMES.get(symbol, symbol),
                 "current_price": close,
                 "predicted_change_pct": round(est_change, 1),
                 "probability": min(0.85, 0.5 + c["score"] / 200),
