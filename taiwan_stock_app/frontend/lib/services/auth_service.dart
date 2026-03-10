@@ -1,11 +1,47 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import 'api_service.dart';
 
+/// 跨平台 Token 持久化存儲
+/// - Web: 使用 SharedPreferences (localStorage)，避免 FlutterSecureStorage 加密 key 遺失
+/// - Mobile: 使用 FlutterSecureStorage (Keychain/Keystore)
+class _TokenStorage {
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+
+  Future<void> write(String key, String value) async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, value);
+    } else {
+      await _secureStorage.write(key: key, value: value);
+    }
+  }
+
+  Future<String?> read(String key) async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(key);
+    } else {
+      return await _secureStorage.read(key: key);
+    }
+  }
+
+  Future<void> delete(String key) async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(key);
+    } else {
+      await _secureStorage.delete(key: key);
+    }
+  }
+}
+
 class AuthService {
   final ApiService _apiService;
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  final _TokenStorage _storage = _TokenStorage();
 
   static const String _tokenKey = 'auth_token';
   static const String _userKey = 'user_data';
@@ -17,11 +53,8 @@ class AuthService {
     final token = response['access_token'];
     final user = User.fromJson(response['user']);
 
-    // Save token and user data
-    await _storage.write(key: _tokenKey, value: token);
-    await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
-
-    // Set token in API service
+    await _storage.write(_tokenKey, token);
+    await _storage.write(_userKey, jsonEncode(user.toJson()));
     _apiService.setAuthToken(token);
 
     return user;
@@ -32,11 +65,8 @@ class AuthService {
     final token = response['access_token'];
     final user = User.fromJson(response['user']);
 
-    // Save token and user data
-    await _storage.write(key: _tokenKey, value: token);
-    await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
-
-    // Set token in API service
+    await _storage.write(_tokenKey, token);
+    await _storage.write(_userKey, jsonEncode(user.toJson()));
     _apiService.setAuthToken(token);
 
     return user;
@@ -47,11 +77,8 @@ class AuthService {
     final token = response['access_token'];
     final user = User.fromJson(response['user']);
 
-    // Save token and user data
-    await _storage.write(key: _tokenKey, value: token);
-    await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
-
-    // Set token in API service
+    await _storage.write(_tokenKey, token);
+    await _storage.write(_userKey, jsonEncode(user.toJson()));
     _apiService.setAuthToken(token);
 
     return user;
@@ -72,22 +99,19 @@ class AuthService {
     final token = response['access_token'];
     final user = User.fromJson(response['user']);
 
-    // Save token and user data
-    await _storage.write(key: _tokenKey, value: token);
-    await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
-
-    // Set token in API service
+    await _storage.write(_tokenKey, token);
+    await _storage.write(_userKey, jsonEncode(user.toJson()));
     _apiService.setAuthToken(token);
 
     return user;
   }
 
   Future<String?> getToken() async {
-    return await _storage.read(key: _tokenKey);
+    return await _storage.read(_tokenKey);
   }
 
   Future<User?> getSavedUser() async {
-    final userJson = await _storage.read(key: _userKey);
+    final userJson = await _storage.read(_userKey);
     if (userJson != null) {
       try {
         return User.fromJson(jsonDecode(userJson));
@@ -102,7 +126,7 @@ class AuthService {
     try {
       final userData = await _apiService.getCurrentUser();
       final user = User.fromJson(userData);
-      await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
+      await _storage.write(_userKey, jsonEncode(user.toJson()));
       return user;
     } catch (e) {
       return null;
@@ -111,26 +135,14 @@ class AuthService {
 
   Future<void> deleteAccount() async {
     await _apiService.deleteAccount();
-    await _storage.delete(key: _tokenKey);
-    await _storage.delete(key: _userKey);
+    await _storage.delete(_tokenKey);
+    await _storage.delete(_userKey);
     _apiService.setAuthToken('');
   }
 
   Future<void> logout() async {
-    // 讀取目前 token，若有效才嘗試呼叫後端登出 API
-    final token = await _storage.read(key: _tokenKey);
-    if (token != null && token.isNotEmpty) {
-      try {
-        // 嘗試呼叫後端登出（若後端有提供），失敗不影響本地登出
-        // await _apiService.logoutRemote();
-      } catch (_) {
-        // 忽略遠端登出失敗，確保本地狀態仍能清除
-      }
-    }
-
-    // 無論遠端登出是否成功，都清除本地狀態
-    await _storage.delete(key: _tokenKey);
-    await _storage.delete(key: _userKey);
+    await _storage.delete(_tokenKey);
+    await _storage.delete(_userKey);
     _apiService.setAuthToken('');
   }
 
