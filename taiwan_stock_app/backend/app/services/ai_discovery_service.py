@@ -367,7 +367,6 @@ class AIDiscoveryService:
   "picks": [
     {{
       "symbol": "股票代碼",
-      "name": "公司名稱",
       "current_price": 收盤價數字,
       "predicted_change_pct": 預測5日漲幅百分比數字,
       "probability": 上漲機率(0.5-0.95),
@@ -402,7 +401,8 @@ class AIDiscoveryService:
             # 補充候選股的技術數據
             symbol = pick.get("symbol", "")
             cand = next((c for c in candidates if c["symbol"] == symbol), None)
-            name = pick.get("name", "") or STOCK_NAMES.get(symbol, symbol)
+            # 優先使用 STOCK_NAMES 對照表（AI 常回傳佔位符如 "公司名稱"）
+            name = STOCK_NAMES.get(symbol, pick.get("name", symbol))
             enriched.append({
                 "stock_id": symbol,
                 "name": name,
