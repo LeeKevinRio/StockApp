@@ -284,6 +284,19 @@ class PredictionTracker:
                     )
                     continue
 
+                # === 合理性檢查：防止 mock 或異常數據寫入 ===
+                # 台股漲跌幅限制 ±10%，actual_close 不應偏離 base 超過 15%（含誤差）
+                # 美股無漲跌幅限制，但單日偏離超過 50% 也視為異常
+                preliminary_change = ((actual_close - base_price) / base_price) * 100
+                max_deviation = 15.0 if record.market_region == "TW" else 50.0
+                if abs(preliminary_change) > max_deviation:
+                    logger.warning(
+                        f"Sanity check FAILED for {record.stock_id}: "
+                        f"base={base_price}, actual={actual_close}, change={preliminary_change:+.1f}% "
+                        f"(exceeds ±{max_deviation}%%, likely bad data) - skipping"
+                    )
+                    continue
+
                 # === 台股 base_price 修正 ===
                 # 台股每日漲跌幅限制 ±10%，如果 base_price 過於陳舊
                 # （例如長假前的價格），會導致計算出超過 10% 的漲跌幅。

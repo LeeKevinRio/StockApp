@@ -347,8 +347,8 @@ class StockDataService:
                 stock_id, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
             )
             if len(prices) == 0:
-                # Return mock data for testing
-                return generate_mock_realtime_price(stock_id)
+                logger.warning(f"FinMind 無數據: {stock_id}")
+                return None
 
             latest = prices.iloc[-1]
             prev_close = float(latest.get("open", latest.get("close", 0)))
@@ -372,8 +372,7 @@ class StockDataService:
             }
         except Exception as e:
             logger.error(f"FinMind API 失敗: {e}")
-            # Return mock data for testing
-            return generate_mock_realtime_price(stock_id)
+            return None
 
     def get_realtime_prices_batch(self, stock_ids: List[str], market: str = "TW") -> dict:
         """
@@ -569,8 +568,8 @@ class StockDataService:
                 )
 
                 if len(df) == 0:
-                    # Return mock data for testing
-                    return generate_mock_stock_history(stock_id, days)
+                    logger.warning(f"FinMind 歷史無數據: {stock_id}")
+                    return []
 
                 # Standardize column names
                 if 'max' in df.columns:
@@ -592,8 +591,7 @@ class StockDataService:
                     })
             except Exception as e:
                 logger.error(f"FinMind history API 失敗: {e}")
-                # Return mock data for testing
-                return generate_mock_stock_history(stock_id, days)
+                return []
 
         # Apply aggregation if needed
         if period == "week":
