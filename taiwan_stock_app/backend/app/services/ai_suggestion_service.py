@@ -16,6 +16,7 @@ import pandas as pd
 
 from app.data_fetchers import FinMindFetcher, USStockFetcher, MacroDataFetcher
 from app.data_fetchers.news_fetcher import NewsFetcher
+from app.data_fetchers.twse_fetcher import TWSEFetcher
 from app.config import settings
 from app.services.technical_indicators import TechnicalIndicators
 from app.services.trading_calendar import get_calendar_gap_days
@@ -199,11 +200,26 @@ class AISuggestionService:
         # ========== 社群情緒數據 ==========
         social_analysis = self._analyze_social_sentiment(stock_id)
 
+        # 優先用 TWSE 即時報價取得最新價（FinMind 可能延遲一天）
+        latest_price = 0
+        try:
+            twse = TWSEFetcher()
+            quote = twse.get_realtime_quote(stock_id)
+            if quote and quote.get("price", 0) > 0:
+                latest_price = float(quote["price"])
+                logger.info(f"台股 {stock_id} 即時價: {latest_price}")
+        except Exception as e:
+            logger.warning(f"TWSE 即時報價失敗 {stock_id}: {e}")
+
+        # Fallback: 使用 FinMind 最後一筆收盤價
+        if latest_price <= 0 and len(prices) > 0:
+            latest_price = float(prices.iloc[-1]["close"])
+
         return {
             "stock_id": stock_id,
             "market_region": "TW",
             "currency": "TWD",
-            "latest_price": float(prices.iloc[-1]["close"]) if len(prices) > 0 else 0,
+            "latest_price": latest_price,
             "price_change_5d": self._calculate_change(prices, 5),
             "price_change_20d": self._calculate_change(prices, 20),
             "avg_daily_volatility": self._calculate_avg_daily_volatility(prices, 10),
@@ -1512,25 +1528,32 @@ class AISuggestionService:
             if isinstance(_ndp_raw, dict) and 'predicted_change_percent' in _ndp_raw:
                 _ndp_raw['predicted_change_percent'] = _safe_pct(_ndp_raw['predicted_change_percent'], 0)
 
-            # ===== 價格合理性驗證 =====
-            # AI 有時會產出完全偏離的 target/stop_loss，在此自動修正
+            # ===== 價格合理性驗證（高風險經紀人：紀律停損、積極停利）=====
             if latest_price > 0:
-                # 台股每日漲跌幅 ±10%，美股無限制但短線不應偏離太多
-                max_dev = 0.10 if market == "TW" else 0.20
+                # target/stop_loss 允許更大偏離（台股 ±15%，美股 ±25%）
+                max_dev_target = 0.15 if market == "TW" else 0.25
+                # entry 依然要求接近現價
+                max_dev_entry = 0.05
+
                 for price_key in ("target_price", "stop_loss_price", "entry_price_min", "entry_price_max"):
                     val = result.get(price_key)
+                    max_dev = max_dev_target if price_key in ("target_price", "stop_loss_price") else max_dev_entry
                     if val is not None:
                         try:
                             val = float(val)
                             deviation = abs(val - latest_price) / latest_price
                             if deviation > max_dev or val <= 0:
-                                # 用公式重算
+                                # 用高風險公式重算
                                 if price_key == "target_price":
-                                    pct = float(result.get("predicted_change_percent", 3) or 3)
-                                    result[price_key] = round(latest_price * (1 + abs(pct) / 100), 2)
+                                    pct = float(result.get("predicted_change_percent", 5) or 5)
+                                    # 目標價至少 +5%，確保風報比
+                                    target_pct = max(abs(pct), 5.0)
+                                    result[price_key] = round(latest_price * (1 + target_pct / 100), 2)
                                 elif price_key == "stop_loss_price":
-                                    pct = float(result.get("predicted_change_percent", 3) or 3)
-                                    result[price_key] = round(latest_price * (1 - abs(pct) / 100), 2)
+                                    # 紀律停損：固定 3%~5%
+                                    pct = float(result.get("predicted_change_percent", 5) or 5)
+                                    stop_pct = min(max(abs(pct) * 0.5, 3.0), 5.0)
+                                    result[price_key] = round(latest_price * (1 - stop_pct / 100), 2)
                                 elif price_key == "entry_price_min":
                                     result[price_key] = round(latest_price * 0.98, 2)
                                 elif price_key == "entry_price_max":
@@ -1538,19 +1561,28 @@ class AISuggestionService:
                         except (TypeError, ValueError):
                             pass
 
-                # 修正 take_profit_targets 裡的價格
+                # 修正 take_profit_targets 裡的價格（分批停利）
                 tpt = result.get("take_profit_targets")
                 if isinstance(tpt, list):
-                    for item in tpt:
-                        if isinstance(item, dict):
-                            p = item.get("price")
-                            if p is not None:
-                                try:
-                                    p = float(p)
-                                    if abs(p - latest_price) / latest_price > max_dev or p <= 0:
-                                        item["price"] = round(latest_price * 1.05, 2)
-                                except (TypeError, ValueError):
-                                    pass
+                    # 確保至少有 3 個分批停利點
+                    if len(tpt) < 3:
+                        tpt_pcts = [3, 5, 8] if market == "TW" else [5, 8, 12]
+                        tpt = [
+                            {"price": round(latest_price * (1 + p / 100), 2), "probability": round(0.75 - i * 0.1, 2), "description": desc}
+                            for i, (p, desc) in enumerate(zip(tpt_pcts, ["保守停利", "中性停利", "積極停利"]))
+                        ]
+                        result["take_profit_targets"] = tpt
+                    else:
+                        for item in tpt:
+                            if isinstance(item, dict):
+                                p = item.get("price")
+                                if p is not None:
+                                    try:
+                                        p = float(p)
+                                        if abs(p - latest_price) / latest_price > max_dev_target or p <= 0:
+                                            item["price"] = round(latest_price * 1.05, 2)
+                                    except (TypeError, ValueError):
+                                        pass
 
                 # 修正 next_day_prediction 裡的價格
                 ndp = result.get("next_day_prediction")
@@ -1561,7 +1593,7 @@ class AISuggestionService:
                         if pv is not None:
                             try:
                                 pv = float(pv)
-                                if abs(pv - latest_price) / latest_price > max_dev or pv <= 0:
+                                if abs(pv - latest_price) / latest_price > max_dev_target or pv <= 0:
                                     pct = float(ndp.get("predicted_change_percent", 0) or 0)
                                     if pk == "price_range_low":
                                         ndp[pk] = round(latest_price * (1 + pct / 100 - range_margin), 2)
@@ -1879,14 +1911,16 @@ class AISuggestionService:
 
 **嚴禁多檔股票給出相同的預測數值！每支股票波動特性不同，預測值必須不同！**
 
-## 價格計算公式
+## 價格計算公式（高風險經紀人 — 紀律停損、積極停利）
 所有價格都必須基於最新收盤價計算：
-- target_price = 最新收盤價 × (1 + 預期漲幅%/100)
-- stop_loss_price = 最新收盤價 × (1 - 停損幅%/100)
-- entry_price_min = 最新收盤價 × 0.98 ~ 0.99
+- target_price = 最新收盤價 × (1 + 目標漲幅%/100)，目標漲幅至少 5%~15%（視波動度和信號強度）
+- stop_loss_price = 最新收盤價 × (1 - 停損幅%/100)，停損幅固定 3%~5%（紀律嚴格，絕不猶豫）
+- entry_price_min = 最新收盤價 × 0.97 ~ 0.99
 - entry_price_max = 最新收盤價 × 1.00 ~ 1.02
+- take_profit_targets: 至少給 3 個分批停利點（例如 +5%, +8%, +12%）
 
-**所有輸出價格都必須在最新收盤價的 ±15% 範圍內！**"""
+**停損必須明確且紀律！風報比 (target/stop_loss) 至少 2:1 以上！**
+**所有輸出價格都必須在最新收盤價的 ±20% 範圍內！**"""
 
             reasoning_hint = f"說明計算依據：RSI=多少、MACD狀態、P/E估值、VIX恐慌指數等"
 
@@ -1942,7 +1976,18 @@ class AISuggestionService:
    - price_range_low = 最新收盤價 × (1 + 預測漲跌幅% - 1.5%)
    - price_range_high = 最新收盤價 × (1 + 預測漲跌幅% + 1.5%)
 
-**嚴禁多檔股票給出相同的預測數值！每支股票波動特性不同，預測值必須不同！**"""
+**嚴禁多檔股票給出相同的預測數值！每支股票波動特性不同，預測值必須不同！**
+
+## 價格計算公式（高風險經紀人 — 紀律停損、積極停利）
+所有價格都必須基於最新收盤價計算：
+- target_price = 最新收盤價 × (1 + 目標漲幅%/100)，目標漲幅至少 5%~10%（台股漲跌停 ±10%）
+- stop_loss_price = 最新收盤價 × (1 - 停損幅%/100)，停損幅固定 3%~5%（紀律嚴格，絕不猶豫）
+- entry_price_min = 最新收盤價 × 0.97 ~ 0.99
+- entry_price_max = 最新收盤價 × 1.00 ~ 1.02
+- take_profit_targets: 至少給 3 個分批停利點（例如 +3%, +5%, +8%）
+
+**停損必須明確且紀律！風報比 (target/stop_loss) 至少 2:1 以上！**
+**所有輸出價格都必須在最新收盤價的 ±15% 範圍內！**"""
 
             reasoning_hint = f"說明計算依據：RSI=多少、外資買賣超多少張、MACD狀態等"
 
@@ -1975,10 +2020,12 @@ class AISuggestionService:
   ],
   "entry_price_min": 建議進場價下限（基於最新收盤價計算）,
   "entry_price_max": 建議進場價上限（基於最新收盤價計算）,
-  "target_price": 目標價（基於最新收盤價 + 預期漲幅計算）,
-  "stop_loss_price": 停損價（基於最新收盤價 - 風險容忍度計算）,
+  "target_price": 目標價（至少 +5% 以上，追求高報酬）,
+  "stop_loss_price": 停損價（紀律停損 -3%~-5%，絕不拖延）,
   "take_profit_targets": [
-    {{"price": 數字, "probability": 0.5-0.8, "description": "保守|中性|積極"}}
+    {{"price": 第一停利價(+3~5%), "probability": 0.7-0.8, "description": "保守停利"}},
+    {{"price": 第二停利價(+5~8%), "probability": 0.5-0.7, "description": "中性停利"}},
+    {{"price": 第三停利價(+8~12%), "probability": 0.3-0.5, "description": "積極停利"}}
   ],
   "risk_level": "HIGH",
   "time_horizon": "短線(1-3天)" | "中線(1-2週)",
