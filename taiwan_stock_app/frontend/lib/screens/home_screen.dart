@@ -37,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
       DashboardScreen(onTabChange: (index) => _switchToTab(index)),
       const WatchlistScreen(),
       const AISuggestionsScreen(),
-      const AIChatScreen(),
+      // AIChatScreen 功能保留，暫時從底部導航隱藏
       const AlertsScreen(),
     ];
   }
@@ -103,10 +103,6 @@ class _HomeScreenState extends State<HomeScreen> {
               BottomNavigationBarItem(
                 icon: const Icon(Icons.lightbulb),
                 label: isUS ? 'AI Tips' : 'AI 建議',
-              ),
-              BottomNavigationBarItem(
-                icon: const Icon(Icons.chat),
-                label: isUS ? 'AI Chat' : 'AI 問答',
               ),
               BottomNavigationBarItem(
                 icon: const Icon(Icons.notifications),
