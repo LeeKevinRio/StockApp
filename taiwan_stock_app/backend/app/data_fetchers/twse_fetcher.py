@@ -127,9 +127,17 @@ class TWSEFetcher:
             if not stock_id:
                 continue
             price = self._safe_float(item.get("z"))
-            # 如果已有有效價格的記錄，跳過無效的
-            if stock_id in seen and price == 0:
-                continue
+            yesterday_close = self._safe_float(item.get("y"))
+
+            if stock_id in seen:
+                existing = seen[stock_id]
+                # 已有完整有效數據（price > 0 且 yesterday_close > 0），不覆蓋
+                if existing["price"] > 0 and existing["yesterday_close"] > 0:
+                    continue
+                # 新數據也沒有價格，跳過
+                if price == 0:
+                    continue
+
             seen[stock_id] = {
                 "stock_id": stock_id,
                 "name": item.get("n", ""),
@@ -138,7 +146,7 @@ class TWSEFetcher:
                 "high": self._safe_float(item.get("h")),
                 "low": self._safe_float(item.get("l")),
                 "volume": int(self._safe_float(item.get("v"))),
-                "yesterday_close": self._safe_float(item.get("y")),
+                "yesterday_close": yesterday_close,
             }
 
         return list(seen.values())

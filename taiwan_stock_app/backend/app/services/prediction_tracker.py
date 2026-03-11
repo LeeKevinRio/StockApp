@@ -214,6 +214,7 @@ class PredictionTracker:
                 actual_close = 0
                 actual_high = 0
                 actual_low = 0
+                price_data = None
 
                 logger.info(f"Processing {record.stock_id}: target={target}, today={today}, base={record.base_close_price}, market={record.market_region}")
                 if target == today:
@@ -229,7 +230,6 @@ class PredictionTracker:
                         actual_low = float(price_data.get("low", 0))
                 else:
                     # 過去的預測：用歷史收盤價
-                    from app.database import SessionLocal
                     from app.models import StockPrice as StockPriceModel
                     history_price = db.query(StockPriceModel).filter(
                         StockPriceModel.stock_id == record.stock_id,
@@ -252,8 +252,24 @@ class PredictionTracker:
                                 actual_close = float(row.get('close', 0))
                                 actual_high = float(row.get('max', row.get('high', 0)))
                                 actual_low = float(row.get('min', row.get('low', 0)))
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning(f"FinMind 取得 {record.stock_id} ({target}) 失敗: {e}")
+
+                    # FinMind 失敗時，台股嘗試用 TWSE 月成交資料取得歷史價
+                    if actual_close <= 0 and record.market_region == "TW":
+                        try:
+                            daily_data = self.stock_service.twse.get_daily_trading(
+                                record.stock_id, target.year, target.month
+                            )
+                            target_str_roc = f"{target.year - 1911}/{target.month:02d}/{target.day:02d}"
+                            for row in daily_data:
+                                if row.get("date", "").strip() == target_str_roc:
+                                    actual_close = float(row.get("close", 0))
+                                    actual_high = float(row.get("high", 0))
+                                    actual_low = float(row.get("low", 0))
+                                    break
+                        except Exception as e:
+                            logger.warning(f"TWSE 月成交 {record.stock_id} ({target}) 失敗: {e}")
 
                     if actual_close <= 0:
                         # 過去的日期仍拿不到資料，嘗試即時報價（可能是今天剛收盤）
@@ -268,12 +284,20 @@ class PredictionTracker:
 
                 base_price = float(record.base_close_price or 0)
 
-                # base_price=0 修復：從即時報價的漲跌幅反推前一日收盤
-                if base_price <= 0 and actual_close > 0 and price_data:
-                    cp = float(price_data.get("change_percent", 0))
-                    if cp != 0:
-                        base_price = round(actual_close / (1 + cp / 100), 2)
-                    else:
+                # base_price=0 修復
+                if base_price <= 0 and actual_close > 0:
+                    # 方法 1：從即時報價的漲跌幅反推前一日收盤
+                    if price_data:
+                        cp = float(price_data.get("change_percent", 0))
+                        if cp != 0:
+                            base_price = round(actual_close / (1 + cp / 100), 2)
+                    # 方法 2：查 target 前一交易日收盤
+                    if base_price <= 0:
+                        prev_close = self._get_prev_trading_day_close(db, record.stock_id, target)
+                        if prev_close and prev_close > 0:
+                            base_price = prev_close
+                    # 方法 3：最後手段
+                    if base_price <= 0:
                         base_price = actual_close
                     record.base_close_price = base_price
                     logger.info(f"Auto-fix base_price for {record.stock_id}: {base_price}")
@@ -284,20 +308,7 @@ class PredictionTracker:
                     )
                     continue
 
-                # === 合理性檢查：防止 mock 或異常數據寫入 ===
-                # 台股漲跌幅限制 ±10%，actual_close 不應偏離 base 超過 15%（含誤差）
-                # 美股無漲跌幅限制，但單日偏離超過 50% 也視為異常
-                preliminary_change = ((actual_close - base_price) / base_price) * 100
-                max_deviation = 15.0 if record.market_region == "TW" else 50.0
-                if abs(preliminary_change) > max_deviation:
-                    logger.warning(
-                        f"Sanity check FAILED for {record.stock_id}: "
-                        f"base={base_price}, actual={actual_close}, change={preliminary_change:+.1f}% "
-                        f"(exceeds ±{max_deviation}%%, likely bad data) - skipping"
-                    )
-                    continue
-
-                # === 台股 base_price 修正 ===
+                # === 台股 base_price 修正（在合理性檢查之前）===
                 # 台股每日漲跌幅限制 ±10%，如果 base_price 過於陳舊
                 # （例如長假前的價格），會導致計算出超過 10% 的漲跌幅。
                 # 修正方式：用 target_date 前一個交易日的收盤價取代。
@@ -314,6 +325,19 @@ class PredictionTracker:
                             )
                             base_price = corrected_base
                             record.base_close_price = corrected_base
+
+                # === 合理性檢查：防止 mock 或異常數據寫入 ===
+                # 台股漲跌幅限制 ±10%，actual_close 不應偏離 base 超過 15%（含誤差）
+                # 美股無漲跌幅限制，但單日偏離超過 50% 也視為異常
+                preliminary_change = ((actual_close - base_price) / base_price) * 100
+                max_deviation = 15.0 if record.market_region == "TW" else 50.0
+                if abs(preliminary_change) > max_deviation:
+                    logger.warning(
+                        f"Sanity check FAILED for {record.stock_id}: "
+                        f"base={base_price}, actual={actual_close}, change={preliminary_change:+.1f}% "
+                        f"(exceeds ±{max_deviation}%%, likely bad data) - skipping"
+                    )
+                    continue
 
                 # 計算實際漲跌幅
                 actual_change = ((actual_close - base_price) / base_price) * 100
