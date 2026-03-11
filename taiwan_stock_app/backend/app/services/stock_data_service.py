@@ -342,7 +342,7 @@ class StockDataService:
         # 3. 最後使用 FinMind（延遲數據）
         try:
             end_date = date.today()
-            start_date = end_date - timedelta(days=1)
+            start_date = end_date - timedelta(days=5)  # 多拉幾天確保有前一交易日
             prices = self.finmind.get_stock_price(
                 stock_id, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
             )
@@ -351,9 +351,13 @@ class StockDataService:
                 return None
 
             latest = prices.iloc[-1]
-            prev_close = float(latest.get("open", latest.get("close", 0)))
+            # 用前一交易日的收盤價計算漲跌幅（而非當日開盤價）
+            if len(prices) >= 2:
+                prev_close = float(prices.iloc[-2].get("close", 0))
+            else:
+                prev_close = float(latest.get("open", latest.get("close", 0)))
             current = float(latest.get("close", 0))
-            change = current - prev_close
+            change = current - prev_close if prev_close > 0 else 0
             change_percent = (change / prev_close * 100) if prev_close > 0 else 0
 
             return {

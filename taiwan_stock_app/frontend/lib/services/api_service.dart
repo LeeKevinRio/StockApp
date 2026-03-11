@@ -178,7 +178,7 @@ class ApiService {
     );
     _checkResponse(response);
     final List<dynamic> data = _safeJsonDecode(response.body);
-    return data.map((e) => StockHistory.fromJson(e)).toList();
+    return StockHistory.fromJsonList(data);
   }
 
   Future<List<Map<String, dynamic>>> getUSStockNews(String stockId, {int limit = 10}) async {

@@ -478,9 +478,12 @@ class _EnhancedCandlestickChartState extends State<EnhancedCandlestickChart> {
     if (_touchedIndex == null || _touchedIndex! >= visibleData.length) return const SizedBox();
 
     final candle = visibleData[_touchedIndex!];
-    final isRising = candle.close >= candle.open;
+    // 取得前一根 K 棒的收盤價作為基準（正確計算日漲跌幅）
+    final globalIndex = startIndex + _touchedIndex!;
+    final prevClose = globalIndex > 0 ? widget.data[globalIndex - 1].close : candle.open;
+    final isRising = candle.close >= prevClose;
     final priceColor = isRising ? AppTheme.stockRise : AppTheme.stockFall;
-    final changePercent = candle.open != 0 ? ((candle.close - candle.open) / candle.open * 100) : 0.0;
+    final changePercent = prevClose != 0 ? ((candle.close - prevClose) / prevClose * 100) : 0.0;
 
     return Positioned(
       top: 0, left: 0, right: 0,
