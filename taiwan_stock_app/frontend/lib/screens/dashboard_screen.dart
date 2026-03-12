@@ -186,6 +186,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // 即時時間 + 資料更新說明
           RealtimeClockCard(
             lastDataRefresh: dashboardProvider.lastRefreshTime,
+            market: marketProvider.marketCode,
           ),
 
           const SizedBox(height: 12),

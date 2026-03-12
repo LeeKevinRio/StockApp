@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 /// 即時時間顯示卡片，附帶資料更新時間說明
 class RealtimeClockCard extends StatefulWidget {
   final DateTime? lastDataRefresh;
+  final String market; // 'TW' or 'US'
 
-  const RealtimeClockCard({super.key, this.lastDataRefresh});
+  const RealtimeClockCard({super.key, this.lastDataRefresh, this.market = 'TW'});
 
   @override
   State<RealtimeClockCard> createState() => _RealtimeClockCardState();
@@ -31,23 +32,62 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
     super.dispose();
   }
 
-  /// 判斷台股是否在交易時段
-  bool get _isTWMarketOpen {
-    final twNow = _now.toUtc().add(const Duration(hours: 8));
-    final weekday = twNow.weekday;
+  bool get _isUS => widget.market == 'US';
+
+  /// 取得該市場的當地時間
+  DateTime get _marketLocalTime {
+    final utcNow = _now.toUtc();
+    if (_isUS) {
+      // 美東時間 UTC-4（夏令） / UTC-5（冬令）
+      // 簡化：3月第2個週日 ~ 11月第1個週日 為夏令
+      final isDST = _isDaylightSaving(utcNow);
+      return utcNow.add(Duration(hours: isDST ? -4 : -5));
+    }
+    // 台灣 UTC+8
+    return utcNow.add(const Duration(hours: 8));
+  }
+
+  /// 判斷是否為美國夏令時間
+  bool _isDaylightSaving(DateTime utc) {
+    final year = utc.year;
+    // 3月第2個週日
+    var marchStart = DateTime.utc(year, 3, 8);
+    while (marchStart.weekday != DateTime.sunday) {
+      marchStart = marchStart.add(const Duration(days: 1));
+    }
+    // 11月第1個週日
+    var novEnd = DateTime.utc(year, 11, 1);
+    while (novEnd.weekday != DateTime.sunday) {
+      novEnd = novEnd.add(const Duration(days: 1));
+    }
+    return utc.isAfter(marchStart) && utc.isBefore(novEnd);
+  }
+
+  /// 判斷市場是否在交易時段
+  bool get _isMarketOpen {
+    final localTime = _marketLocalTime;
+    final weekday = localTime.weekday;
     if (weekday > 5) return false; // 週末
-    final hour = twNow.hour;
-    final minute = twNow.minute;
-    final timeVal = hour * 60 + minute;
-    return timeVal >= 540 && timeVal <= 810; // 09:00 ~ 13:30
+
+    final timeVal = localTime.hour * 60 + localTime.minute;
+
+    if (_isUS) {
+      // 美股：09:30 ~ 16:00 (ET)
+      return timeVal >= 570 && timeVal <= 960;
+    }
+    // 台股：09:00 ~ 13:30
+    return timeVal >= 540 && timeVal <= 810;
   }
 
   String get _marketStatusText {
-    if (_isTWMarketOpen) return '開盤中';
-    return '已收盤';
+    if (_isUS) {
+      return _isMarketOpen ? 'Market Open' : 'Market Closed';
+    }
+    return _isMarketOpen ? '開盤中' : '已收盤';
   }
 
   static const _weekdays = ['', '週一', '週二', '週三', '週四', '週五', '週六', '週日'];
+  static const _weekdaysEN = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   String _formatTime(DateTime dt) {
     return '${dt.hour.toString().padLeft(2, '0')}:'
@@ -55,21 +95,23 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
         '${dt.second.toString().padLeft(2, '0')}';
   }
 
-  String _formatDate(DateTime dt) {
+  String _formatDate(DateTime dt, {bool english = false}) {
+    final wd = english ? _weekdaysEN[dt.weekday] : _weekdays[dt.weekday];
     return '${dt.year}/${dt.month.toString().padLeft(2, '0')}/'
-        '${dt.day.toString().padLeft(2, '0')} ${_weekdays[dt.weekday]}';
+        '${dt.day.toString().padLeft(2, '0')} $wd';
   }
 
   Color _marketStatusColor(BuildContext context) {
-    if (_isTWMarketOpen) return Colors.green;
+    if (_isMarketOpen) return Colors.green;
     return Colors.grey;
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final timeStr = _formatTime(_now);
-    final dateStr = _formatDate(_now);
+    final marketLocal = _marketLocalTime;
+    final timeStr = _formatTime(marketLocal);
+    final dateStr = _formatDate(marketLocal, english: _isUS);
 
     final lastRefreshStr = widget.lastDataRefresh != null
         ? _formatTime(widget.lastDataRefresh!)
@@ -131,7 +173,7 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '資料更新',
+                      _isUS ? 'Updated' : '資料更新',
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.textTheme.bodySmall?.color,
                       ),
@@ -150,9 +192,9 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
 
             const SizedBox(height: 4),
 
-            // 第二行：日期
+            // 第二行：日期 + 時區
             Text(
-              dateStr,
+              '$dateStr  ${_isUS ? (_isDaylightSaving(_now.toUtc()) ? "美東 EDT (UTC-4)" : "美東 EST (UTC-5)") : "台灣 TST (UTC+8)"}',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.7),
               ),
@@ -175,12 +217,19 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
       height: 1.5,
     );
 
-    final items = [
-      ('即時報價', '盤中每 30 秒 / 收盤後每 5 分鐘'),
-      ('自選股', '每次進入首頁時讀取'),
-      ('AI 建議', '首頁載入後非同步讀取'),
-      ('市場熱力圖', '快取 5 分鐘，下拉可刷新'),
-    ];
+    final items = _isUS
+        ? [
+            ('Quotes', 'Refresh every 30s (open) / 5min (closed)'),
+            ('Watchlist', 'Loaded on each visit'),
+            ('AI Tips', 'Loaded async after dashboard'),
+            ('Heatmap', 'Cached 5 min, pull to refresh'),
+          ]
+        : [
+            ('即時報價', '盤中每 30 秒 / 收盤後每 5 分鐘'),
+            ('自選股', '每次進入首頁時讀取'),
+            ('AI 建議', '首頁載入後非同步讀取'),
+            ('市場熱力圖', '快取 5 分鐘，下拉可刷新'),
+          ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,7 +239,7 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
             Icon(Icons.info_outline, size: 13, color: theme.colorScheme.primary.withValues(alpha: 0.7)),
             const SizedBox(width: 4),
             Text(
-              '資料讀取頻率',
+              _isUS ? 'Data Refresh Rate' : '資料讀取頻率',
               style: theme.textTheme.labelSmall?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: theme.colorScheme.primary.withValues(alpha: 0.9),
