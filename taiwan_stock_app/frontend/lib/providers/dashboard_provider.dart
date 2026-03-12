@@ -54,6 +54,9 @@ class DashboardProvider with ChangeNotifier {
   /// 是否有數據
   bool get hasData => _dashboardData != null;
 
+  /// 最後一次資料刷新時間
+  DateTime? get lastRefreshTime => _lastRefresh;
+
   /// 市場概況
   MarketOverview? get marketOverview => _dashboardData?.marketOverview;
 

@@ -8,6 +8,7 @@ import '../widgets/dashboard/watchlist_summary_card.dart';
 import '../widgets/dashboard/ai_picks_card.dart';
 import '../widgets/dashboard/ai_discovery_card.dart';
 import '../widgets/dashboard/quick_actions_card.dart';
+import '../widgets/dashboard/realtime_clock_card.dart';
 import '../widgets/common/skeleton_loader.dart';
 
 /// Dashboard 儀表板頁面
@@ -182,6 +183,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 即時時間 + 資料更新說明
+          RealtimeClockCard(
+            lastDataRefresh: dashboardProvider.lastRefreshTime,
+          ),
+
+          const SizedBox(height: 12),
+
           // 市場概況卡片
           if (data?.marketOverview != null)
             MarketOverviewCard(
