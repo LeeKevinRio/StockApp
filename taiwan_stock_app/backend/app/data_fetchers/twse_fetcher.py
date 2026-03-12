@@ -40,6 +40,7 @@ class TWSEFetcher:
         response = requests.get(
             self.REALTIME_URL,
             params={"ex_ch": ex_ch, "json": "1", "_": int(time.time() * 1000)},
+            timeout=10,
         )
         response.raise_for_status()
         data = response.json()
@@ -60,6 +61,7 @@ class TWSEFetcher:
             response = requests.get(
                 self.REALTIME_URL,
                 params={"ex_ch": ex_ch, "json": "1", "_": int(time.time() * 1000)},
+                timeout=10,
             )
             response.raise_for_status()
             data = response.json()
@@ -116,6 +118,7 @@ class TWSEFetcher:
         response = requests.get(
             self.REALTIME_URL,
             params={"ex_ch": ex_ch, "json": "1", "_": int(time.time() * 1000)},
+            timeout=10,  # 10 秒超時，避免 Render 上掛起
         )
         response.raise_for_status()
         data = response.json()

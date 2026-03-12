@@ -214,8 +214,11 @@ class MarketOverviewService:
         # 清除 _tw_quote_cache 避免跨請求的陳舊資料
         self._tw_quote_cache.clear()
 
-        # 寫入結果快取
-        _result_cache.set(cache_key, result, HEATMAP_CACHE_TTL)
+        # 只在有資料時才快取，避免 TWSE 查詢失敗的空結果被快取 5 分鐘
+        if result["sectors"]:
+            _result_cache.set(cache_key, result, HEATMAP_CACHE_TTL)
+        else:
+            logger.warning("熱力圖結果為空，不寫入快取（下次請求將重試）")
 
         return result
 
