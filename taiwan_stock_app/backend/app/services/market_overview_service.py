@@ -123,11 +123,12 @@ class MarketOverviewService:
             return stock_id
 
     def _prefetch_tw_quotes(self, stock_ids: List[str]):
-        """批量預取台股報價（TWSE API），分批查詢避免超時"""
+        """批量預取台股報價（TWSE API → FinMind fallback）"""
         import time as _time
-        batch_size = 20  # TWSE API 每批最多查 20 支避免 URL 過長
+        batch_size = 20
         unique_ids = list(set(stock_ids))
 
+        # 1. 先嘗試 TWSE 批量查詢
         for i in range(0, len(unique_ids), batch_size):
             batch = unique_ids[i:i + batch_size]
             try:
@@ -150,9 +151,60 @@ class MarketOverviewService:
             except Exception as e:
                 logger.warning(f"TWSE 批量預取第 {i // batch_size + 1} 批失敗: {e}")
 
-            # TWSE 速率限制：批次之間等待 2 秒
             if i + batch_size < len(unique_ids):
                 _time.sleep(2)
+
+        # 2. TWSE 查不到的股票，用 FinMind 並行補齊
+        missing_ids = [sid for sid in unique_ids if sid not in self._tw_quote_cache]
+        if missing_ids:
+            logger.info(f"TWSE 缺少 {len(missing_ids)} 支，改用 FinMind 補齊")
+            self._finmind_fallback(missing_ids)
+
+    def _finmind_fallback(self, stock_ids: List[str]):
+        """用 FinMind 並行查詢多支股票的最新收盤價"""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        end_date = date.today()
+        start_date = end_date - timedelta(days=7)
+
+        def fetch_one(stock_id: str) -> tuple:
+            try:
+                prices = self.finmind.get_stock_price(
+                    stock_id,
+                    start_date.strftime("%Y-%m-%d"),
+                    end_date.strftime("%Y-%m-%d"),
+                )
+                if len(prices) >= 2:
+                    latest = prices.iloc[-1]
+                    prev = prices.iloc[-2]
+                    price = float(latest["close"])
+                    prev_close = float(prev["close"])
+                    change = price - prev_close
+                    change_pct = (change / prev_close * 100) if prev_close > 0 else 0
+                    return (stock_id, {
+                        "stock_id": stock_id,
+                        "name": self._get_stock_name(stock_id),
+                        "price": round(price, 2),
+                        "change": round(change, 2),
+                        "change_percent": round(change_pct, 2),
+                        "volume": int(latest.get("Trading_Volume", 0)),
+                    })
+            except Exception as e:
+                logger.warning(f"FinMind fallback 失敗 {stock_id}: {e}")
+            return (stock_id, None)
+
+        # 最多 10 個並行，總時間限制 20 秒
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {executor.submit(fetch_one, sid): sid for sid in stock_ids}
+            for future in as_completed(futures, timeout=20):
+                try:
+                    sid, result = future.result(timeout=5)
+                    if result:
+                        self._tw_quote_cache[sid] = result
+                except Exception:
+                    pass
+
+        logger.info(f"FinMind fallback 完成，快取共 {len(self._tw_quote_cache)} 支")
 
     def get_heatmap_data(self, market: str = "TW") -> Dict:
         """取得熱力圖數據（按產業分組），帶 TTL 快取（5 分鐘）"""
