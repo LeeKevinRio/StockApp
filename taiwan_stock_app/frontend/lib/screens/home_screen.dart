@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/market_provider.dart';
 import '../providers/watchlist_provider.dart';
+import '../providers/dashboard_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/market_switcher.dart';
@@ -65,9 +66,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onMarketChanged() {
-    // Refresh watchlist when market changes
     final marketProvider = context.read<MarketProvider>();
-    context.read<WatchlistProvider>().setMarketFilter(marketProvider.marketCode);
+    final marketCode = marketProvider.marketCode;
+    // 切換市場時同步更新所有相關 Provider
+    context.read<WatchlistProvider>().setMarketFilter(marketCode);
+    context.read<DashboardProvider>().setMarket(marketCode);
   }
 
   @override

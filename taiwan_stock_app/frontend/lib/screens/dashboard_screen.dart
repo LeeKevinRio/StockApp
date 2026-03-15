@@ -53,9 +53,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Consumer2<DashboardProvider, MarketProvider>(
       builder: (context, dashboardProvider, marketProvider, child) {
-        // 市場變更時重新加載
+        // 安全網：若市場不同步（例如從 Drawer 以外的路徑切換），自動同步
         if (dashboardProvider.currentMarket != marketProvider.marketCode) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
+          // 使用 microtask 避免在 build 中直接觸發 notifyListeners
+          Future.microtask(() {
             dashboardProvider.setMarket(marketProvider.marketCode);
           });
         }
