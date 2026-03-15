@@ -24,6 +24,10 @@ class ApiService {
   final String baseUrl;
   String? _authToken;
 
+  /// 全域 401 回呼：任何 API 收到 401 時觸發（用於自動登出）
+  void Function()? onUnauthorized;
+  bool _unauthorizedHandled = false;
+
   /// HTTP 請求逾時時間
   static const Duration _timeout = Duration(seconds: 60);
 
@@ -31,11 +35,13 @@ class ApiService {
 
   void setAuthToken(String token) {
     _authToken = token;
+    _unauthorizedHandled = false; // 重設 401 攔截旗標，允許新 token 下再次偵測
   }
 
   Map<String, String> get _headers => {
         'Content-Type': 'application/json',
-        if (_authToken != null) 'Authorization': 'Bearer $_authToken',
+        if (_authToken != null && _authToken!.isNotEmpty)
+          'Authorization': 'Bearer $_authToken',
       };
 
   // ==================== HTTP 請求封裝（含 30 秒逾時） ====================
@@ -1315,6 +1321,11 @@ class ApiService {
 
       switch (response.statusCode) {
         case 401:
+          // 觸發全域 401 回呼（自動登出 + 跳轉登入頁），防止並行請求重複觸發
+          if (!_unauthorizedHandled) {
+            _unauthorizedHandled = true;
+            onUnauthorized?.call();
+          }
           throw ApiException(
             statusCode: 401,
             message: '登入已過期，請重新登入',

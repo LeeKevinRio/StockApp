@@ -42,6 +42,9 @@ import 'screens/broker_link_screen.dart';
 import 'screens/ai_settings_screen.dart';
 import 'screens/backtest_screen.dart';
 
+/// 全域 NavigatorKey，讓非 Widget 層級（如 ApiService 401 回呼）也能導航
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -55,6 +58,15 @@ void main() async {
   if (isLoggedIn) {
     initialUser = await authService.getSavedUser();
   }
+
+  // 全域 401 攔截：任何 API 收到 401 時自動清除 auth 並跳轉登入頁
+  apiService.onUnauthorized = () {
+    authService.logout();
+    // 延遲到 microtask 執行導航，避免在同步 exception 處理中觸發
+    Future.microtask(() {
+      navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (_) => false);
+    });
+  };
 
   runApp(MyApp(
     apiService: apiService,
@@ -121,6 +133,7 @@ class MyApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
           return MaterialApp(
+            navigatorKey: navigatorKey,
             title: '台股智慧助手',
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.defaultTheme,
