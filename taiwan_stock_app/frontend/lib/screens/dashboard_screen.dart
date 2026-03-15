@@ -222,6 +222,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (data?.watchlistSummary != null)
             WatchlistSummaryCard(
               data: data!.watchlistSummary,
+              market: marketProvider.marketCode,
               onTap: () => _navigateToWatchlist(context),
             ),
 

@@ -5,12 +5,14 @@ import '../../config/app_theme.dart';
 /// 自選股摘要卡片
 class WatchlistSummaryCard extends StatelessWidget {
   final WatchlistSummary data;
+  final String market;
   final VoidCallback? onTap;
   final VoidCallback? onStockTap;
 
   const WatchlistSummaryCard({
     super.key,
     required this.data,
+    this.market = 'TW',
     this.onTap,
     this.onStockTap,
   });
@@ -35,9 +37,9 @@ class WatchlistSummaryCard extends StatelessWidget {
                     size: 20,
                   ),
                   const SizedBox(width: 8),
-                  const Text(
-                    '自選股摘要',
-                    style: TextStyle(
+                  Text(
+                    market.toUpperCase() == 'US' ? '美股自選股摘要' : '台股自選股摘要',
+                    style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
@@ -71,40 +73,67 @@ class WatchlistSummaryCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // 統計數據
-              Row(
-                children: [
-                  _CircularStat(
-                    total: data.totalStocks,
-                    upCount: data.upCount,
-                    downCount: data.downCount,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
+              // 統計數據 or 空狀態
+              if (data.totalStocks == 0)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Center(
                     child: Column(
                       children: [
-                        _StatRow(
-                          label: '上漲',
-                          value: data.upCount,
-                          color: AppTheme.stockRise,
+                        Icon(
+                          Icons.playlist_add,
+                          size: 40,
+                          color: Colors.grey.shade400,
                         ),
                         const SizedBox(height: 8),
-                        _StatRow(
-                          label: '下跌',
-                          value: data.downCount,
-                          color: AppTheme.stockFall,
-                        ),
-                        const SizedBox(height: 8),
-                        _StatRow(
-                          label: '平盤',
-                          value: data.flatCount,
-                          color: AppTheme.stockFlat,
+                        Text(
+                          market.toUpperCase() == 'US'
+                              ? '尚未加入美股自選股'
+                              : '尚未加入台股自選股',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade500,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
+                )
+              else ...[
+                Row(
+                  children: [
+                    _CircularStat(
+                      total: data.totalStocks,
+                      upCount: data.upCount,
+                      downCount: data.downCount,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          _StatRow(
+                            label: '上漲',
+                            value: data.upCount,
+                            color: AppTheme.stockRise,
+                          ),
+                          const SizedBox(height: 8),
+                          _StatRow(
+                            label: '下跌',
+                            value: data.downCount,
+                            color: AppTheme.stockFall,
+                          ),
+                          const SizedBox(height: 8),
+                          _StatRow(
+                            label: '平盤',
+                            value: data.flatCount,
+                            color: AppTheme.stockFlat,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
 
               if (data.topGainers.isNotEmpty || data.topLosers.isNotEmpty) ...[
                 const SizedBox(height: 16),

@@ -75,10 +75,16 @@ class DashboardProvider with ChangeNotifier {
   /// 設置市場
   void setMarket(String market) {
     if (_currentMarket != market) {
+      if (kDebugMode) {
+        print('[Dashboard] Switching market: $_currentMarket → $market');
+      }
       _currentMarket = market;
+      // 清除舊市場數據，讓 UI 顯示載入骨架
+      _dashboardData = null;
       _discoveryPicks = [];
       _discoveryMarketSummary = '';
       _hasScannedDiscovery = false;
+      notifyListeners();
       loadDashboard(forceRefresh: true);
     }
   }
@@ -284,7 +290,14 @@ class DashboardProvider with ChangeNotifier {
   /// 加載自選股摘要
   Future<WatchlistSummary> _loadWatchlistSummary() async {
     try {
+      if (kDebugMode) {
+        print('[Dashboard] Loading watchlist summary for market: $_currentMarket');
+      }
       final watchlist = await _apiService.getWatchlist(market: _currentMarket);
+
+      if (kDebugMode) {
+        print('[Dashboard] Watchlist returned ${watchlist.length} items for $_currentMarket');
+      }
 
       int upCount = 0;
       int downCount = 0;
@@ -304,21 +317,27 @@ class DashboardProvider with ChangeNotifier {
         }
       }
 
-      final topGainers = sortedByGain.take(3).map((item) => TopMover(
-        stockId: item.stockId,
-        name: item.name,
-        price: item.currentPrice ?? 0,
-        changePercent: item.changePercent ?? 0,
-        market: item.marketRegion,
-      )).toList();
+      // 只從有實際漲幅的項目中取 top gainers（排除 changePercent <= 0）
+      final topGainers = sortedByGain
+        .where((item) => (item.changePercent ?? 0) > 0)
+        .take(3).map((item) => TopMover(
+          stockId: item.stockId,
+          name: item.name,
+          price: item.currentPrice ?? 0,
+          changePercent: item.changePercent ?? 0,
+          market: item.marketRegion,
+        )).toList();
 
-      final topLosers = sortedByGain.reversed.take(3).map((item) => TopMover(
-        stockId: item.stockId,
-        name: item.name,
-        price: item.currentPrice ?? 0,
-        changePercent: item.changePercent ?? 0,
-        market: item.marketRegion,
-      )).toList();
+      // 只從有實際跌幅的項目中取 top losers（排除 changePercent >= 0）
+      final topLosers = sortedByGain.reversed
+        .where((item) => (item.changePercent ?? 0) < 0)
+        .take(3).map((item) => TopMover(
+          stockId: item.stockId,
+          name: item.name,
+          price: item.currentPrice ?? 0,
+          changePercent: item.changePercent ?? 0,
+          market: item.marketRegion,
+        )).toList();
 
       return WatchlistSummary(
         totalStocks: watchlist.length,
@@ -331,7 +350,7 @@ class DashboardProvider with ChangeNotifier {
       );
     } catch (e) {
       if (kDebugMode) {
-        print('Load watchlist summary error: $e');
+        print('[Dashboard] Load watchlist summary error for $_currentMarket: $e');
       }
       return WatchlistSummary.empty();
     }
