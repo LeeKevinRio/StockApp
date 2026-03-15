@@ -208,17 +208,21 @@ class _SplashScreenState extends State<_SplashScreen> {
 
     final authProvider = context.read<AuthProvider>();
 
-    // 如果 main() 已預載入 user（Web 重整場景），直接進入首頁
-    // 同時背景刷新 user 資料以取得最新狀態
     if (authProvider.isAuthenticated) {
+      // main() 已預載入 cached user，向伺服器驗證 token 是否仍有效
+      final stillValid = await authProvider.refreshUser();
       if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/home');
-      // 背景刷新，不阻塞導航
-      authProvider.refreshUser();
+
+      if (stillValid && authProvider.isAuthenticated) {
+        Navigator.of(context).pushReplacementNamed('/home');
+      } else {
+        // Token 已過期，需重新登入
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
       return;
     }
 
-    // 否則走完整的 auth check（首次載入或 token 不存在）
+    // 無 cached user，走完整的 auth check
     final isLoggedIn = await authProvider.checkAuth();
 
     if (!mounted) return;

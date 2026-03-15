@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/user.dart';
+import '../services/api_service.dart';
 import '../services/auth_service.dart';
 
 class AuthProvider with ChangeNotifier {
@@ -24,9 +25,10 @@ class AuthProvider with ChangeNotifier {
     try {
       final isLoggedIn = await _authService.isLoggedIn();
       if (isLoggedIn) {
-        // Try to get saved user data
+        // 先從本地 cache 恢復 user
         _user = await _authService.getSavedUser();
-        // Refresh user data from server
+        // 向伺服器驗證 token 並刷新 user 資料
+        // refreshUser() 會在 401 時 rethrow ApiException
         final refreshedUser = await _authService.refreshUser();
         if (refreshedUser != null) {
           _user = refreshedUser;
@@ -35,10 +37,19 @@ class AuthProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return isLoggedIn;
-    } catch (e) {
+    } on ApiException catch (e) {
+      // Token 過期 (401)，清除登入狀態
+      if (e.isUnauthorized) {
+        _user = null;
+      }
       _isLoading = false;
       notifyListeners();
       return false;
+    } catch (e) {
+      // 網路錯誤等：如果有 cached user 就保持登入
+      _isLoading = false;
+      notifyListeners();
+      return _user != null;
     }
   }
 
@@ -120,11 +131,26 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  Future<void> refreshUser() async {
-    final refreshedUser = await _authService.refreshUser();
-    if (refreshedUser != null) {
-      _user = refreshedUser;
-      notifyListeners();
+  /// 刷新使用者資料，若 token 已過期則清除登入狀態
+  /// 回傳 true 表示使用者仍有效，false 表示已被登出
+  Future<bool> refreshUser() async {
+    try {
+      final refreshedUser = await _authService.refreshUser();
+      if (refreshedUser != null) {
+        _user = refreshedUser;
+        notifyListeners();
+      }
+      return true;
+    } on ApiException catch (e) {
+      if (e.isUnauthorized) {
+        // Token 過期，清除登入狀態
+        _user = null;
+        notifyListeners();
+        return false;
+      }
+      return true; // 其他 API 錯誤，保留 cached user
+    } catch (e) {
+      return true; // 網路錯誤等，保留 cached user
     }
   }
 
