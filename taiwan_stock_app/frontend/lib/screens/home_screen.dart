@@ -40,6 +40,22 @@ class _HomeScreenState extends State<HomeScreen> {
       // AIChatScreen 功能保留，暫時從底部導航隱藏
       const AlertsScreen(),
     ];
+
+    // Auth 安全守衛：若使用者狀態遺失（不正常情況），嘗試恢復或導回登入頁
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ensureAuth();
+    });
+  }
+
+  Future<void> _ensureAuth() async {
+    final authProvider = context.read<AuthProvider>();
+    if (!authProvider.isAuthenticated) {
+      // 嘗試從 storage 恢復
+      final restored = await authProvider.checkAuth();
+      if (!restored && mounted) {
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
+    }
   }
 
   void _switchToTab(int index) {

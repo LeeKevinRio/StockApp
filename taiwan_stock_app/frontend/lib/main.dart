@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'models/user.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'providers/auth_provider.dart';
@@ -44,19 +45,35 @@ import 'screens/backtest_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 在 app 啟動前從 storage 恢復 auth token，避免 Web 重整後遺失
+  // 在 app 啟動前從 storage 完整恢復 auth 狀態（token + user），避免 Web 重整後遺失
   final apiService = ApiService();
   final authService = AuthService(apiService);
-  await authService.isLoggedIn();
+  final isLoggedIn = await authService.isLoggedIn();
 
-  runApp(MyApp(apiService: apiService, authService: authService));
+  // 預載入 user 資料，確保 AuthProvider 一建立就有完整使用者狀態
+  User? initialUser;
+  if (isLoggedIn) {
+    initialUser = await authService.getSavedUser();
+  }
+
+  runApp(MyApp(
+    apiService: apiService,
+    authService: authService,
+    initialUser: initialUser,
+  ));
 }
 
 class MyApp extends StatelessWidget {
   final ApiService apiService;
   final AuthService authService;
+  final User? initialUser;
 
-  const MyApp({super.key, required this.apiService, required this.authService});
+  const MyApp({
+    super.key,
+    required this.apiService,
+    required this.authService,
+    this.initialUser,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +82,7 @@ class MyApp extends StatelessWidget {
       providers: [
         Provider.value(value: apiService),
         ChangeNotifierProvider(
-          create: (_) => AuthProvider(authService),
+          create: (_) => AuthProvider(authService, initialUser: initialUser),
         ),
         ChangeNotifierProvider(
           create: (_) => MarketProvider(),
@@ -190,6 +207,18 @@ class _SplashScreenState extends State<_SplashScreen> {
     }
 
     final authProvider = context.read<AuthProvider>();
+
+    // 如果 main() 已預載入 user（Web 重整場景），直接進入首頁
+    // 同時背景刷新 user 資料以取得最新狀態
+    if (authProvider.isAuthenticated) {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed('/home');
+      // 背景刷新，不阻塞導航
+      authProvider.refreshUser();
+      return;
+    }
+
+    // 否則走完整的 auth check（首次載入或 token 不存在）
     final isLoggedIn = await authProvider.checkAuth();
 
     if (!mounted) return;
