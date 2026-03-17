@@ -14,7 +14,7 @@ from app.models.ai_usage import AIUsageDaily
 from app.models.user_ai_config import UserAIConfig
 
 DAILY_LIMITS = {
-    "free": 10,
+    "free": 30,
     "pro": 50,
 }
 
