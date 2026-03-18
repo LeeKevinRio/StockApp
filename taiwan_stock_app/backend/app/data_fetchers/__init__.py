@@ -6,6 +6,7 @@ from .fugle_fetcher import FugleFetcher
 from .twse_fetcher import TWSEFetcher
 from .us_stock_fetcher import USStockFetcher
 from .reddit_fetcher import RedditFetcher
+from .threads_fetcher import ThreadsFetcher
 from .global_news_fetcher import GlobalNewsFetcher
 from .taiwan_social_fetcher import TaiwanSocialFetcher
 from .macro_data_fetcher import MacroDataFetcher
@@ -17,6 +18,7 @@ __all__ = [
     "TWSEFetcher",
     "USStockFetcher",
     "RedditFetcher",
+    "ThreadsFetcher",
     "GlobalNewsFetcher",
     "TaiwanSocialFetcher",
     "MacroDataFetcher",
