@@ -20,7 +20,7 @@ class TWSEFetcher:
 
     def __init__(self):
         self.last_request_time = 0
-        self.request_interval = 2  # 每次請求間隔2秒
+        self.request_interval = 1.2  # 每次請求間隔1.2秒（TWSE 限制: 3次/5秒）
 
     def _rate_limit(self):
         """簡單的請求頻率控制"""

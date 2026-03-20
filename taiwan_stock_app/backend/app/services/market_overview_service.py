@@ -152,7 +152,7 @@ class MarketOverviewService:
                 logger.warning(f"TWSE 批量預取第 {i // batch_size + 1} 批失敗: {e}")
 
             if i + batch_size < len(unique_ids):
-                _time.sleep(2)
+                _time.sleep(1.2)  # TWSE 限制: 3次/5秒，間隔 1.2 秒即安全
 
         # 2. TWSE 查不到的股票，用 FinMind 並行補齊
         missing_ids = [sid for sid in unique_ids if sid not in self._tw_quote_cache]

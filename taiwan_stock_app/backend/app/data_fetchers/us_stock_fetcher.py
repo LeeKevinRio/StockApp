@@ -148,6 +148,82 @@ class USStockFetcher:
             logger.error(f"Error fetching realtime quote for {symbol}: {e}")
             return None
 
+    def get_realtime_quotes_batch(self, symbols: List[str]) -> Dict[str, Dict]:
+        """
+        批量取得美股即時報價（使用 yf.download 一次取得所有股票）
+        比逐一查詢快 5-10 倍
+        """
+        if not symbols:
+            return {}
+
+        results = {}
+        try:
+            # yf.download 支援批量，一次 HTTP 取得所有股票
+            data = yf.download(
+                symbols,
+                period="2d",
+                group_by="ticker" if len(symbols) > 1 else "column",
+                progress=False,
+                threads=True,
+            )
+
+            if data.empty:
+                return {}
+
+            for symbol in symbols:
+                try:
+                    if len(symbols) > 1:
+                        stock_data = data[symbol] if symbol in data.columns.get_level_values(0) else None
+                    else:
+                        stock_data = data
+
+                    if stock_data is None or stock_data.empty:
+                        continue
+
+                    # 取最後兩筆計算漲跌
+                    stock_data = stock_data.dropna(subset=['Close'])
+                    if len(stock_data) < 1:
+                        continue
+
+                    latest = stock_data.iloc[-1]
+                    prev_close = float(stock_data.iloc[-2]['Close']) if len(stock_data) >= 2 else 0
+                    current_price = float(latest['Close'])
+
+                    if current_price <= 0:
+                        continue
+
+                    change = current_price - prev_close if prev_close > 0 else 0
+                    change_percent = (change / prev_close * 100) if prev_close > 0 else 0
+
+                    results[symbol] = {
+                        "stock_id": symbol.upper(),
+                        "symbol": symbol.upper(),
+                        "name": symbol.upper(),
+                        "price": round(current_price, 2),
+                        "change": round(change, 2),
+                        "change_percent": round(change_percent, 2),
+                        "open": round(float(latest.get('Open', 0) or 0), 2),
+                        "high": round(float(latest.get('High', 0) or 0), 2),
+                        "low": round(float(latest.get('Low', 0) or 0), 2),
+                        "volume": int(latest.get('Volume', 0) or 0),
+                        "previous_close": round(prev_close, 2),
+                        "currency": "USD",
+                        "market_region": "US",
+                        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                except Exception as e:
+                    logger.warning(f"解析 {symbol} 批量數據失敗: {e}")
+
+        except Exception as e:
+            logger.error(f"yfinance 批量下載失敗: {e}")
+            # 降級為逐一查詢
+            for symbol in symbols:
+                quote = self.get_realtime_quote(symbol)
+                if quote:
+                    results[symbol] = quote
+
+        return results
+
     def get_realtime_quotes(self, symbols: List[str]) -> List[Dict]:
         """Get real-time quotes for multiple stocks"""
         results = []

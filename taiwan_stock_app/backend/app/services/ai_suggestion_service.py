@@ -85,6 +85,135 @@ class AISuggestionService:
                 ai_client = AIClientFactory.create_client(config)
         return cls(subscription_tier=tier, ai_client=ai_client)
 
+    @staticmethod
+    def detect_market_regime(prices) -> Dict:
+        """
+        偵測市場狀態（牛市/熊市/盤整），用於調整預測策略
+
+        Returns:
+            dict with regime, trend_strength, volatility_regime
+        """
+        if len(prices) < 20:
+            return {"regime": "unknown", "trend_strength": 0, "volatility_regime": "normal"}
+
+        try:
+            closes = prices['close'].astype(float)
+
+            # 1. 趨勢判斷：用 MA5 vs MA20 的關係和斜率
+            ma5 = closes.rolling(5).mean()
+            ma20 = closes.rolling(20).mean()
+
+            # 最近5日 MA5 和 MA20 的差距趨勢
+            ma_diff = (ma5 - ma20).dropna()
+            if len(ma_diff) < 5:
+                return {"regime": "unknown", "trend_strength": 0, "volatility_regime": "normal"}
+
+            recent_diff = ma_diff.iloc[-5:]
+            avg_diff_pct = (recent_diff / closes.iloc[-5:] * 100).mean()
+
+            # MA20 斜率（最近10日）
+            if len(ma20.dropna()) >= 10:
+                ma20_slope = (ma20.dropna().iloc[-1] - ma20.dropna().iloc[-10]) / ma20.dropna().iloc[-10] * 100
+            else:
+                ma20_slope = 0
+
+            # 2. 波動率狀態
+            daily_returns = closes.pct_change().dropna()
+            recent_vol = daily_returns.iloc[-10:].std() * 100 if len(daily_returns) >= 10 else 1.0
+            historical_vol = daily_returns.std() * 100 if len(daily_returns) >= 20 else recent_vol
+
+            if recent_vol > historical_vol * 1.5:
+                volatility_regime = "high"
+            elif recent_vol < historical_vol * 0.5:
+                volatility_regime = "low"
+            else:
+                volatility_regime = "normal"
+
+            # 3. 綜合判斷
+            if avg_diff_pct > 1.0 and ma20_slope > 1.0:
+                regime = "bull"
+                trend_strength = min(abs(avg_diff_pct) + abs(ma20_slope), 10)
+            elif avg_diff_pct < -1.0 and ma20_slope < -1.0:
+                regime = "bear"
+                trend_strength = min(abs(avg_diff_pct) + abs(ma20_slope), 10)
+            else:
+                regime = "sideways"
+                trend_strength = abs(avg_diff_pct)
+
+            return {
+                "regime": regime,
+                "trend_strength": round(trend_strength, 2),
+                "volatility_regime": volatility_regime,
+                "recent_volatility": round(recent_vol, 2),
+                "ma20_slope": round(ma20_slope, 2),
+            }
+        except Exception as e:
+            logger.warning(f"Market regime detection failed: {e}")
+            return {"regime": "unknown", "trend_strength": 0, "volatility_regime": "normal"}
+
+    def _get_accuracy_feedback(self, stock_id: str, db=None) -> Dict:
+        """
+        取得歷史準確率回饋，用於自動調整預測權重
+
+        Returns:
+            dict with direction_accuracy, avg_error, amplitude_ratio, n_records,
+                  adjust_factor (用於縮放預測幅度)
+        """
+        if db is None:
+            return {"adjust_factor": 1.0, "n_records": 0}
+
+        try:
+            from app.models import PredictionRecord
+            records = db.query(PredictionRecord).filter(
+                PredictionRecord.stock_id == stock_id,
+                PredictionRecord.actual_close_price.isnot(None)
+            ).order_by(PredictionRecord.target_date.desc()).limit(20).all()
+
+            if len(records) < 3:
+                return {"adjust_factor": 1.0, "n_records": len(records)}
+
+            pred_abs_sum = 0
+            actual_abs_sum = 0
+            direction_correct = 0
+            total_error = 0
+
+            for r in records:
+                pred_change = abs(float(r.predicted_change_percent or 0))
+                actual_change = abs(float(r.actual_change_percent or 0))
+                pred_abs_sum += pred_change
+                actual_abs_sum += actual_change
+                if r.direction_correct:
+                    direction_correct += 1
+                total_error += float(r.error_percent or 0)
+
+            n = len(records)
+            direction_accuracy = direction_correct / n
+            avg_error = total_error / n
+
+            # 幅度校正因子：若預測幅度是實際的 2 倍，factor = 0.5
+            if pred_abs_sum > 0 and actual_abs_sum > 0:
+                amplitude_ratio = pred_abs_sum / actual_abs_sum
+                adjust_factor = min(1.0 / amplitude_ratio, 2.0)
+                adjust_factor = max(adjust_factor, 0.3)  # 不要縮太多
+            else:
+                amplitude_ratio = 1.0
+                adjust_factor = 1.0
+
+            # 若方向準確率極低（<40%），降低信心度
+            if direction_accuracy < 0.4:
+                adjust_factor *= 0.7
+
+            return {
+                "direction_accuracy": round(direction_accuracy, 2),
+                "avg_error": round(avg_error, 2),
+                "amplitude_ratio": round(amplitude_ratio, 2),
+                "adjust_factor": round(adjust_factor, 2),
+                "n_records": n,
+            }
+        except Exception as e:
+            logger.warning(f"Failed to get accuracy feedback: {e}")
+            return {"adjust_factor": 1.0, "n_records": 0}
+
     def collect_stock_data(self, stock_id: str, days: int = 60, market: str = "TW") -> Dict:
         """
         收集股票分析所需的所有數據（技術面、籌碼面、基本面、消息面）
@@ -100,32 +229,53 @@ class AISuggestionService:
             return self._collect_tw_stock_data(stock_id, days)
 
     def _collect_us_stock_data(self, stock_id: str, days: int = 60) -> Dict:
-        """收集美股分析數據"""
-        # ========== 技術面數據 ==========
+        """收集美股分析數據（使用 ThreadPoolExecutor 並行抓取）"""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        # ========== 先取得價格數據（技術面需要） ==========
         price_data = self.us_fetcher.get_stock_price(stock_id, period=f"{days}d")
+        prices = pd.DataFrame(price_data) if price_data else pd.DataFrame()
 
-        if price_data:
-            prices = pd.DataFrame(price_data)
-        else:
-            prices = pd.DataFrame()
+        # ========== 並行抓取所有維度 ==========
+        results_map = {}
 
-        technical = self._calculate_technical_indicators(prices)
+        def _fetch_technical():
+            return "technical", self._calculate_technical_indicators(prices)
 
-        # ========== 基本面數據 (美股用yfinance info) ==========
-        stock_info = self.us_fetcher.get_stock_info(stock_id)
-        fundamental = self._analyze_us_fundamental_data(stock_info)
+        def _fetch_fundamental():
+            stock_info = self.us_fetcher.get_stock_info(stock_id)
+            return "fundamental", self._analyze_us_fundamental_data(stock_info)
 
-        # ========== 消息面數據 ==========
-        news_sentiment = self._analyze_us_news_sentiment(stock_id)
+        def _fetch_news():
+            return "news", self._analyze_us_news_sentiment(stock_id)
 
-        # ========== 宏觀面數據 ==========
-        macro_analysis = self._analyze_macro_data()
+        def _fetch_macro():
+            return "macro", self._analyze_macro_data()
 
-        # 美股無籌碼面數據
+        def _fetch_social():
+            return "social", self._analyze_social_sentiment(stock_id)
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [
+                executor.submit(_fetch_technical),
+                executor.submit(_fetch_fundamental),
+                executor.submit(_fetch_news),
+                executor.submit(_fetch_macro),
+                executor.submit(_fetch_social),
+            ]
+            for future in as_completed(futures, timeout=30):
+                try:
+                    key, value = future.result(timeout=25)
+                    results_map[key] = value
+                except Exception as e:
+                    logger.error(f"美股並行數據抓取失敗: {e}")
+
+        technical = results_map.get("technical", {"data_insufficient": True})
+        fundamental = results_map.get("fundamental", {})
+        news_sentiment = results_map.get("news", {})
+        macro_analysis = results_map.get("macro", {})
+        social_analysis = results_map.get("social", {})
         chip_analysis = {"data_available": False, "note": "籌碼面數據不適用於美股"}
-
-        # ========== 社群情緒數據 ==========
-        social_analysis = self._analyze_social_sentiment(stock_id)
 
         latest_price = 0
         if len(prices) > 0:
@@ -150,16 +300,16 @@ class AISuggestionService:
         }
 
     def _collect_tw_stock_data(self, stock_id: str, days: int = 60) -> Dict:
-        """收集台股分析數據"""
+        """收集台股分析數據（使用 ThreadPoolExecutor 並行抓取 6 維度）"""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
         end_date = date.today()
         start_date = end_date - timedelta(days=days)
         start_str = start_date.strftime("%Y-%m-%d")
         end_str = end_date.strftime("%Y-%m-%d")
-
-        # 基本面需要更長時間範圍
         fundamental_start = (end_date - timedelta(days=365)).strftime("%Y-%m-%d")
 
-        # ========== 技術面數據 ==========
+        # ========== 第一階段：先取得價格數據（技術面需要） ==========
         try:
             prices = self.finmind.get_stock_price(stock_id, start_str, end_str)
             if len(prices) > 0:
@@ -171,45 +321,73 @@ class AISuggestionService:
             logger.error(f"Error getting price data for {stock_id}: {e}")
             prices = pd.DataFrame()
 
-        technical = self._calculate_technical_indicators(prices)
+        # ========== 第二階段：並行抓取所有維度數據 ==========
+        results_map = {}
 
-        # ========== 籌碼面數據 ==========
-        try:
-            institutions = self.finmind.get_institutional_investors(stock_id, start_str, end_str)
-        except Exception as e:
-            logger.error(f"Error getting institutional data for {stock_id}: {e}")
-            institutions = pd.DataFrame()
+        def _fetch_technical():
+            return "technical", self._calculate_technical_indicators(prices)
 
-        try:
-            margins = self.finmind.get_margin_trading(stock_id, start_str, end_str)
-        except Exception as e:
-            logger.error(f"Error getting margin data for {stock_id}: {e}")
-            margins = pd.DataFrame()
+        def _fetch_chip():
+            try:
+                institutions = self.finmind.get_institutional_investors(stock_id, start_str, end_str)
+            except Exception as e:
+                logger.error(f"Error getting institutional data for {stock_id}: {e}")
+                institutions = pd.DataFrame()
+            try:
+                margins = self.finmind.get_margin_trading(stock_id, start_str, end_str)
+            except Exception as e:
+                logger.error(f"Error getting margin data for {stock_id}: {e}")
+                margins = pd.DataFrame()
+            return "chip", self._analyze_chip_data(institutions, margins)
 
-        chip_analysis = self._analyze_chip_data(institutions, margins)
+        def _fetch_fundamental():
+            return "fundamental", self._analyze_fundamental_data(stock_id, fundamental_start, end_str)
 
-        # ========== 基本面數據 ==========
-        fundamental = self._analyze_fundamental_data(stock_id, fundamental_start, end_str)
+        def _fetch_news():
+            return "news", self._analyze_news_sentiment(stock_id)
 
-        # ========== 消息面數據 ==========
-        news_sentiment = self._analyze_news_sentiment(stock_id)
+        def _fetch_macro():
+            return "macro", self._analyze_macro_data()
 
-        # ========== 宏觀面數據 ==========
-        macro_analysis = self._analyze_macro_data()
+        def _fetch_social():
+            return "social", self._analyze_social_sentiment(stock_id)
 
-        # ========== 社群情緒數據 ==========
-        social_analysis = self._analyze_social_sentiment(stock_id)
+        def _fetch_price():
+            """TWSE 即時報價"""
+            try:
+                twse = TWSEFetcher()
+                quote = twse.get_realtime_quote(stock_id)
+                if quote and quote.get("price", 0) > 0:
+                    return "latest_price", float(quote["price"])
+            except Exception as e:
+                logger.warning(f"TWSE 即時報價失敗 {stock_id}: {e}")
+            return "latest_price", 0
 
-        # 優先用 TWSE 即時報價取得最新價（FinMind 可能延遲一天）
-        latest_price = 0
-        try:
-            twse = TWSEFetcher()
-            quote = twse.get_realtime_quote(stock_id)
-            if quote and quote.get("price", 0) > 0:
-                latest_price = float(quote["price"])
-                logger.info(f"台股 {stock_id} 即時價: {latest_price}")
-        except Exception as e:
-            logger.warning(f"TWSE 即時報價失敗 {stock_id}: {e}")
+        # 同時執行所有維度的數據抓取（最多 7 個並行）
+        with ThreadPoolExecutor(max_workers=7) as executor:
+            futures = [
+                executor.submit(_fetch_technical),
+                executor.submit(_fetch_chip),
+                executor.submit(_fetch_fundamental),
+                executor.submit(_fetch_news),
+                executor.submit(_fetch_macro),
+                executor.submit(_fetch_social),
+                executor.submit(_fetch_price),
+            ]
+            for future in as_completed(futures, timeout=30):
+                try:
+                    key, value = future.result(timeout=25)
+                    results_map[key] = value
+                except Exception as e:
+                    logger.error(f"並行數據抓取失敗: {e}")
+
+        technical = results_map.get("technical", {"data_insufficient": True})
+        chip_analysis = results_map.get("chip", {"data_available": False})
+        fundamental = results_map.get("fundamental", {})
+        news_sentiment = results_map.get("news", {})
+        macro_analysis = results_map.get("macro", {})
+        social_analysis = results_map.get("social", {})
+        latest_price = results_map.get("latest_price", 0)
 
         # Fallback: 使用 FinMind 最後一筆收盤價
         if latest_price <= 0 and len(prices) > 0:
@@ -1351,6 +1529,38 @@ class AISuggestionService:
             }
         }
 
+    @staticmethod
+    def _build_regime_context(regime: Dict, accuracy_fb: Dict) -> str:
+        """為 AI Prompt 生成市場狀態和準確率回饋上下文"""
+        lines = []
+
+        if regime and regime.get("regime") != "unknown":
+            regime_names = {"bull": "牛市（上升趨勢）", "bear": "熊市（下降趨勢）", "sideways": "盤整（橫向震盪）"}
+            vol_names = {"high": "高波動", "low": "低波動", "normal": "正常波動"}
+            lines.append("## 市場狀態偵測")
+            lines.append(f"- 當前狀態: **{regime_names.get(regime['regime'], regime['regime'])}**")
+            lines.append(f"- 趨勢強度: {regime.get('trend_strength', 0)}/10")
+            lines.append(f"- 波動水準: {vol_names.get(regime.get('volatility_regime', 'normal'), '正常')}")
+            if regime.get('ma20_slope'):
+                lines.append(f"- MA20 斜率: {regime['ma20_slope']:+.2f}%")
+
+            if regime['regime'] == 'sideways':
+                lines.append("- **盤整市場提醒**: 方向不明確時，預測幅度應較小，機率應較低（0.50~0.60）")
+            elif regime['regime'] == 'bear':
+                lines.append("- **熊市提醒**: 下跌動能較強，反彈預測需更謹慎，注意籌碼面動向")
+
+        if accuracy_fb and accuracy_fb.get('n_records', 0) >= 5:
+            lines.append(f"\n## 歷史準確率自動調整")
+            lines.append(f"- 方向準確率: {accuracy_fb.get('direction_accuracy', 0):.0%}")
+            lines.append(f"- 平均預測誤差: {accuracy_fb.get('avg_error', 0):.1f}%")
+            amp_ratio = accuracy_fb.get('amplitude_ratio', 1.0)
+            if amp_ratio > 1.3:
+                lines.append(f"- **⚠️ 過去預測幅度是實際的 {amp_ratio:.1f} 倍，系統已自動縮小預測幅度**")
+            elif amp_ratio < 0.7:
+                lines.append(f"- 過去預測幅度偏保守（實際的 {amp_ratio:.1f} 倍），可適度放大")
+
+        return "\n".join(lines) if lines else ""
+
     def _get_prediction_history_context(self, stock_id: str, db=None) -> str:
         """取得過去預測歷史，作為 AI 回饋參考（含方向偏差和幅度偏差偵測）"""
         if db is None:
@@ -1460,6 +1670,36 @@ class AISuggestionService:
             data = self.collect_stock_data(stock_id, market=market)
             data['_db'] = db  # 傳遞 db 給 prompt builder 用
 
+            # ===== 市場狀態偵測（牛/熊/盤整）=====
+            prices_df = None
+            if market == "TW":
+                try:
+                    end_d = date.today()
+                    start_d = end_d - timedelta(days=60)
+                    prices_df = self.finmind.get_stock_price(
+                        stock_id, start_d.strftime("%Y-%m-%d"), end_d.strftime("%Y-%m-%d")
+                    )
+                    if len(prices_df) > 0:
+                        if 'max' in prices_df.columns:
+                            prices_df['high'] = prices_df['max']
+                        if 'min' in prices_df.columns:
+                            prices_df['low'] = prices_df['min']
+                except Exception:
+                    prices_df = pd.DataFrame()
+            else:
+                try:
+                    price_list = self.us_fetcher.get_stock_price(stock_id, period="60d")
+                    prices_df = pd.DataFrame(price_list) if price_list else pd.DataFrame()
+                except Exception:
+                    prices_df = pd.DataFrame()
+
+            market_regime = self.detect_market_regime(prices_df) if prices_df is not None and len(prices_df) > 0 else {"regime": "unknown", "trend_strength": 0, "volatility_regime": "normal"}
+            data['market_regime'] = market_regime
+
+            # ===== 歷史準確率回饋 =====
+            accuracy_fb = self._get_accuracy_feedback(stock_id, db)
+            data['accuracy_feedback'] = accuracy_fb
+
             # 計算綜合評分
             tech_score = data.get('technical', {}).get('technical_score', 0)
             chip_score = data.get('chip', {}).get('chip_score', 0)
@@ -1468,23 +1708,44 @@ class AISuggestionService:
             social_score = data.get('social', {}).get('social_score', 0)
             macro_score = data.get('macro', {}).get('macro_score', 0)
 
-            # 加權平均 - 6維度（含社群情緒）— 用於交易建議（BUY/SELL）
-            if market == "US":
-                # 美股權重: 技術35%, 基本面25%, 消息面12%, 社群8%, 宏觀面20%
-                total_score = (tech_score * 0.35) + (fund_score * 0.25) + (news_score * 0.12) + (social_score * 0.08) + (macro_score * 0.20)
-            else:
-                # 台股權重: 技術30%, 籌碼20%, 基本面15%, 消息面10%, 社群10%, 宏觀面15%
-                total_score = (tech_score * 0.30) + (chip_score * 0.20) + (fund_score * 0.15) + (news_score * 0.10) + (social_score * 0.10) + (macro_score * 0.15)
+            # ===== 根據市場狀態動態調整權重 =====
+            regime = market_regime.get("regime", "unknown")
 
-            # 隔日預測專用加權評分 — 側重短期因子
             if market == "US":
-                # 美股預測權重: 技術40%, 基本面15%, 消息面15%, 社群5%, 宏觀25%
-                prediction_score = (tech_score * 0.40) + (fund_score * 0.15) + (news_score * 0.15) + (social_score * 0.05) + (macro_score * 0.25)
+                if regime == "bear":
+                    # 熊市：提高宏觀和新聞權重，降低技術面
+                    total_score = (tech_score * 0.25) + (fund_score * 0.20) + (news_score * 0.20) + (social_score * 0.05) + (macro_score * 0.30)
+                elif regime == "sideways":
+                    # 盤整：技術面更重要（支撐/壓力）
+                    total_score = (tech_score * 0.45) + (fund_score * 0.20) + (news_score * 0.10) + (social_score * 0.05) + (macro_score * 0.20)
+                else:
+                    # 牛市/未知：預設權重
+                    total_score = (tech_score * 0.35) + (fund_score * 0.25) + (news_score * 0.12) + (social_score * 0.08) + (macro_score * 0.20)
             else:
-                # 台股預測權重: 技術35%, 籌碼35%, 消息面15%, 社群5%, 基本面5%, 宏觀5%
-                prediction_score = (tech_score * 0.35) + (chip_score * 0.35) + (news_score * 0.15) + (social_score * 0.05) + (fund_score * 0.05) + (macro_score * 0.05)
+                if regime == "bear":
+                    # 熊市：籌碼面（外資動向）更重要
+                    total_score = (tech_score * 0.20) + (chip_score * 0.35) + (fund_score * 0.10) + (news_score * 0.15) + (social_score * 0.05) + (macro_score * 0.15)
+                elif regime == "sideways":
+                    # 盤整：技術面更重要
+                    total_score = (tech_score * 0.40) + (chip_score * 0.20) + (fund_score * 0.10) + (news_score * 0.10) + (social_score * 0.05) + (macro_score * 0.15)
+                else:
+                    # 牛市/未知：預設權重
+                    total_score = (tech_score * 0.30) + (chip_score * 0.20) + (fund_score * 0.15) + (news_score * 0.10) + (social_score * 0.10) + (macro_score * 0.15)
+
+            # 隔日預測專用加權評分 — 側重短期因子（也根據市場狀態調整）
+            if market == "US":
+                if regime == "bear":
+                    prediction_score = (tech_score * 0.30) + (fund_score * 0.10) + (news_score * 0.25) + (social_score * 0.05) + (macro_score * 0.30)
+                else:
+                    prediction_score = (tech_score * 0.40) + (fund_score * 0.15) + (news_score * 0.15) + (social_score * 0.05) + (macro_score * 0.25)
+            else:
+                if regime == "bear":
+                    prediction_score = (tech_score * 0.25) + (chip_score * 0.40) + (news_score * 0.20) + (social_score * 0.05) + (fund_score * 0.05) + (macro_score * 0.05)
+                else:
+                    prediction_score = (tech_score * 0.35) + (chip_score * 0.35) + (news_score * 0.15) + (social_score * 0.05) + (fund_score * 0.05) + (macro_score * 0.05)
 
             data['prediction_score'] = round(prediction_score, 1)
+            logger.info(f"[{stock_id}] 市場狀態: {regime}, 趨勢強度: {market_regime.get('trend_strength', 0)}, 波動: {market_regime.get('volatility_regime', 'normal')}")
 
             # 組合 Prompt
             system_prompt = self._build_system_prompt(total_score, market)
@@ -1602,12 +1863,15 @@ class AISuggestionService:
                             except (TypeError, ValueError):
                                 pass
 
-            # ===== 預測幅度校正（防止 AI 所有股票給相似值）=====
+            # ===== 預測幅度校正（含市場狀態 + 歷史準確率回饋）=====
             ndp = result.get("next_day_prediction")
             if isinstance(ndp, dict) and latest_price > 0:
                 avg_vol = data.get('avg_daily_volatility', 1.0) or 1.0
                 pred_score = data.get('prediction_score', 0) or 0
                 ai_change = float(ndp.get('predicted_change_percent', 0) or 0)
+                regime_info = data.get('market_regime', {})
+                accuracy_fb = data.get('accuracy_feedback', {})
+                adjust_factor = accuracy_fb.get('adjust_factor', 1.0)
 
                 # 用 prediction_score 決定信號強度倍數
                 abs_score = abs(pred_score)
@@ -1617,6 +1881,20 @@ class AISuggestionService:
                     multiplier = 0.6 + ((abs_score - 20) / 30) * 0.6  # 0.6~1.2
                 else:
                     multiplier = 1.2 + min((abs_score - 50) / 50, 1.0) * 0.8  # 1.2~2.0
+
+                # 根據市場狀態調整 multiplier
+                vol_regime = regime_info.get('volatility_regime', 'normal')
+                if vol_regime == 'high':
+                    multiplier *= 1.3  # 高波動期放大預測幅度
+                elif vol_regime == 'low':
+                    multiplier *= 0.6  # 低波動期縮小預測幅度
+
+                # 盤整時減少預測幅度（方向不明確）
+                if regime_info.get('regime') == 'sideways':
+                    multiplier *= 0.7
+
+                # 根據歷史準確率回饋調整幅度（核心改進）
+                multiplier *= adjust_factor
 
                 # 校正方向：以 prediction_score 決定方向
                 direction_sign = 1 if pred_score >= 0 else -1
@@ -1638,16 +1916,26 @@ class AISuggestionService:
                     range_margin = 0.015 if market == "TW" else 0.025
                     ndp['price_range_low'] = round(latest_price * (1 + calibrated_change / 100 - range_margin), 2)
                     ndp['price_range_high'] = round(latest_price * (1 + calibrated_change / 100 + range_margin), 2)
-                    logger.info("預測校正 %s: AI=%.2f%% → 校正=%.2f%% (vol=%.2f%%, score=%.1f)",
-                                stock_id, ai_change, calibrated_change, avg_vol, pred_score)
+                    logger.info("預測校正 %s: AI=%.2f%% → 校正=%.2f%% (vol=%.2f%%, score=%.1f, regime=%s, adj=%.2f)",
+                                stock_id, ai_change, calibrated_change, avg_vol, pred_score,
+                                regime_info.get('regime', '?'), adjust_factor)
 
-                # 機率也應根據信號強度調整，不要全部 0.70
+                # 機率也應根據信號強度和歷史準確率調整
+                hist_dir_accuracy = accuracy_fb.get('direction_accuracy', 0.5)
                 if abs_score >= 50:
                     calibrated_prob = round(0.72 + min(abs_score - 50, 50) / 500, 2)  # 0.72~0.82
                 elif abs_score >= 20:
                     calibrated_prob = round(0.60 + (abs_score - 20) / 250, 2)  # 0.60~0.72
                 else:
                     calibrated_prob = round(0.52 + abs_score / 200, 2)  # 0.52~0.62
+
+                # 根據歷史方向準確率修正：若歷史準確率低，降低信心
+                if accuracy_fb.get('n_records', 0) >= 5:
+                    if hist_dir_accuracy < 0.4:
+                        calibrated_prob = min(calibrated_prob, 0.55)
+                    elif hist_dir_accuracy > 0.7:
+                        calibrated_prob = min(calibrated_prob + 0.05, 0.85)
+
                 ndp['probability'] = calibrated_prob
 
             # 強制覆蓋 AI 的建議和信心度（高風險經紀人模式）
@@ -2190,6 +2478,8 @@ class AISuggestionService:
 - **每支股票的預測值必須不同！不要出現多檔股票預測相同數值的情況！**
 
 {self._get_prediction_history_context(stock_id, data.get('_db'))}
+
+{self._build_regime_context(data.get('market_regime', {}), data.get('accuracy_feedback', {}))}
 
 {self._get_holiday_gap_context(market)}
 

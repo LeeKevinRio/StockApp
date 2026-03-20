@@ -79,8 +79,7 @@ class DashboardProvider with ChangeNotifier {
         print('[Dashboard] Switching market: $_currentMarket → $market');
       }
       _currentMarket = market;
-      // 清除舊市場數據，讓 UI 顯示載入骨架
-      _dashboardData = null;
+      // 保留舊數據顯示（避免白屏），標記載入中讓 UI 顯示進度指示
       _discoveryPicks = [];
       _discoveryMarketSummary = '';
       _hasScannedDiscovery = false;

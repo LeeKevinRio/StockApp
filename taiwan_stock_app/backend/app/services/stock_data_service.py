@@ -414,15 +414,36 @@ class StockDataService:
         new_prices = {}
 
         if market == "US":
-            # US stocks - 逐一查詢（yfinance 沒有批量 API）
-            for stock_id in missing_ids:
-                try:
-                    price_data = self._get_us_realtime_price(stock_id)
-                    if price_data:
-                        new_prices[stock_id] = price_data
-                        results[stock_id] = price_data
-                except Exception as e:
-                    logger.error(f"US Stock {stock_id} 報價失敗: {e}")
+            # US stocks - 使用批量 API（yf.download 一次取得所有）
+            try:
+                batch_quotes = self.us_fetcher.get_realtime_quotes_batch(missing_ids)
+                for stock_id, quote in batch_quotes.items():
+                    price_data = {
+                        "stock_id": stock_id,
+                        "name": quote.get("name", ""),
+                        "current_price": Decimal(str(quote.get("price", 0))),
+                        "change": Decimal(str(quote.get("change", 0))),
+                        "change_percent": Decimal(str(quote.get("change_percent", 0))),
+                        "open": Decimal(str(quote.get("open", 0))),
+                        "high": Decimal(str(quote.get("high", 0))),
+                        "low": Decimal(str(quote.get("low", 0))),
+                        "volume": quote.get("volume", 0),
+                        "market_region": "US",
+                        "currency": quote.get("currency", "USD"),
+                        "updated_at": datetime.now(),
+                    }
+                    new_prices[stock_id] = price_data
+                    results[stock_id] = price_data
+            except Exception as e:
+                logger.error(f"US 批量報價失敗，降級逐一查詢: {e}")
+                for stock_id in missing_ids:
+                    try:
+                        price_data = self._get_us_realtime_price(stock_id)
+                        if price_data:
+                            new_prices[stock_id] = price_data
+                            results[stock_id] = price_data
+                    except Exception as e2:
+                        logger.error(f"US Stock {stock_id} 報價失敗: {e2}")
         else:
             # TW stocks - 使用 TWSE 批量 API（含上市+上櫃）
             try:
@@ -461,17 +482,28 @@ class StockDataService:
             except Exception as e:
                 logger.error(f"TWSE 批量報價失敗: {e}")
 
-            # 對批量查詢未命中的股票，逐一補查
+            # 對批量查詢未命中的股票，並行補查（提速 3-5 倍）
             still_missing = [sid for sid in missing_ids if sid not in results]
             if still_missing:
-                for stock_id in still_missing:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                def _fetch_single_tw(sid):
                     try:
-                        price_data = self._get_tw_realtime_price(stock_id)
-                        if price_data:
-                            new_prices[stock_id] = price_data
-                            results[stock_id] = price_data
+                        return sid, self._get_tw_realtime_price(sid)
                     except Exception as e2:
-                        logger.error(f"TW Stock {stock_id} 逐一補查失敗: {e2}")
+                        logger.error(f"TW Stock {sid} 逐一補查失敗: {e2}")
+                        return sid, None
+
+                with ThreadPoolExecutor(max_workers=min(len(still_missing), 5)) as executor:
+                    futures = {executor.submit(_fetch_single_tw, sid): sid for sid in still_missing}
+                    for future in as_completed(futures, timeout=15):
+                        try:
+                            sid, price_data = future.result(timeout=10)
+                            if price_data:
+                                new_prices[sid] = price_data
+                                results[sid] = price_data
+                        except Exception:
+                            pass
 
         # 快取新獲取的報價
         if new_prices:
