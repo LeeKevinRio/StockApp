@@ -134,7 +134,7 @@ async def get_market_regime(
 
 @router.get("/sector-impact")
 async def get_sector_impact(
-    market: str = Query("TW", regex="^(TW|US)$"),
+    market: str = Query("TW", pattern="^(TW|US)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/crypto", tags=["crypto"])
 @router.get("/prices")
 async def get_crypto_prices(
     limit: int = Query(20, ge=1, le=250),
-    vs_currency: str = Query("usd", regex="^[a-z]{3}$"),
+    vs_currency: str = Query("usd", pattern="^[a-z]{3}$"),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
@@ -93,8 +93,8 @@ async def get_crypto_prices(
 
 @router.get("/{symbol}/detail")
 async def get_crypto_detail(
-    symbol: str = Query(..., min_length=2, max_length=10),
-    vs_currency: str = Query("usd", regex="^[a-z]{3}$"),
+    symbol: str,
+    vs_currency: str = Query("usd", pattern="^[a-z]{3}$"),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
@@ -158,7 +158,7 @@ async def get_crypto_detail(
 
 @router.get("/{symbol}/kline")
 async def get_crypto_kline(
-    symbol: str = Query(..., min_length=2, max_length=10),
+    symbol: str,
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
@@ -280,7 +280,7 @@ async def get_market_overview(
 
 @router.get("/{symbol}/ai-analysis")
 async def get_crypto_ai_analysis(
-    symbol: str = Query(..., min_length=2, max_length=10),
+    symbol: str,
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
