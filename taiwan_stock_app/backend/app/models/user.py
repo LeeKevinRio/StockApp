@@ -27,3 +27,7 @@ class User(Base):
     # Subscription fields
     subscription_tier = Column(String(20), default='free')  # 'free' or 'pro'
     is_admin = Column(Boolean, default=False)
+
+    # 用戶偏好設定
+    daily_summary_enabled = Column(Boolean, default=False)  # 是否訂閱每日盤前摘要 Email
+    risk_preference = Column(String(20), default='moderate')  # 風險偏好: conservative / moderate / aggressive

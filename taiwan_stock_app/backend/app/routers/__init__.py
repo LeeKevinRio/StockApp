@@ -19,6 +19,8 @@ from .strategy_backtest import router as strategy_backtest_router
 from .ai_discovery import router as ai_discovery_router
 from .crypto import router as crypto_router
 from .daily_summary import router as daily_summary_router
+from .macro import router as macro_router
+from .portfolio_recommendation import router as portfolio_recommendation_router
 
 __all__ = [
     "auth_router",
@@ -39,4 +41,6 @@ __all__ = [
     "ai_discovery_router",
     "crypto_router",
     "daily_summary_router",
+    "macro_router",
+    "portfolio_recommendation_router",
 ]

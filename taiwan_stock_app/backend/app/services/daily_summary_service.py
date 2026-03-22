@@ -35,7 +35,8 @@ class DailySummaryService:
         self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
         self.smtp_user = os.getenv("SMTP_USER", "")
         self.smtp_password = os.getenv("SMTP_PASSWORD", "")
-        self.from_email = os.getenv("FROM_EMAIL", "")
+        self.from_email = os.getenv("FROM_EMAIL", self.smtp_user)
+        # 保留環境變數作為備用，但主要從用戶 DB 取得 email
         self.to_emails = self._parse_to_emails(os.getenv("TO_EMAIL", ""))
 
         # 延遲導入以避免循環依賴
@@ -49,6 +50,32 @@ class DailySummaryService:
         if not to_email_str:
             return []
         return [email.strip() for email in to_email_str.split(",") if email.strip()]
+
+    def _get_subscribed_emails(self) -> List[str]:
+        """
+        從資料庫取得所有已訂閱盤前摘要的用戶 Email（Google 登入帳號）
+        如果 DB 不可用，退回使用環境變數設定
+        """
+        try:
+            from app.database import SessionLocal
+            from app.models.user import User
+            db = SessionLocal()
+            try:
+                # 取得所有啟用盤前摘要的用戶 email
+                users = db.query(User).filter(
+                    User.email.isnot(None),
+                    User.daily_summary_enabled == True
+                ).all()
+                emails = [u.email for u in users if u.email]
+                if emails:
+                    return emails
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"無法從 DB 取得訂閱用戶，退回環境變數: {e}")
+
+        # 退回使用環境變數
+        return self.to_emails
 
     async def _get_us_market_summary(self) -> Dict:
         """
@@ -858,10 +885,33 @@ class DailySummaryService:
 
         return summary_data
 
+    async def send_to_user(self, user_email: str, summary_data: Optional[Dict] = None) -> bool:
+        """
+        發送盤前摘要到指定用戶的 Google 登入 Email
+
+        Args:
+            user_email: 用戶的 Google 登入 email
+            summary_data: 摘要數據，若為 None 則自動生成
+
+        Returns:
+            是否發送成功
+        """
+        if not summary_data:
+            summary_data = await self.generate_summary()
+
+        # 暫時替換收件人
+        original = self.to_emails
+        self.to_emails = [user_email]
+        try:
+            return await self.send_email(summary_data)
+        finally:
+            self.to_emails = original
+
     async def schedule_daily_summary(self) -> bool:
         """
         每日摘要定時任務
         應由 APScheduler 在每天 8:00 AM 台灣時間調用
+        自動從 DB 取得所有訂閱用戶的 Google Email 並逐一發送
 
         Returns:
             是否執行成功
@@ -870,18 +920,28 @@ class DailySummaryService:
         logger.info("執行每日盤前摘要任務...")
 
         try:
-            # 生成摘要數據
+            # 生成摘要數據（只需生成一次）
             summary_data = await self.generate_summary()
 
-            # 發送郵件
-            email_sent = await self.send_email(summary_data)
+            # 從 DB 取得訂閱用戶 email（即 Google 登入帳號）
+            subscribed_emails = self._get_subscribed_emails()
 
-            if email_sent:
-                logger.info("每日摘要任務執行成功")
-                return True
-            else:
-                logger.warning("摘要數據已生成，但郵件發送失敗")
+            if not subscribed_emails:
+                logger.warning("沒有訂閱盤前摘要的用戶")
                 return False
+
+            # 逐一發送（未來可改為批次）
+            success_count = 0
+            for email in subscribed_emails:
+                try:
+                    sent = await self.send_to_user(email, summary_data)
+                    if sent:
+                        success_count += 1
+                except Exception as e:
+                    logger.error(f"發送至 {email} 失敗: {e}")
+
+            logger.info(f"每日摘要完成：{success_count}/{len(subscribed_emails)} 封發送成功")
+            return success_count > 0
 
         except Exception as e:
             logger.error(f"每日摘要任務執行失敗: {e}")

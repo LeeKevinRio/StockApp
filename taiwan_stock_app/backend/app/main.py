@@ -55,6 +55,8 @@ try:
         ai_discovery_router,
         crypto_router,
         daily_summary_router,
+        macro_router,
+        portfolio_recommendation_router,
     )
     from app.routers.predictions import router as predictions_router
     from app.routers.market_overview import router as market_overview_router
@@ -120,6 +122,8 @@ if _routers_available:
     app.include_router(ai_discovery_router)
     app.include_router(crypto_router)
     app.include_router(daily_summary_router)
+    app.include_router(macro_router)
+    app.include_router(portfolio_recommendation_router)
 
 
 @app.on_event("startup")
@@ -135,6 +139,12 @@ def on_startup():
                 with engine.connect() as conn:
                     conn.execute(text(
                         "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ"
+                    ))
+                    conn.execute(text(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_summary_enabled BOOLEAN DEFAULT FALSE"
+                    ))
+                    conn.execute(text(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS risk_preference VARCHAR(20) DEFAULT 'moderate'"
                     ))
                     conn.commit()
             except Exception as mig_e:
