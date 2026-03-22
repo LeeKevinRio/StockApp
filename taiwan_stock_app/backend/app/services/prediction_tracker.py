@@ -1,18 +1,39 @@
 """
 Prediction Tracker Service - 追蹤 AI 預測準確度
 """
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 import logging
+from collections import defaultdict
 
 from app.models import PredictionRecord, Stock, Watchlist
 from app.services import StockDataService
 from app.services.trading_calendar import get_next_trading_date, get_previous_trading_date
 
 logger = logging.getLogger(__name__)
+
+# 業界分類對應表
+INDUSTRY_MAPPING = {
+    # 半導體
+    "2330": "半導體", "2340": "半導體", "2342": "半導體", "3034": "半導體", "3044": "半導體",
+    "3045": "半導體", "3231": "半導體", "3257": "半導體", "2379": "半導體", "2388": "半導體",
+    # 金融
+    "2880": "金融", "2881": "金融", "2882": "金融", "2883": "金融", "2884": "金融",
+    "2887": "金融", "2889": "金融", "2890": "金融", "2891": "金融", "2892": "金融",
+    # 傳產
+    "1101": "傳產", "1102": "傳產", "1103": "傳產", "1104": "傳產", "2002": "傳產",
+    "2207": "傳產", "2231": "傳產", "2409": "傳產", "2449": "傳產",
+    # 電子
+    "2308": "電子", "2317": "電子", "2324": "電子", "2408": "電子", "2412": "電子",
+    "2454": "電子", "2482": "電子", "2498": "電子",
+    # 生技
+    "1256": "生技", "1260": "生技", "1266": "生技", "1268": "生技", "1336": "生技",
+    # 日用
+    "1101": "日用", "1605": "日用", "2105": "日用",
+}
 
 
 class PredictionTracker:
@@ -677,3 +698,547 @@ class PredictionTracker:
             results.append(pred)
 
         return results
+
+    def _get_industry(self, stock_id: str) -> str:
+        """
+        根據股票代碼取得業界分類
+
+        Args:
+            stock_id: 股票代碼
+
+        Returns:
+            業界名稱，預設為 "其他"
+        """
+        return INDUSTRY_MAPPING.get(stock_id, "其他")
+
+    def get_industry_accuracy(self, db: Session, days: int = 30, market: str = None) -> Dict:
+        """
+        依業界分類分析預測準確度
+
+        Args:
+            db: Database session
+            days: 統計天數
+            market: 市場過濾 (TW/US/None=all)
+
+        Returns:
+            各業界的準確度統計
+        """
+        start_date = date.today() - timedelta(days=days)
+
+        query = db.query(PredictionRecord).filter(
+            PredictionRecord.target_date >= start_date,
+            PredictionRecord.actual_close_price.isnot(None)
+        )
+        if market:
+            query = query.filter(PredictionRecord.market_region == market)
+
+        records = self._dedup_records(query.all())
+
+        # 依業界分組統計
+        industry_stats = defaultdict(lambda: {
+            "total": 0,
+            "correct": 0,
+            "within_range": 0,
+            "total_error": 0,
+            "stocks": set(),
+            "records": []
+        })
+
+        for r in records:
+            industry = self._get_industry(r.stock_id)
+            stats = industry_stats[industry]
+
+            stats["total"] += 1
+            stats["stocks"].add(r.stock_id)
+            if r.direction_correct:
+                stats["correct"] += 1
+            if r.within_range:
+                stats["within_range"] += 1
+            stats["total_error"] += float(r.error_percent or 0)
+            stats["records"].append({
+                "stock_id": r.stock_id,
+                "predicted_direction": r.predicted_direction,
+                "actual_direction": r.actual_direction,
+                "direction_correct": r.direction_correct,
+                "error_percent": float(r.error_percent or 0)
+            })
+
+        # 計算統計指標
+        result = {}
+        for industry, stats in industry_stats.items():
+            total = stats["total"]
+            result[industry] = {
+                "total_predictions": total,
+                "num_stocks": len(stats["stocks"]),
+                "direction_accuracy": round((stats["correct"] / total) * 100, 1) if total > 0 else 0,
+                "within_range_rate": round((stats["within_range"] / total) * 100, 1) if total > 0 else 0,
+                "avg_error_percent": round(stats["total_error"] / total, 2) if total > 0 else 0,
+                "correct_count": stats["correct"],
+            }
+
+        return {
+            "period_days": days,
+            "total_industries": len(result),
+            "industries": result
+        }
+
+    def get_time_period_accuracy(self, db: Session, days: int = 90, period_type: str = "weekly", market: str = None) -> Dict:
+        """
+        分析不同時期的預測準確度趨勢
+
+        Args:
+            db: Database session
+            days: 統計天數
+            period_type: 週期類型 ("weekly" 或 "monthly")
+            market: 市場過濾 (TW/US/None=all)
+
+        Returns:
+            時期別準確度數據
+        """
+        start_date = date.today() - timedelta(days=days)
+        today = date.today()
+
+        query = db.query(PredictionRecord).filter(
+            PredictionRecord.target_date >= start_date,
+            PredictionRecord.target_date <= today,
+            PredictionRecord.actual_close_price.isnot(None)
+        )
+        if market:
+            query = query.filter(PredictionRecord.market_region == market)
+
+        records = self._dedup_records(query.all())
+
+        # 依時期分組
+        period_stats = defaultdict(lambda: {
+            "total": 0,
+            "correct": 0,
+            "total_error": 0
+        })
+
+        for r in records:
+            if period_type == "weekly":
+                # 計算週數（自該週的週一起始）
+                period_key = r.target_date.isocalendar()[1]  # 週數
+                period_label = f"Week {period_key}"
+            else:  # monthly
+                period_key = r.target_date.strftime("%Y-%m")
+                period_label = period_key
+
+            stats = period_stats[period_label]
+            stats["total"] += 1
+            if r.direction_correct:
+                stats["correct"] += 1
+            stats["total_error"] += float(r.error_percent or 0)
+
+        # 計算各時期準確率
+        result = []
+        for period_label in sorted(period_stats.keys()):
+            stats = period_stats[period_label]
+            total = stats["total"]
+            result.append({
+                "period": period_label,
+                "total_predictions": total,
+                "direction_accuracy": round((stats["correct"] / total) * 100, 1) if total > 0 else 0,
+                "avg_error_percent": round(stats["total_error"] / total, 2) if total > 0 else 0,
+                "correct_count": stats["correct"]
+            })
+
+        return {
+            "period_type": period_type,
+            "total_periods": len(result),
+            "periods": result
+        }
+
+    def get_market_regime_accuracy(self, db: Session, days: int = 30, market: str = "TW") -> Dict:
+        """
+        分析不同市場環境下的預測準確度（牛市/熊市/盤整）
+
+        Args:
+            db: Database session
+            days: 統計天數
+            market: 市場 (TW/US)
+
+        Returns:
+            市場環境別準確度數據
+        """
+        start_date = date.today() - timedelta(days=days)
+
+        query = db.query(PredictionRecord).filter(
+            PredictionRecord.target_date >= start_date,
+            PredictionRecord.actual_close_price.isnot(None),
+            PredictionRecord.market_region == market
+        )
+
+        records = self._dedup_records(query.all())
+
+        # 計算市場平均漲跌幅來判斷市場環境
+        if records:
+            avg_change = sum(float(r.actual_change_percent or 0) for r in records) / len(records)
+
+            # 簡易市場環境判定
+            if avg_change > 1.0:
+                regime = "bull"  # 牛市
+            elif avg_change < -1.0:
+                regime = "bear"  # 熊市
+            else:
+                regime = "sideways"  # 盤整
+        else:
+            regime = "unknown"
+
+        # 依市場環境分組統計
+        regime_stats = defaultdict(lambda: {
+            "total": 0,
+            "correct": 0,
+            "within_range": 0,
+            "total_error": 0,
+            "avg_actual_change": 0
+        })
+
+        for r in records:
+            actual_change = float(r.actual_change_percent or 0)
+
+            # 判定個別記錄的市場環境
+            if actual_change > 1.0:
+                rec_regime = "bull"
+            elif actual_change < -1.0:
+                rec_regime = "bear"
+            else:
+                rec_regime = "sideways"
+
+            stats = regime_stats[rec_regime]
+            stats["total"] += 1
+            if r.direction_correct:
+                stats["correct"] += 1
+            if r.within_range:
+                stats["within_range"] += 1
+            stats["total_error"] += float(r.error_percent or 0)
+            stats["avg_actual_change"] += actual_change
+
+        # 計算統計指標
+        result = {}
+        for regime_name in ["bull", "bear", "sideways"]:
+            if regime_name not in regime_stats:
+                continue
+            stats = regime_stats[regime_name]
+            total = stats["total"]
+            result[regime_name] = {
+                "total_predictions": total,
+                "direction_accuracy": round((stats["correct"] / total) * 100, 1) if total > 0 else 0,
+                "within_range_rate": round((stats["within_range"] / total) * 100, 1) if total > 0 else 0,
+                "avg_error_percent": round(stats["total_error"] / total, 2) if total > 0 else 0,
+                "avg_actual_change_percent": round(stats["avg_actual_change"] / total, 2) if total > 0 else 0,
+                "correct_count": stats["correct"]
+            }
+
+        return {
+            "period_days": days,
+            "market": market,
+            "current_regime": regime,
+            "regimes": result
+        }
+
+    def get_confidence_calibration(self, db: Session, days: int = 30, market: str = None) -> Dict:
+        """
+        分析預測信心度與實際準確度的關係
+
+        Args:
+            db: Database session
+            days: 統計天數
+            market: 市場過濾 (TW/US/None=all)
+
+        Returns:
+            信心度區間的準確度對照
+        """
+        start_date = date.today() - timedelta(days=days)
+
+        query = db.query(PredictionRecord).filter(
+            PredictionRecord.target_date >= start_date,
+            PredictionRecord.actual_close_price.isnot(None),
+            PredictionRecord.predicted_probability.isnot(None)
+        )
+        if market:
+            query = query.filter(PredictionRecord.market_region == market)
+
+        records = self._dedup_records(query.all())
+
+        # 定義信心度區間（%）
+        confidence_buckets = {
+            "very_low": (0, 50),      # 0-50%
+            "low": (50, 60),          # 50-60%
+            "medium": (60, 70),       # 60-70%
+            "high": (70, 80),         # 70-80%
+            "very_high": (80, 100)    # 80-100%
+        }
+
+        confidence_stats = {name: {
+            "total": 0,
+            "correct": 0,
+            "within_range": 0,
+            "total_error": 0,
+            "avg_probability": 0
+        } for name in confidence_buckets.keys()}
+
+        for r in records:
+            prob = float(r.predicted_probability or 0)
+
+            # 找到合適的信心度區間
+            for bucket_name, (lower, upper) in confidence_buckets.items():
+                if lower <= prob < upper:
+                    stats = confidence_stats[bucket_name]
+                    stats["total"] += 1
+                    if r.direction_correct:
+                        stats["correct"] += 1
+                    if r.within_range:
+                        stats["within_range"] += 1
+                    stats["total_error"] += float(r.error_percent or 0)
+                    stats["avg_probability"] += prob
+                    break
+
+        # 計算各區間的準確率
+        result = []
+        for bucket_name, (lower, upper) in confidence_buckets.items():
+            stats = confidence_stats[bucket_name]
+            total = stats["total"]
+            if total > 0:
+                result.append({
+                    "confidence_range": f"{lower}-{upper}%",
+                    "total_predictions": total,
+                    "direction_accuracy": round((stats["correct"] / total) * 100, 1),
+                    "within_range_rate": round((stats["within_range"] / total) * 100, 1),
+                    "avg_error_percent": round(stats["total_error"] / total, 2),
+                    "avg_predicted_probability": round(stats["avg_probability"] / total, 1),
+                    "correct_count": stats["correct"]
+                })
+
+        return {
+            "period_days": days,
+            "total_predictions": sum(s["total"] for s in confidence_stats.values()),
+            "confidence_buckets": result
+        }
+
+    def get_signal_strength_accuracy(self, db: Session, days: int = 30, market: str = None) -> Dict:
+        """
+        分析不同信號強度下的預測準確度
+
+        Args:
+            db: Database session
+            days: 統計天數
+            market: 市場過濾 (TW/US/None=all)
+
+        Returns:
+            各信號強度的準確度統計
+        """
+        start_date = date.today() - timedelta(days=days)
+
+        query = db.query(PredictionRecord).filter(
+            PredictionRecord.target_date >= start_date,
+            PredictionRecord.actual_close_price.isnot(None)
+        )
+        if market:
+            query = query.filter(PredictionRecord.market_region == market)
+
+        records = self._dedup_records(query.all())
+
+        # 根據預測變幅和信心度推算信號強度
+        signal_stats = {
+            "strong_buy": {"total": 0, "correct": 0, "within_range": 0, "total_error": 0},
+            "buy": {"total": 0, "correct": 0, "within_range": 0, "total_error": 0},
+            "neutral": {"total": 0, "correct": 0, "within_range": 0, "total_error": 0},
+            "sell": {"total": 0, "correct": 0, "within_range": 0, "total_error": 0},
+            "strong_sell": {"total": 0, "correct": 0, "within_range": 0, "total_error": 0}
+        }
+
+        for r in records:
+            change = float(r.predicted_change_percent or 0)
+            prob = float(r.predicted_probability or 0)
+
+            # 推算信號強度
+            if r.predicted_direction == "UP":
+                if change > 2.0 and prob > 70:
+                    signal = "strong_buy"
+                elif change > 1.0 or prob > 60:
+                    signal = "buy"
+                else:
+                    signal = "neutral"
+            elif r.predicted_direction == "DOWN":
+                if change < -2.0 and prob > 70:
+                    signal = "strong_sell"
+                elif change < -1.0 or prob > 60:
+                    signal = "sell"
+                else:
+                    signal = "neutral"
+            else:
+                signal = "neutral"
+
+            stats = signal_stats[signal]
+            stats["total"] += 1
+            if r.direction_correct:
+                stats["correct"] += 1
+            if r.within_range:
+                stats["within_range"] += 1
+            stats["total_error"] += float(r.error_percent or 0)
+
+        # 計算統計指標
+        result = []
+        for signal_name, stats in signal_stats.items():
+            total = stats["total"]
+            if total > 0:
+                result.append({
+                    "signal_strength": signal_name,
+                    "total_predictions": total,
+                    "direction_accuracy": round((stats["correct"] / total) * 100, 1),
+                    "within_range_rate": round((stats["within_range"] / total) * 100, 1),
+                    "avg_error_percent": round(stats["total_error"] / total, 2),
+                    "correct_count": stats["correct"]
+                })
+
+        # 依信號強度排序（由強到弱）
+        signal_order = ["strong_buy", "buy", "neutral", "sell", "strong_sell"]
+        result.sort(key=lambda x: signal_order.index(x["signal_strength"]))
+
+        return {
+            "period_days": days,
+            "total_predictions": sum(s["total"] for s in signal_stats.values()),
+            "signals": result
+        }
+
+    def get_best_worst_stocks(self, db: Session, days: int = 30, market: str = None, limit: int = 10) -> Dict:
+        """
+        找出預測表現最好和最差的股票
+
+        Args:
+            db: Database session
+            days: 統計天數
+            market: 市場過濾 (TW/US/None=all)
+            limit: 回傳數量
+
+        Returns:
+            最佳和最差股票列表
+        """
+        start_date = date.today() - timedelta(days=days)
+
+        query = db.query(PredictionRecord).filter(
+            PredictionRecord.target_date >= start_date,
+            PredictionRecord.actual_close_price.isnot(None)
+        )
+        if market:
+            query = query.filter(PredictionRecord.market_region == market)
+
+        records = self._dedup_records(query.all())
+
+        # 依股票分組統計
+        stock_stats = defaultdict(lambda: {
+            "stock_name": "",
+            "market": "",
+            "total": 0,
+            "correct": 0,
+            "within_range": 0,
+            "total_error": 0
+        })
+
+        for r in records:
+            stats = stock_stats[r.stock_id]
+            stats["stock_name"] = r.stock_name
+            stats["market"] = r.market_region
+            stats["total"] += 1
+            if r.direction_correct:
+                stats["correct"] += 1
+            if r.within_range:
+                stats["within_range"] += 1
+            stats["total_error"] += float(r.error_percent or 0)
+
+        # 計算準確率並排序
+        stock_list = []
+        for stock_id, stats in stock_stats.items():
+            if stats["total"] >= 3:  # 只列入至少有 3 筆預測的股票
+                stock_list.append({
+                    "stock_id": stock_id,
+                    "stock_name": stats["stock_name"],
+                    "market": stats["market"],
+                    "total_predictions": stats["total"],
+                    "direction_accuracy": round((stats["correct"] / stats["total"]) * 100, 1),
+                    "within_range_rate": round((stats["within_range"] / stats["total"]) * 100, 1),
+                    "avg_error_percent": round(stats["total_error"] / stats["total"], 2),
+                    "correct_count": stats["correct"]
+                })
+
+        # 依準確率排序
+        stock_list.sort(key=lambda x: x["direction_accuracy"], reverse=True)
+
+        return {
+            "period_days": days,
+            "best_stocks": stock_list[:limit],
+            "worst_stocks": stock_list[-limit:][::-1]  # 反序回傳
+        }
+
+    def get_dashboard_data(self, db: Session, days: int = 30, market: str = None) -> Dict:
+        """
+        取得完整的儀表板數據，包含所有分析指標
+
+        此方法整合所有分析功能，提供前端可視化所需的全面數據。
+
+        Args:
+            db: Database session
+            days: 統計天數
+            market: 市場過濾 (TW/US/None=all)
+
+        Returns:
+            包含以下內容的綜合數據字典：
+            - overall_stats: 總體統計
+            - industry_analysis: 業界別分析
+            - time_period_analysis: 時間週期分析
+            - market_regime_analysis: 市場環境分析
+            - confidence_calibration: 信心度校準
+            - signal_strength_analysis: 信號強度分析
+            - best_worst_stocks: 表現最佳和最差的股票
+        """
+        # 取得基礎統計
+        overall_stats = self.get_accuracy_statistics(db, days=days, market=market)
+
+        # 取得各項分析
+        industry_analysis = self.get_industry_accuracy(db, days=days, market=market)
+        time_period_analysis = self.get_time_period_accuracy(db, days=days, period_type="weekly", market=market)
+        market_regime_analysis = self.get_market_regime_accuracy(db, days=days, market=market or "TW")
+        confidence_calibration = self.get_confidence_calibration(db, days=days, market=market)
+        signal_strength_analysis = self.get_signal_strength_accuracy(db, days=days, market=market)
+        best_worst_stocks = self.get_best_worst_stocks(db, days=days, market=market, limit=10)
+
+        return {
+            "generated_at": datetime.now().isoformat(),
+            "period_days": days,
+            "market_filter": market or "all",
+            "overall_stats": {
+                "total_predictions": overall_stats["total_predictions"],
+                "direction_accuracy": overall_stats["direction_accuracy"],
+                "within_range_rate": overall_stats["within_range_rate"],
+                "avg_error_percent": overall_stats["avg_error_percent"],
+                "provider_breakdown": overall_stats.get("provider_breakdown", {})
+            },
+            "industry_analysis": industry_analysis,
+            "time_period_analysis": time_period_analysis,
+            "market_regime_analysis": market_regime_analysis,
+            "confidence_calibration": confidence_calibration,
+            "signal_strength_analysis": signal_strength_analysis,
+            "best_worst_stocks": best_worst_stocks,
+            "summary": {
+                "top_industry": self._get_top_item(industry_analysis.get("industries", {}), "direction_accuracy"),
+                "best_performing_period": self._get_top_item({p["period"]: p for p in time_period_analysis.get("periods", [])}, "direction_accuracy"),
+                "best_signal": self._get_top_item({s["signal_strength"]: s for s in signal_strength_analysis.get("signals", [])}, "direction_accuracy"),
+            }
+        }
+
+    @staticmethod
+    def _get_top_item(items_dict: Dict, key: str) -> Dict:
+        """
+        從字典中找出指定鍵值最高的項目
+
+        Args:
+            items_dict: 項目字典
+            key: 比較的鍵名
+
+        Returns:
+            最高項目或空字典
+        """
+        if not items_dict:
+            return {}
+        return max(items_dict.items(), key=lambda x: float(x[1].get(key, 0)))[1] if items_dict else {}
