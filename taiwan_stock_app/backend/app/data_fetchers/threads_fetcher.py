@@ -3,13 +3,14 @@ Threads Stock Sentiment Fetcher
 透過 Threads 公開頁面抓取股票相關討論，支援台股與美股
 """
 import requests
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 import re
 import time
 import random
 import logging
 import json
+from collections import Counter
 
 logger = logging.getLogger(__name__)
 
@@ -23,26 +24,32 @@ class ThreadsFetcher:
     - 美股：搜尋 #stocks #investing #wallstreet 等 hashtag
     """
 
-    # 台股相關搜尋關鍵字
+    # 台股相關搜尋關鍵字 - 擴展版本
     TW_SEARCH_QUERIES = [
-        "台股",
-        "台積電",
-        "股票 投資",
-        "台股 漲",
-        "台股 跌",
-        "半導體",
-        "AI概念股",
+        # 基礎股票術語
+        "台股", "台積電", "股票 投資", "台股 漲", "台股 跌",
+        # 個股搜尋
+        "鴻海", "聯發科", "台達電", "大立光", "中華電", "富邦金", "國泰金",
+        "聯電", "日月光", "華碩", "長榮", "陽明",
+        # 產業與概念股
+        "半導體", "AI概念股", "電動車", "金融股", "ETF", "被動式基金",
+        # 市場情緒關鍵字
+        "崩盤", "噴出", "利多", "利空", "停損", "停利",
+        "強勢", "弱勢", "反彈", "套牢", "破底", "翻多", "翻空",
     ]
 
-    # 美股相關搜尋關鍵字
+    # 美股相關搜尋關鍵字 - 擴展版本
     US_SEARCH_QUERIES = [
-        "stocks",
-        "NVDA",
-        "AAPL",
-        "stock market",
-        "investing",
-        "S&P 500",
-        "nasdaq",
+        # 基礎術語
+        "stocks", "stock market", "investing", "S&P 500", "nasdaq",
+        # 熱門股票
+        "NVDA", "AAPL", "TSMC", "NVIDIA", "AMD", "Apple", "Tesla",
+        "Microsoft", "Google", "Amazon", "Meta",
+        # 產業與概念
+        "semiconductor stocks", "AI stocks", "EV stocks", "fintech",
+        "tech earnings", "market sentiment",
+        # 市場情緒
+        "bull market", "bear market", "crash", "rally", "breakout",
     ]
 
     # 台股 sentiment 關鍵字
@@ -71,26 +78,54 @@ class ThreadsFetcher:
         "miss", "downgrade", "overvalued", "bubble", "bankrupt",
     ]
 
-    # 台股代碼對照（熱門股）
+    # 台股代碼對照（熱門股）- 擴展版本
     TW_POPULAR_STOCKS = {
-        "台積電": "2330", "鴻海": "2317", "聯發科": "2454",
-        "廣達": "2382", "台達電": "2308", "富邦金": "2881",
-        "國泰金": "2882", "中信金": "2891", "兆豐金": "2886",
-        "長榮": "2603", "陽明": "2609", "華碩": "2357",
-        "緯創": "3231", "英業達": "2356", "仁寶": "2324",
-        "大立光": "3008", "聯電": "2303", "日月光": "3711",
-        "中華電": "2412", "統一": "1216", "南亞": "1303",
-        "台塑": "1301", "中鋼": "2002", "友達": "2409",
-        "群創": "3481", "華航": "2610", "穩懋": "3105",
-        "瑞昱": "2379", "矽力": "6415", "信驊": "5274",
+        # 台積電相關
+        "台積電": "2330", "鴻海": "2317", "聯發科": "2454", "聯電": "2303",
+        # 電子產業
+        "廣達": "2382", "台達電": "2308", "華碩": "2357", "緯創": "3231",
+        "英業達": "2356", "仁寶": "2324", "大立光": "3008", "日月光": "3711",
+        "穩懋": "3105", "瑞昱": "2379", "矽力": "6415", "信驊": "5274",
+        # 金融股
+        "富邦金": "2881", "國泰金": "2882", "中信金": "2891", "兆豐金": "2886",
+        "玉山金": "2884", "第一金": "2892", "元大金": "2885",
+        # 民生消費
+        "統一": "1216", "台塑": "1301", "南亞": "1303", "中鋼": "2002",
+        # 運輸物流
+        "長榮": "2603", "陽明": "2609", "華航": "2610", "萬海": "2615",
+        # 面板
+        "友達": "2409", "群創": "3481",
+        # 通訊
+        "中華電": "2412", "遠傳": "2891",
+        # 其他熱門股
+        "台灣塑膠": "1301", "中華食": "1217", "永豐金": "2890",
     }
 
-    # 美股熱門代碼
+    # 美股熱門代碼 - 擴展版本
     US_POPULAR_TICKERS = [
-        "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA",
-        "AMD", "INTC", "NFLX", "DIS", "PYPL", "COIN", "GME",
-        "SPY", "QQQ", "PLTR", "NIO", "BABA", "SOFI", "RIVN",
-        "JPM", "BAC", "GS", "V", "MA", "AVGO", "MU", "QCOM",
+        # 科技巨頭
+        "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "AMD", "INTC",
+        "TSLA", "NFLX", "COIN", "PLTR",
+        # 台積電相關（美股）
+        "TSM", "ASML", "LRCX", "KLAC", "AMAT",
+        # ETF
+        "SPY", "QQQ", "DIA", "IWM", "VTI", "VOO",
+        # 消費與零售
+        "DIS", "PYPL", "SHOP", "SQ", "SOFI",
+        # 遊戲與娛樂
+        "GME", "RBLX",
+        # 新能源與電動車
+        "TSLA", "NIO", "XPeng", "LI", "RIVN", "LUCID",
+        # 中資與 ADR
+        "BABA", "JD", "PDD", "BILI",
+        # 金融
+        "JPM", "BAC", "GS", "MS", "C", "WFC",
+        # 支付與卡組織
+        "V", "MA", "AXP", "DFS",
+        # 半導體相關
+        "AVGO", "MU", "QCOM", "BROADCOM", "QUALCOMM",
+        # AI 概念
+        "CRM", "SNOW", "PSTG", "MSTR",
     ]
 
     USER_AGENTS = [
@@ -103,7 +138,21 @@ class ThreadsFetcher:
         self.session = requests.Session()
         self.last_request_time = 0
         self.request_interval = 3.0
+        self.retry_count = 0
+        self.max_retries = 3
         self._update_headers()
+
+        # 非股票相關的垃圾過濾關鍵字
+        self.NOISE_KEYWORDS = {
+            # 食物相關
+            "食物", "餐廳", "美食", "料理", "食譜", "吃", "飲食", "烹飪",
+            # 旅遊相關
+            "旅遊", "旅行", "景點", "度假", "飯店", "民宿", "渡假村",
+            # 娛樂相關
+            "電影", "電視劇", "演員", "明星", "追劇", "影劇", "綜藝", "音樂",
+            # 其他無關
+            "天氣", "運動", "籃球", "足球", "棒球", "遊戲", "寵物", "寵物", "旗艦",
+        }
 
     def _update_headers(self):
         self.session.headers.update({
@@ -113,14 +162,65 @@ class ThreadsFetcher:
             "Accept-Encoding": "gzip, deflate",
         })
 
-    def _rate_limit(self):
+    def _rate_limit(self, retry_count: int = 0):
+        """
+        智能延遲控制，支援指數退避 (exponential backoff)
+
+        Args:
+            retry_count: 目前重試次數，用於計算退避延遲
+        """
+        # 指數退避：基礎延遲 + 隨機抖動
+        base_delay = self.request_interval
+        if retry_count > 0:
+            # 指數退避：3 秒 * (2 ^ 重試次數)
+            base_delay = min(self.request_interval * (2 ** retry_count), 30)
+
+        # 加入 ±20% 的隨機抖動，避免同時發送請求
+        jitter = base_delay * random.uniform(-0.2, 0.2)
+        total_delay = base_delay + jitter
+
         elapsed = time.time() - self.last_request_time
-        if elapsed < self.request_interval:
-            time.sleep(self.request_interval - elapsed)
+        if elapsed < total_delay:
+            time.sleep(total_delay - elapsed)
         self.last_request_time = time.time()
 
+    def _is_spam_post(self, text: str) -> bool:
+        """
+        判斷貼文是否為垃圾內容（過短、過多 hashtag 或無關內容）
+
+        Args:
+            text: 貼文內容
+
+        Returns:
+            True 表示是垃圾內容，應該過濾掉
+        """
+        # 檢查長度：少於 10 字元視為無效
+        if len(text.strip()) < 10:
+            return True
+
+        # 檢查 hashtag 過多：超過 10 個 hashtag 視為垃圾
+        hashtag_count = len(re.findall(r'#\w+', text))
+        if hashtag_count > 10:
+            return True
+
+        # 檢查是否包含垃圾關鍵字
+        text_lower = text.lower()
+        for noise_kw in self.NOISE_KEYWORDS:
+            if noise_kw in text_lower:
+                return True
+
+        return False
+
     def _extract_tw_stocks(self, text: str) -> List[str]:
-        """從文字中提取台股代碼"""
+        """
+        從文字中提取台股代碼
+
+        Args:
+            text: 貼文文本
+
+        Returns:
+            台股代碼清單
+        """
         stocks = set()
 
         # 1. 比對公司名稱
@@ -192,35 +292,55 @@ class ThreadsFetcher:
 
         return {"sentiment": sentiment, "score": round(score, 2)}
 
-    def _fetch_threads_search(self, query: str, market: str = "TW") -> List[Dict]:
+    def _fetch_threads_search(self, query: str, market: str = "TW", retry_count: int = 0) -> List[Dict]:
         """
-        透過 Threads 網頁搜尋 API 取得貼文
+        透過 Threads 網頁搜尋 API 取得貼文，支援指數退避重試
 
         Threads 的搜尋頁面會回傳 JSON 格式的搜尋結果。
         若 API 被擋，則使用 HTML 解析作為 fallback。
+        失敗時會自動重試，使用指數退避策略。
+
+        Args:
+            query: 搜尋關鍵字
+            market: 市場類別 ('TW' 或 'US')
+            retry_count: 目前重試次數
+
+        Returns:
+            符合條件的貼文列表
         """
-        self._rate_limit()
+        self._rate_limit(retry_count)
         self._update_headers()
 
         posts = []
 
         try:
-            # Threads 搜尋 API（公開搜尋端點）
-            search_url = "https://www.threads.net/api/graphql"
-
-            # 使用公開搜尋頁面 fallback
+            # 使用公開搜尋頁面
             search_page_url = f"https://www.threads.net/search?q={requests.utils.quote(query)}&serp_type=default"
-
             response = self.session.get(search_page_url, timeout=10)
 
             if response.status_code == 200:
                 # 嘗試從 HTML 中提取 JSON 資料
                 posts = self._parse_threads_html(response.text, query, market)
+                self.retry_count = 0  # 重置重試計數
+            elif response.status_code == 429 and retry_count < self.max_retries:
+                # 遭到速率限制，進行指數退避重試
+                logger.info(f"速率限制，進行重試 ({query}): 第 {retry_count + 1} 次")
+                return self._fetch_threads_search(query, market, retry_count + 1)
             else:
                 logger.warning(f"Threads 搜尋失敗 ({query}): HTTP {response.status_code}")
 
+        except requests.exceptions.Timeout:
+            if retry_count < self.max_retries:
+                logger.info(f"請求超時，進行重試 ({query}): 第 {retry_count + 1} 次")
+                return self._fetch_threads_search(query, market, retry_count + 1)
+            else:
+                logger.warning(f"Threads 搜尋超時 ({query})，已達重試上限")
         except Exception as e:
-            logger.warning(f"Threads 搜尋異常 ({query}): {e}")
+            if retry_count < self.max_retries:
+                logger.info(f"搜尋異常，進行重試 ({query}): {e}")
+                return self._fetch_threads_search(query, market, retry_count + 1)
+            else:
+                logger.warning(f"Threads 搜尋異常 ({query}): {e}")
 
         return posts
 
@@ -262,7 +382,16 @@ class ThreadsFetcher:
         return posts
 
     def _extract_posts_from_json(self, data: dict, market: str) -> List[Dict]:
-        """從 Threads JSON 資料提取貼文"""
+        """
+        從 Threads JSON 資料提取貼文，並過濾垃圾內容
+
+        Args:
+            data: Threads JSON 資料
+            market: 市場類別
+
+        Returns:
+            過濾後的貼文列表（最多 20 則）
+        """
         posts = []
 
         def traverse(obj):
@@ -270,7 +399,7 @@ class ThreadsFetcher:
                 # 找到貼文結構
                 if "text" in obj and ("pk" in obj or "id" in obj):
                     text = obj.get("text", "")
-                    if not text:
+                    if not text or self._is_spam_post(text):
                         return
 
                     extract_fn = self._extract_tw_stocks if market == "TW" else self._extract_us_tickers
@@ -337,7 +466,16 @@ class ThreadsFetcher:
         return posts
 
     def fetch_recent_posts(self, market: str = "TW", limit: int = 30) -> List[Dict]:
-        """抓取最新的股票相關 Threads 貼文"""
+        """
+        抓取最新的股票相關 Threads 貼文
+
+        Args:
+            market: 市場類別 ('TW' 或 'US')
+            limit: 返回的貼文數量上限
+
+        Returns:
+            按讚數排序的貼文列表
+        """
         queries = self.TW_SEARCH_QUERIES if market == "TW" else self.US_SEARCH_QUERIES
         all_posts = []
 
@@ -364,7 +502,17 @@ class ThreadsFetcher:
         return unique_posts[:limit]
 
     def fetch_stock_discussions(self, stock_id: str, market: str = "TW", limit: int = 20) -> List[Dict]:
-        """抓取特定股票的 Threads 討論"""
+        """
+        抓取特定股票的 Threads 討論
+
+        Args:
+            stock_id: 股票代碼（台股 4 位數、美股 ticker）
+            market: 市場類別 ('TW' 或 'US')
+            limit: 返回的討論數量上限
+
+        Returns:
+            股票相關討論列表
+        """
         if market == "TW":
             # 找出股票名稱
             stock_name = None
@@ -397,6 +545,31 @@ class ThreadsFetcher:
                 unique_posts.append(post)
 
         return unique_posts[:limit]
+
+    def fetch_batch_stocks(self, stock_ids: List[str], market: str = "TW", limit_per_stock: int = 10) -> Dict[str, List[Dict]]:
+        """
+        批次抓取多檔股票的討論（高效率方式）
+
+        采用批次抓取策略，減少 HTTP 請求次數，提升效率。
+
+        Args:
+            stock_ids: 股票代碼列表
+            market: 市場類別 ('TW' 或 'US')
+            limit_per_stock: 每檔股票的討論數量上限
+
+        Returns:
+            股票代碼 -> 討論列表 的字典
+        """
+        results = {}
+        for stock_id in stock_ids:
+            try:
+                discussions = self.fetch_stock_discussions(stock_id, market, limit_per_stock)
+                results[stock_id] = discussions
+            except Exception as e:
+                logger.warning(f"批次抓取失敗 ({stock_id}): {e}")
+                results[stock_id] = []
+
+        return results
 
     def get_hot_stocks(self, market: str = "TW", limit: int = 20) -> List[Dict]:
         """從 Threads 取得熱門討論股票"""
@@ -472,7 +645,15 @@ class ThreadsFetcher:
         return hot_stocks[:limit]
 
     def get_market_sentiment(self, market: str = "TW") -> Dict:
-        """從 Threads 取得市場整體情緒"""
+        """
+        從 Threads 取得市場整體情緒
+
+        Args:
+            market: 市場類別 ('TW' 或 'US')
+
+        Returns:
+            包含整體情緒、評分、計數的字典
+        """
         all_posts = self.fetch_recent_posts(market=market, limit=30)
 
         if not all_posts:
@@ -507,6 +688,32 @@ class ThreadsFetcher:
             "negative": negative,
             "neutral": neutral,
         }
+
+    def detect_trending_topics(self, market: str = "TW", limit: int = 10) -> List[Tuple[str, int]]:
+        """
+        從最新貼文中偵測當前熱門話題（趨勢）
+
+        透過分析最近的貼文，提取出現頻率最高的股票。
+        這可以幫助快速發現市場焦點和熱門個股。
+
+        Args:
+            market: 市場類別 ('TW' 或 'US')
+            limit: 返回的熱門話題數量
+
+        Returns:
+            [(話題/股票代碼, 提及次數), ...] 的列表
+        """
+        all_posts = self.fetch_recent_posts(market=market, limit=100)
+
+        # 統計所有提及的股票/話題
+        ticker_counts = Counter()
+        for post in all_posts:
+            tickers = post.get("tickers", [])
+            for ticker in tickers:
+                ticker_counts[ticker] += 1
+
+        # 返回前 N 名最熱門的話題
+        return ticker_counts.most_common(limit)
 
 
 # 全域實例
