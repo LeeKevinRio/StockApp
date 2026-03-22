@@ -17,11 +17,41 @@ import pandas as pd
 from app.data_fetchers import FinMindFetcher, USStockFetcher, MacroDataFetcher
 from app.data_fetchers.news_fetcher import NewsFetcher
 from app.data_fetchers.twse_fetcher import TWSEFetcher
-from app.data_fetchers.enhanced_news_fetcher import enhanced_news_fetcher
 from app.config import settings
 from app.services.technical_indicators import TechnicalIndicators
 from app.services.trading_calendar import get_calendar_gap_days
-from app.services.enhanced_sentiment_analyzer import enhanced_analyzer
+
+# 延遲載入新增模組，避免 import 失敗影響核心功能
+_enhanced_news_fetcher = None
+_enhanced_analyzer = None
+
+def _get_enhanced_news_fetcher():
+    global _enhanced_news_fetcher
+    if _enhanced_news_fetcher is None:
+        try:
+            from app.data_fetchers.enhanced_news_fetcher import enhanced_news_fetcher as _enf
+            _enhanced_news_fetcher = _enf
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"enhanced_news_fetcher 載入失敗: {e}")
+    return _enhanced_news_fetcher
+
+class _FallbackAnalyzer:
+    """enhanced_analyzer 載入失敗時的簡易替代品"""
+    def analyze(self, text, **kwargs):
+        return {'score': 0.0, 'sentiment': 'neutral', 'confidence': 0.0}
+    def batch_analyze(self, texts, **kwargs):
+        return [self.analyze(t) for t in texts]
+
+def _get_enhanced_analyzer():
+    global _enhanced_analyzer
+    if _enhanced_analyzer is None:
+        try:
+            from app.services.enhanced_sentiment_analyzer import enhanced_analyzer as _ea
+            _enhanced_analyzer = _ea
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"enhanced_analyzer 載入失敗，使用 fallback: {e}")
+            _enhanced_analyzer = _FallbackAnalyzer()
+    return _enhanced_analyzer
 
 logger = logging.getLogger(__name__)
 
@@ -1231,14 +1261,14 @@ class AISuggestionService:
             enhanced_intl = []
             try:
                 enhanced_tw = loop.run_until_complete(
-                    enhanced_news_fetcher.fetch_tw_stock_news(stock_id, stock_name, limit=10)
+                    _get_enhanced_news_fetcher().fetch_tw_stock_news(stock_id, stock_name, limit=10) if _get_enhanced_news_fetcher() else asyncio.coroutine(lambda: [])()
                 )
             except Exception as e:
                 logger.warning(f"擴充台灣新聞失敗: {e}")
 
             try:
                 enhanced_intl = loop.run_until_complete(
-                    enhanced_news_fetcher.fetch_market_overview_news(market="TW", limit=8)
+                    _get_enhanced_news_fetcher().fetch_market_overview_news(market="TW", limit=8) if _get_enhanced_news_fetcher() else asyncio.coroutine(lambda: [])()
                 )
             except Exception as e:
                 logger.warning(f"擴充國際新聞失敗: {e}")
@@ -1301,7 +1331,7 @@ class AISuggestionService:
                     score = ai_sent.get("score", 0)
                 else:
                     # 用進階分析器分析
-                    analysis = enhanced_analyzer.analyze(
+                    analysis = _get_enhanced_analyzer().analyze(
                         f"{news.get('title', '')} {news.get('summary', '')}"
                     )
                     score = analysis['score']
@@ -1417,7 +1447,7 @@ class AISuggestionService:
                     # 使用進階情緒分析器重新分析
                     for post in tw_posts:
                         platform = post.get('platform', 'unknown')
-                        analysis = enhanced_analyzer.analyze(
+                        analysis = _get_enhanced_analyzer().analyze(
                             f"{post.get('title', '')} {post.get('content', '')}",
                             platform=platform,
                             push_count=post.get('push_count', 0),
@@ -1434,7 +1464,7 @@ class AISuggestionService:
                 threads_posts = threads_fetcher.fetch_stock_discussions(stock_id, market="TW", limit=15)
                 if threads_posts:
                     for post in threads_posts:
-                        analysis = enhanced_analyzer.analyze(
+                        analysis = _get_enhanced_analyzer().analyze(
                             f"{post.get('title', '')} {post.get('content', '')}",
                             platform="threads"
                         )
