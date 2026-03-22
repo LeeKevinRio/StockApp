@@ -53,6 +53,8 @@ try:
         ai_config_router,
         strategy_backtest_router,
         ai_discovery_router,
+        crypto_router,
+        daily_summary_router,
     )
     from app.routers.predictions import router as predictions_router
     from app.routers.market_overview import router as market_overview_router
@@ -116,6 +118,8 @@ if _routers_available:
     app.include_router(trading_diary_router)
     app.include_router(strategy_backtest_router)
     app.include_router(ai_discovery_router)
+    app.include_router(crypto_router)
+    app.include_router(daily_summary_router)
 
 
 @app.on_event("startup")

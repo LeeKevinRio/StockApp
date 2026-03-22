@@ -17,6 +17,8 @@ from .broker import router as broker_router
 from .ai_config import router as ai_config_router
 from .strategy_backtest import router as strategy_backtest_router
 from .ai_discovery import router as ai_discovery_router
+from .crypto import router as crypto_router
+from .daily_summary import router as daily_summary_router
 
 __all__ = [
     "auth_router",
@@ -35,4 +37,6 @@ __all__ = [
     "ai_config_router",
     "strategy_backtest_router",
     "ai_discovery_router",
+    "crypto_router",
+    "daily_summary_router",
 ]
