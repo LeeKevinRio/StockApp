@@ -11,6 +11,7 @@ from .global_news_fetcher import GlobalNewsFetcher
 from .taiwan_social_fetcher import TaiwanSocialFetcher
 from .macro_data_fetcher import MacroDataFetcher
 from .fred_fetcher import FREDFetcher
+from .enhanced_news_fetcher import EnhancedNewsFetcher
 
 __all__ = [
     "FinMindFetcher",
@@ -23,4 +24,5 @@ __all__ = [
     "TaiwanSocialFetcher",
     "MacroDataFetcher",
     "FREDFetcher",
+    "EnhancedNewsFetcher",
 ]

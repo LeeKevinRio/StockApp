@@ -17,9 +17,11 @@ import pandas as pd
 from app.data_fetchers import FinMindFetcher, USStockFetcher, MacroDataFetcher
 from app.data_fetchers.news_fetcher import NewsFetcher
 from app.data_fetchers.twse_fetcher import TWSEFetcher
+from app.data_fetchers.enhanced_news_fetcher import enhanced_news_fetcher
 from app.config import settings
 from app.services.technical_indicators import TechnicalIndicators
 from app.services.trading_calendar import get_calendar_gap_days
+from app.services.enhanced_sentiment_analyzer import enhanced_analyzer
 
 logger = logging.getLogger(__name__)
 
@@ -1203,75 +1205,123 @@ class AISuggestionService:
 
         return result
 
-    def _analyze_news_sentiment(self, stock_id: str) -> Dict:
-        """分析消息面（新聞情緒）- 優先使用 AI 語意分析"""
-        result = {"data_available": False, "news_count": 0}
+    def _analyze_news_sentiment(self, stock_id: str, stock_name: str = "") -> Dict:
+        """
+        分析消息面（強化版）
+        整合台灣新聞 + 國際財經新聞，使用進階語意分析
+        """
+        result = {
+            "data_available": False,
+            "news_count": 0,
+            "tw_news_count": 0,
+            "intl_news_count": 0,
+        }
 
         try:
-            # 同步方式運行異步函數
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            news_list = loop.run_until_complete(self.news_fetcher.fetch_stock_news(stock_id, limit=10))
 
-            if not news_list:
-                loop.close()
-                return result
+            # ===== 1. 原有新聞源 =====
+            original_news = loop.run_until_complete(
+                self.news_fetcher.fetch_stock_news(stock_id, limit=10)
+            )
 
-            result["data_available"] = True
-            result["news_count"] = len(news_list)
-
-            # 優先使用 AI 語意分析
-            analysis_news = news_list[:5]
+            # ===== 2. 擴充新聞源（國內外 RSS）=====
+            enhanced_tw = []
+            enhanced_intl = []
             try:
-                analysis_news = loop.run_until_complete(
-                    self.news_fetcher.analyze_sentiment_with_ai(analysis_news)
+                enhanced_tw = loop.run_until_complete(
+                    enhanced_news_fetcher.fetch_tw_stock_news(stock_id, stock_name, limit=10)
                 )
-                result["sentiment_method"] = "ai"
             except Exception as e:
-                logger.warning(f"AI 語意分析失敗，使用關鍵字分析: {e}")
-                result["sentiment_method"] = "keyword"
+                logger.warning(f"擴充台灣新聞失敗: {e}")
+
+            try:
+                enhanced_intl = loop.run_until_complete(
+                    enhanced_news_fetcher.fetch_market_overview_news(market="TW", limit=8)
+                )
+            except Exception as e:
+                logger.warning(f"擴充國際新聞失敗: {e}")
+
+            # AI 語意分析（原有邏輯）
+            if original_news:
+                try:
+                    original_news = loop.run_until_complete(
+                        self.news_fetcher.analyze_sentiment_with_ai(original_news[:5])
+                    )
+                    result["sentiment_method"] = "ai"
+                except Exception:
+                    result["sentiment_method"] = "keyword"
 
             loop.close()
 
-            # 統計情緒
+            # ===== 3. 合併所有新聞 =====
+            all_news = []
+
+            # 原有新聞
+            for news in (original_news or []):
+                news['region'] = 'TW'
+                all_news.append(news)
+
+            # 擴充台灣新聞
+            for news in enhanced_tw:
+                all_news.append(news)
+
+            # 國際市場新聞
+            for news in enhanced_intl:
+                all_news.append(news)
+
+            # 去重（標題前40字）
+            seen = set()
+            unique_news = []
+            for n in all_news:
+                key = n.get('title', '')[:40].lower().strip()
+                if key and key not in seen:
+                    seen.add(key)
+                    unique_news.append(n)
+
+            if not unique_news:
+                return result
+
+            result["data_available"] = True
+            result["news_count"] = len(unique_news)
+            result["tw_news_count"] = sum(1 for n in unique_news if n.get('region') == 'TW')
+            result["intl_news_count"] = sum(1 for n in unique_news if n.get('region') == 'INTL')
+
+            # ===== 4. 統計情緒 =====
             positive_count = 0
             negative_count = 0
             neutral_count = 0
             news_summaries = []
 
-            for news in analysis_news:
-                # 優先取 AI 分析結果
+            for news in unique_news[:15]:
+                # 優先用 AI 語意分析結果
                 ai_sent = news.get("ai_sentiment")
                 if ai_sent:
                     score = ai_sent.get("score", 0)
-                    if score > 0.2:
-                        sentiment = "positive"
-                        positive_count += 1
-                    elif score < -0.2:
-                        sentiment = "negative"
-                        negative_count += 1
-                    else:
-                        sentiment = "neutral"
-                        neutral_count += 1
                 else:
-                    # fallback 到關鍵字分析
-                    simple = self.news_fetcher.analyze_sentiment_simple(
-                        news.get('title', ''),
-                        news.get('summary', '')
+                    # 用進階分析器分析
+                    analysis = enhanced_analyzer.analyze(
+                        f"{news.get('title', '')} {news.get('summary', '')}"
                     )
-                    sentiment = simple['sentiment']
-                    if sentiment == 'positive':
-                        positive_count += 1
-                    elif sentiment == 'negative':
-                        negative_count += 1
-                    else:
-                        neutral_count += 1
+                    score = analysis['score']
+
+                if score > 0.15:
+                    sentiment = "positive"
+                    positive_count += 1
+                elif score < -0.15:
+                    sentiment = "negative"
+                    negative_count += 1
+                else:
+                    sentiment = "neutral"
+                    neutral_count += 1
 
                 news_summaries.append({
-                    "title": news.get('title', '')[:50],
+                    "title": news.get('title', '')[:60],
                     "sentiment": sentiment,
-                    "ai_score": ai_sent.get("score") if ai_sent else None,
-                    "source": news.get('source', '')
+                    "score": round(score, 2),
+                    "source": news.get('source', ''),
+                    "region": news.get('region', ''),
                 })
 
             result["positive_news"] = positive_count
@@ -1279,24 +1329,38 @@ class AISuggestionService:
             result["neutral_news"] = neutral_count
             result["recent_news"] = news_summaries
 
-            # 計算情緒評分
+            # ===== 5. 計算情緒評分 =====
             total = positive_count + negative_count + neutral_count
             if total > 0:
                 sentiment_score = ((positive_count - negative_count) / total) * 100
                 result["sentiment_score"] = round(sentiment_score, 1)
                 result["sentiment_signal"] = (
-                    "very_positive_消息面利多" if sentiment_score >= 60 else
-                    "positive_偏多" if sentiment_score >= 20 else
-                    "neutral_中性" if sentiment_score >= -20 else
-                    "negative_偏空" if sentiment_score >= -60 else
-                    "very_negative_消息面利空"
+                    "very_positive_消息面強烈利多" if sentiment_score >= 60 else
+                    "positive_消息面偏多" if sentiment_score >= 20 else
+                    "neutral_消息面中性" if sentiment_score >= -20 else
+                    "negative_消息面偏空" if sentiment_score >= -60 else
+                    "very_negative_消息面強烈利空"
                 )
+
+                # 國際新聞獨立情緒
+                intl_items = [n for n in news_summaries if n.get('region') == 'INTL']
+                if intl_items:
+                    intl_pos = sum(1 for n in intl_items if n['sentiment'] == 'positive')
+                    intl_neg = sum(1 for n in intl_items if n['sentiment'] == 'negative')
+                    intl_score = ((intl_pos - intl_neg) / len(intl_items)) * 100
+                    result["intl_sentiment_score"] = round(intl_score, 1)
+                    result["intl_sentiment_signal"] = (
+                        "positive_國際利多" if intl_score > 20 else
+                        "negative_國際利空" if intl_score < -20 else
+                        "neutral_國際中性"
+                    )
             else:
                 result["sentiment_score"] = 0
                 result["sentiment_signal"] = "no_data"
 
         except Exception as e:
             result["error"] = str(e)
+            logger.error(f"新聞情緒分析失敗: {e}")
 
         return result
 
@@ -1309,7 +1373,10 @@ class AISuggestionService:
             return {"macro_score": 0, "macro_signal": "no_data", "details": {}}
 
     def _analyze_social_sentiment(self, stock_id: str, db=None) -> Dict:
-        """分析社群情緒數據（PTT, Dcard, Mobile01）"""
+        """
+        社群情緒分析（強化版）
+        整合 PTT + Dcard + Mobile01 + Threads，使用進階語意分析器
+        """
         result = {
             "social_score": 0,
             "social_signal": "no_data",
@@ -1320,61 +1387,131 @@ class AISuggestionService:
             "avg_score": 0.0,
             "platforms": [],
             "top_topics": [],
+            "platform_breakdown": {},
+            "high_confidence_signals": [],
         }
 
+        all_posts = []
+
         try:
+            # ===== 1. 從 DB 或直接爬蟲取得 PTT/Dcard/Mobile01 貼文 =====
             if db is not None:
-                from app.services.sentiment_service import sentiment_service
-                import asyncio
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
+                try:
+                    from app.services.sentiment_service import sentiment_service
                     import concurrent.futures
                     with concurrent.futures.ThreadPoolExecutor() as pool:
                         social_data = pool.submit(
                             asyncio.run,
                             sentiment_service.get_social_sentiment_for_ai(db, stock_id)
                         ).result(timeout=15)
-                else:
-                    social_data = asyncio.run(
-                        sentiment_service.get_social_sentiment_for_ai(db, stock_id)
-                    )
+                    if social_data and social_data.get('total_mentions', 0) > 0:
+                        result.update(social_data)
+                except Exception as e:
+                    logger.warning(f"DB 社群數據取得失敗，改用爬蟲: {e}")
 
-                if social_data and social_data.get('total_mentions', 0) > 0:
-                    result.update(social_data)
-                    avg = social_data.get('avg_score', 0)
-                    # 將 -1~1 的情緒分數轉換為 -100~100 的評分
-                    result['social_score'] = round(avg * 100, 1)
-                    if avg > 0.3:
-                        result['social_signal'] = 'very_positive'
-                    elif avg > 0.1:
-                        result['social_signal'] = 'positive'
-                    elif avg < -0.3:
-                        result['social_signal'] = 'very_negative'
-                    elif avg < -0.1:
-                        result['social_signal'] = 'negative'
-                    else:
-                        result['social_signal'] = 'neutral'
-            else:
-                # 無 DB 時直接從爬蟲取資料
+            # 如果 DB 沒拿到足夠數據，直接爬蟲
+            if result['total_mentions'] < 3:
                 from app.data_fetchers.taiwan_social_fetcher import taiwan_social_fetcher
-                posts = taiwan_social_fetcher.fetch_stock_discussions(stock_id, limit=20)
-                if posts:
-                    pos = sum(1 for p in posts if p.get('sentiment') == 'positive')
-                    neg = sum(1 for p in posts if p.get('sentiment') == 'negative')
-                    total = len(posts)
-                    scores = [p.get('sentiment_score', 0) for p in posts if p.get('sentiment_score') is not None]
-                    avg = sum(scores) / len(scores) if scores else 0
+                tw_posts = taiwan_social_fetcher.fetch_stock_discussions(stock_id, limit=25)
+                if tw_posts:
+                    # 使用進階情緒分析器重新分析
+                    for post in tw_posts:
+                        platform = post.get('platform', 'unknown')
+                        analysis = enhanced_analyzer.analyze(
+                            f"{post.get('title', '')} {post.get('content', '')}",
+                            platform=platform,
+                            push_count=post.get('push_count', 0),
+                            boo_count=post.get('boo_count', 0)
+                        )
+                        post['enhanced_sentiment'] = analysis
+                        post['sentiment_score'] = analysis['score']
+                        post['sentiment'] = analysis['sentiment'].replace('very_', '')
+                    all_posts.extend(tw_posts)
 
-                    result['total_mentions'] = total
-                    result['positive'] = pos
-                    result['negative'] = neg
-                    result['neutral'] = total - pos - neg
-                    result['avg_score'] = round(avg, 2)
-                    result['social_score'] = round(avg * 100, 1)
-                    result['social_signal'] = 'positive' if avg > 0.1 else ('negative' if avg < -0.1 else 'neutral')
+            # ===== 2. Threads 社群數據 =====
+            try:
+                from app.data_fetchers.threads_fetcher import threads_fetcher
+                threads_posts = threads_fetcher.fetch_stock_discussions(stock_id, market="TW", limit=15)
+                if threads_posts:
+                    for post in threads_posts:
+                        analysis = enhanced_analyzer.analyze(
+                            f"{post.get('title', '')} {post.get('content', '')}",
+                            platform="threads"
+                        )
+                        post['enhanced_sentiment'] = analysis
+                        post['sentiment_score'] = analysis['score']
+                        post['sentiment'] = analysis['sentiment'].replace('very_', '')
+                        post['platform'] = 'threads'
+                    all_posts.extend(threads_posts)
+            except Exception as e:
+                logger.warning(f"Threads 社群數據取得失敗: {e}")
+
+            # ===== 3. 彙整所有平台數據 =====
+            if all_posts:
+                total = len(all_posts)
+                scores = [p.get('sentiment_score', 0) for p in all_posts]
+                pos = sum(1 for s in scores if s > 0.15)
+                neg = sum(1 for s in scores if s < -0.15)
+                neu = total - pos - neg
+                avg = sum(scores) / len(scores) if scores else 0
+
+                result['total_mentions'] = total
+                result['positive'] = pos
+                result['negative'] = neg
+                result['neutral'] = neu
+                result['avg_score'] = round(avg, 3)
+                result['social_score'] = round(avg * 100, 1)
+
+                # 平台分佈統計
+                platforms_seen = set()
+                platform_data = {}
+                for p in all_posts:
+                    plat = p.get('platform', 'unknown')
+                    platforms_seen.add(plat)
+                    if plat not in platform_data:
+                        platform_data[plat] = {"count": 0, "score_sum": 0.0}
+                    platform_data[plat]["count"] += 1
+                    platform_data[plat]["score_sum"] += p.get('sentiment_score', 0)
+
+                result['platforms'] = list(platforms_seen)
+                result['platform_breakdown'] = {
+                    k: {"count": v["count"], "avg_score": round(v["score_sum"] / v["count"], 3)}
+                    for k, v in platform_data.items()
+                }
+
+                # 高信心度訊號（進階分析器提供的強訊號）
+                high_conf = [p for p in all_posts
+                             if p.get('enhanced_sentiment', {}).get('confidence', 0) > 0.5
+                             and abs(p.get('sentiment_score', 0)) > 0.3]
+                result['high_confidence_signals'] = [
+                    {
+                        "platform": p.get('platform'),
+                        "title": p.get('title', '')[:60],
+                        "score": p.get('sentiment_score'),
+                        "confidence": p.get('enhanced_sentiment', {}).get('confidence', 0),
+                    }
+                    for p in sorted(high_conf, key=lambda x: abs(x.get('sentiment_score', 0)), reverse=True)[:5]
+                ]
+
+                # 熱門話題
+                titles = [p.get('title', '') for p in all_posts if p.get('title')]
+                result['top_topics'] = titles[:5]
+
+                # 信號判定
+                if avg > 0.3:
+                    result['social_signal'] = 'very_positive_社群極度看多'
+                elif avg > 0.1:
+                    result['social_signal'] = 'positive_社群偏多'
+                elif avg < -0.3:
+                    result['social_signal'] = 'very_negative_社群極度看空'
+                elif avg < -0.1:
+                    result['social_signal'] = 'negative_社群偏空'
+                else:
+                    result['social_signal'] = 'neutral_社群中性'
 
         except Exception as e:
             logger.error(f"社群情緒分析失敗: {e}")
+            logger.error(traceback.format_exc())
 
         return result
 
@@ -1711,38 +1848,39 @@ class AISuggestionService:
             # ===== 根據市場狀態動態調整權重 =====
             regime = market_regime.get("regime", "unknown")
 
+            # ===== 動態權重系統（新聞和社群權重提升）=====
             if market == "US":
                 if regime == "bear":
-                    # 熊市：提高宏觀和新聞權重，降低技術面
-                    total_score = (tech_score * 0.25) + (fund_score * 0.20) + (news_score * 0.20) + (social_score * 0.05) + (macro_score * 0.30)
+                    # 熊市：新聞+宏觀主導，社群恐慌指標加重
+                    total_score = (tech_score * 0.20) + (fund_score * 0.15) + (news_score * 0.25) + (social_score * 0.10) + (macro_score * 0.30)
                 elif regime == "sideways":
-                    # 盤整：技術面更重要（支撐/壓力）
-                    total_score = (tech_score * 0.45) + (fund_score * 0.20) + (news_score * 0.10) + (social_score * 0.05) + (macro_score * 0.20)
+                    # 盤整：技術面為主，但新聞/社群突發消息可能打破平衡
+                    total_score = (tech_score * 0.35) + (fund_score * 0.15) + (news_score * 0.18) + (social_score * 0.12) + (macro_score * 0.20)
                 else:
-                    # 牛市/未知：預設權重
-                    total_score = (tech_score * 0.35) + (fund_score * 0.25) + (news_score * 0.12) + (social_score * 0.08) + (macro_score * 0.20)
+                    # 牛市/未知：均衡分配，社群和新聞一起提升
+                    total_score = (tech_score * 0.28) + (fund_score * 0.20) + (news_score * 0.18) + (social_score * 0.12) + (macro_score * 0.22)
             else:
                 if regime == "bear":
-                    # 熊市：籌碼面（外資動向）更重要
-                    total_score = (tech_score * 0.20) + (chip_score * 0.35) + (fund_score * 0.10) + (news_score * 0.15) + (social_score * 0.05) + (macro_score * 0.15)
+                    # 台股熊市：籌碼面+新聞主導，社群恐慌情緒加重
+                    total_score = (tech_score * 0.15) + (chip_score * 0.25) + (fund_score * 0.08) + (news_score * 0.22) + (social_score * 0.12) + (macro_score * 0.18)
                 elif regime == "sideways":
-                    # 盤整：技術面更重要
-                    total_score = (tech_score * 0.40) + (chip_score * 0.20) + (fund_score * 0.10) + (news_score * 0.10) + (social_score * 0.05) + (macro_score * 0.15)
+                    # 台股盤整：技術面+籌碼為主
+                    total_score = (tech_score * 0.30) + (chip_score * 0.18) + (fund_score * 0.10) + (news_score * 0.17) + (social_score * 0.10) + (macro_score * 0.15)
                 else:
-                    # 牛市/未知：預設權重
-                    total_score = (tech_score * 0.30) + (chip_score * 0.20) + (fund_score * 0.15) + (news_score * 0.10) + (social_score * 0.10) + (macro_score * 0.15)
+                    # 台股牛市/未知：新聞+社群提升至 30% 合計
+                    total_score = (tech_score * 0.22) + (chip_score * 0.18) + (fund_score * 0.12) + (news_score * 0.18) + (social_score * 0.12) + (macro_score * 0.18)
 
-            # 隔日預測專用加權評分 — 側重短期因子（也根據市場狀態調整）
+            # ===== 隔日預測專用加權（短期因子為主，新聞/社群影響更大）=====
             if market == "US":
                 if regime == "bear":
-                    prediction_score = (tech_score * 0.30) + (fund_score * 0.10) + (news_score * 0.25) + (social_score * 0.05) + (macro_score * 0.30)
+                    prediction_score = (tech_score * 0.25) + (fund_score * 0.05) + (news_score * 0.28) + (social_score * 0.12) + (macro_score * 0.30)
                 else:
-                    prediction_score = (tech_score * 0.40) + (fund_score * 0.15) + (news_score * 0.15) + (social_score * 0.05) + (macro_score * 0.25)
+                    prediction_score = (tech_score * 0.30) + (fund_score * 0.10) + (news_score * 0.22) + (social_score * 0.13) + (macro_score * 0.25)
             else:
                 if regime == "bear":
-                    prediction_score = (tech_score * 0.25) + (chip_score * 0.40) + (news_score * 0.20) + (social_score * 0.05) + (fund_score * 0.05) + (macro_score * 0.05)
+                    prediction_score = (tech_score * 0.20) + (chip_score * 0.30) + (news_score * 0.25) + (social_score * 0.10) + (fund_score * 0.05) + (macro_score * 0.10)
                 else:
-                    prediction_score = (tech_score * 0.35) + (chip_score * 0.35) + (news_score * 0.15) + (social_score * 0.05) + (fund_score * 0.05) + (macro_score * 0.05)
+                    prediction_score = (tech_score * 0.25) + (chip_score * 0.25) + (news_score * 0.22) + (social_score * 0.10) + (fund_score * 0.05) + (macro_score * 0.13)
 
             data['prediction_score'] = round(prediction_score, 1)
             logger.info(f"[{stock_id}] 市場狀態: {regime}, 趨勢強度: {market_regime.get('trend_strength', 0)}, 波動: {market_regime.get('volatility_regime', 'normal')}")
@@ -2289,12 +2427,29 @@ class AISuggestionService:
 
 {style_section}
 
+## 思維鏈分析流程（Chain-of-Thought，必須遵守！）
+在生成 JSON 回應前，你必須依序完成以下分析步驟：
+
+**Step 1 - 數據匯整**：列出每個維度（技術/籌碼/基本/新聞/社群/宏觀）的核心訊號
+**Step 2 - 矛盾檢測**：找出不同維度之間的矛盾（例如技術面看多但社群看空）
+**Step 3 - 新聞+社群交叉驗證**：
+  - 國際新聞和國內新聞方向一致嗎？不一致時以國際為主
+  - PTT/Dcard/Threads 社群情緒和新聞方向一致嗎？
+  - 高信心度社群訊號（confidence > 0.5）是什麼方向？
+  - 如果新聞+社群+技術面三者方向一致 → 訊號極強
+**Step 4 - 隔日預測計算**：
+  - 參考 prediction_score 和 avg_daily_volatility
+  - 計算合理的預測幅度（要反映該股票真實波動水準）
+**Step 5 - 風險評估**：基於所有維度的一致性判斷信心度
+
+注意：你的 reasoning 欄位中必須體現上述分析邏輯，不要只寫結論！
+
 ## 預測獨立性（極其重要！）
 - suggestion（BUY/SELL）= 交易建議，考量中期走勢，必須遵守上方強制規則
 - next_day_prediction = 隔日走勢預測，必須獨立判斷，**不受 suggestion 影響**
 - 即使 suggestion 是 BUY，若短期超買（RSI>70、KD高檔死叉），next_day_prediction.direction 可以是 DOWN
 - 即使 suggestion 是 SELL，若短期超賣（RSI<30、KD低檔金叉），next_day_prediction.direction 可以是 UP
-- 隔日預測判斷依據：prediction_score、RSI、MACD、布林通道位置、{'籌碼動向（外資/投信）' if market == 'TW' else 'VIX恐慌指數、宏觀面'}
+- 隔日預測判斷依據：prediction_score、RSI、MACD、布林通道位置、{'籌碼動向（外資/投信）' if market == 'TW' else 'VIX恐慌指數、宏觀面'}、**新聞情緒（國內+國際）**、**社群情緒（含高信心度訊號）**
 
 {prediction_section}
 
@@ -2369,6 +2524,8 @@ class AISuggestionService:
         base_info += f"""
 - 基本面評分：{fund.get('fundamental_score', 'N/A')} → {fund.get('fundamental_signal', 'N/A')}
 - 消息面評分：{news.get('sentiment_score', 'N/A')} → {news.get('sentiment_signal', 'N/A')}
+- 社群面評分：{social.get('social_score', 'N/A')} → {social.get('social_signal', 'N/A')}
+- 宏觀面評分：{macro.get('macro_score', 'N/A')} → {macro.get('macro_signal', 'N/A')}
 - **加權總分：{round(total_score, 1)}**
 
 ## 技術面詳細數據
@@ -2435,13 +2592,14 @@ class AISuggestionService:
 - 10年公債殖利率：{macro_details.get('us10y', {}).get('value', 'N/A')}% ({macro_details.get('us10y', {}).get('signal', 'N/A')})
 - 黃金變化：{macro_details.get('gold', {}).get('change_pct', 'N/A')}% ({macro_details.get('gold', {}).get('signal', 'N/A')})
 
-## 消息面詳細數據
-- 近期新聞數：{news.get('news_count', 0)}
+## 消息面詳細數據（國內 + 國際）
+- 總新聞數：{news.get('news_count', 0)}（台灣 {news.get('tw_news_count', 0)} + 國際 {news.get('intl_news_count', 0)}）
 - 正面新聞：{news.get('positive_news', 0)}則
 - 負面新聞：{news.get('negative_news', 0)}則
-- 情緒判斷：{news.get('sentiment_signal', 'N/A')}
+- 消息面情緒：{news.get('sentiment_signal', 'N/A')}
+- 國際市場情緒：{news.get('intl_sentiment_signal', 'N/A')}（國際新聞對大盤有重大影響！）
 
-## 社群輿論數據（PTT/Dcard/Mobile01）
+## 社群輿論數據（PTT/Dcard/Mobile01/Threads 全平台）
 - 社群評分：{social.get('social_score', 'N/A')} → {social.get('social_signal', 'N/A')}
 - 總提及數：{social.get('total_mentions', 0)}
 - 正面聲量：{social.get('positive', 0)}
@@ -2449,9 +2607,17 @@ class AISuggestionService:
 - 中性聲量：{social.get('neutral', 0)}
 - 平均情緒分數：{social.get('avg_score', 0)}
 - 活躍平台：{', '.join(social.get('platforms', [])) or 'N/A'}
+- 各平台情緒分佈：{json.dumps(social.get('platform_breakdown', {}), ensure_ascii=False)}
+- 高信心度訊號：{json.dumps(social.get('high_confidence_signals', []), ensure_ascii=False)}
 - 熱門話題：{', '.join(social.get('top_topics', [])[:3]) or 'N/A'}
 
-## 近期新聞標題
+⚠️ **社群和新聞情緒判讀規則（重要！）**
+- 若社群多平台一致看多/看空（PTT+Dcard+Threads 同方向），此訊號權重應加倍
+- 若國際新聞與國內新聞方向矛盾，以國際新聞為主（全球市場連動）
+- 若社群情緒與技術面矛盾，需特別注意反轉風險
+- 高信心度訊號（confidence > 0.5）是最可靠的社群參考
+
+## 近期新聞標題（含國際）
 {json.dumps(news.get('recent_news', []), ensure_ascii=False, indent=2)}
 
 ## 隔日預測計算參考（獨立於交易建議！）
