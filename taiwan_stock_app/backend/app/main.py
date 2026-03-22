@@ -53,22 +53,48 @@ try:
         ai_config_router,
         strategy_backtest_router,
         ai_discovery_router,
-        crypto_router,
-        daily_summary_router,
-        macro_router,
-        portfolio_recommendation_router,
     )
     from app.routers.predictions import router as predictions_router
     from app.routers.market_overview import router as market_overview_router
     from app.routers.calendar import router as calendar_router
     from app.routers.trading_diary import router as trading_diary_router
     _routers_available = True
-    print("=== All routers imported OK ===", flush=True)
+    print("=== Core routers imported OK ===", flush=True)
 except Exception as e:
     _routers_available = False
-    print(f"=== FATAL: Router import failed: {e} ===", flush=True)
+    print(f"=== FATAL: Core router import failed: {e} ===", flush=True)
     import traceback
     traceback.print_exc()
+
+# 新功能路由：獨立 import，失敗不影響核心功能
+crypto_router = None
+daily_summary_router = None
+macro_router = None
+portfolio_recommendation_router = None
+
+try:
+    from app.routers.crypto import router as crypto_router
+    print("=== crypto_router imported OK ===", flush=True)
+except Exception as e:
+    print(f"=== WARNING: crypto_router import failed: {e} ===", flush=True)
+
+try:
+    from app.routers.daily_summary import router as daily_summary_router
+    print("=== daily_summary_router imported OK ===", flush=True)
+except Exception as e:
+    print(f"=== WARNING: daily_summary_router import failed: {e} ===", flush=True)
+
+try:
+    from app.routers.macro import router as macro_router
+    print("=== macro_router imported OK ===", flush=True)
+except Exception as e:
+    print(f"=== WARNING: macro_router import failed: {e} ===", flush=True)
+
+try:
+    from app.routers.portfolio_recommendation import router as portfolio_recommendation_router
+    print("=== portfolio_recommendation_router imported OK ===", flush=True)
+except Exception as e:
+    print(f"=== WARNING: portfolio_recommendation_router import failed: {e} ===", flush=True)
 
 from sqlalchemy import text
 
@@ -120,10 +146,17 @@ if _routers_available:
     app.include_router(trading_diary_router)
     app.include_router(strategy_backtest_router)
     app.include_router(ai_discovery_router)
-    app.include_router(crypto_router)
-    app.include_router(daily_summary_router)
-    app.include_router(macro_router)
-    app.include_router(portfolio_recommendation_router)
+
+# 新功能路由：僅在成功 import 時註冊
+for _name, _router in [
+    ("crypto", crypto_router),
+    ("daily_summary", daily_summary_router),
+    ("macro", macro_router),
+    ("portfolio_recommendation", portfolio_recommendation_router),
+]:
+    if _router is not None:
+        app.include_router(_router)
+        print(f"=== {_name}_router registered OK ===", flush=True)
 
 
 @app.on_event("startup")
