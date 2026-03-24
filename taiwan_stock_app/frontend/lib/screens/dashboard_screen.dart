@@ -7,7 +7,7 @@ import '../widgets/dashboard/market_overview_card.dart';
 import '../widgets/dashboard/watchlist_summary_card.dart';
 import '../widgets/dashboard/ai_picks_card.dart';
 import '../widgets/dashboard/ai_discovery_card.dart';
-import '../widgets/dashboard/quick_actions_card.dart';
+
 import '../widgets/dashboard/realtime_clock_card.dart';
 import '../widgets/common/skeleton_loader.dart';
 
@@ -99,25 +99,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          // 快捷操作骨架
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: List.generate(4, (_) =>
-                  Column(
-                    children: [
-                      SkeletonLoader(width: 48, height: 48, borderRadius: 12),
-                      const SizedBox(height: 8),
-                      SkeletonLoader(width: 48, height: 12),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
           // 自選股摘要骨架
           Card(
             child: Padding(
@@ -200,14 +181,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           const SizedBox(height: 12),
 
-          // 快捷操作
-          QuickActionsCard(
-            actions: QuickActionsCard.defaultActions,
-            onActionTap: (action) => _handleQuickAction(context, action),
-          ),
-
-          const SizedBox(height: 12),
-
           // 警報狀態
           if (data?.alertSummary != null)
             AlertStatusWidget(
@@ -262,14 +235,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
     );
-  }
-
-  void _handleQuickAction(BuildContext context, QuickActionItem action) {
-    if (action.route == '/home' && action.arguments?['tab'] != null) {
-      widget.onTabChange?.call(action.arguments!['tab'] as int);
-    } else {
-      Navigator.pushNamed(context, action.route, arguments: action.arguments);
-    }
   }
 
   void _navigateToWatchlist(BuildContext context) {
