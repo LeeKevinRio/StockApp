@@ -51,13 +51,7 @@ try:
         admin_router,
         broker_router,
         ai_config_router,
-        strategy_backtest_router,
-        ai_discovery_router,
     )
-    from app.routers.predictions import router as predictions_router
-    from app.routers.market_overview import router as market_overview_router
-    from app.routers.calendar import router as calendar_router
-    from app.routers.trading_diary import router as trading_diary_router
     _routers_available = True
     print("=== Core routers imported OK ===", flush=True)
 except Exception as e:
@@ -65,6 +59,50 @@ except Exception as e:
     print(f"=== FATAL: Core router import failed: {e} ===", flush=True)
     import traceback
     traceback.print_exc()
+
+# 次要核心路由：獨立 import，失敗不影響主要功能
+predictions_router = None
+market_overview_router = None
+calendar_router = None
+trading_diary_router = None
+strategy_backtest_router = None
+ai_discovery_router = None
+
+try:
+    from app.routers.predictions import router as predictions_router
+    print("=== predictions_router imported OK ===", flush=True)
+except Exception as e:
+    print(f"=== WARNING: predictions_router import failed: {e} ===", flush=True)
+
+try:
+    from app.routers.market_overview import router as market_overview_router
+    print("=== market_overview_router imported OK ===", flush=True)
+except Exception as e:
+    print(f"=== WARNING: market_overview_router import failed: {e} ===", flush=True)
+
+try:
+    from app.routers.calendar import router as calendar_router
+    print("=== calendar_router imported OK ===", flush=True)
+except Exception as e:
+    print(f"=== WARNING: calendar_router import failed: {e} ===", flush=True)
+
+try:
+    from app.routers.trading_diary import router as trading_diary_router
+    print("=== trading_diary_router imported OK ===", flush=True)
+except Exception as e:
+    print(f"=== WARNING: trading_diary_router import failed: {e} ===", flush=True)
+
+try:
+    from app.routers.strategy_backtest import router as strategy_backtest_router
+    print("=== strategy_backtest_router imported OK ===", flush=True)
+except Exception as e:
+    print(f"=== WARNING: strategy_backtest_router import failed: {e} ===", flush=True)
+
+try:
+    from app.routers.ai_discovery import router as ai_discovery_router
+    print("=== ai_discovery_router imported OK ===", flush=True)
+except Exception as e:
+    print(f"=== WARNING: ai_discovery_router import failed: {e} ===", flush=True)
 
 # 新功能路由：獨立 import，失敗不影響核心功能
 crypto_router = None
@@ -140,15 +178,15 @@ if _routers_available:
     app.include_router(admin_router)
     app.include_router(broker_router)
     app.include_router(ai_config_router)
-    app.include_router(predictions_router)
-    app.include_router(market_overview_router)
-    app.include_router(calendar_router)
-    app.include_router(trading_diary_router)
-    app.include_router(strategy_backtest_router)
-    app.include_router(ai_discovery_router)
 
-# 新功能路由：僅在成功 import 時註冊
+# 非核心路由：僅在成功 import 時註冊（失敗不影響核心功能）
 for _name, _router in [
+    ("predictions", predictions_router),
+    ("market_overview", market_overview_router),
+    ("calendar", calendar_router),
+    ("trading_diary", trading_diary_router),
+    ("strategy_backtest", strategy_backtest_router),
+    ("ai_discovery", ai_discovery_router),
     ("crypto", crypto_router),
     ("daily_summary", daily_summary_router),
     ("macro", macro_router),

@@ -1,5 +1,7 @@
 """
 API Routers
+注意：只保留「絕對穩定」的核心路由在此匯出。
+新功能路由（可能有外部依賴風險）移至 main.py 獨立 import。
 """
 from .auth import router as auth_router
 from .stocks import router as stocks_router
@@ -15,8 +17,6 @@ from .screener import router as screener_router
 from .admin import router as admin_router
 from .broker import router as broker_router
 from .ai_config import router as ai_config_router
-from .strategy_backtest import router as strategy_backtest_router
-from .ai_discovery import router as ai_discovery_router
 
 __all__ = [
     "auth_router",
@@ -33,6 +33,4 @@ __all__ = [
     "admin_router",
     "broker_router",
     "ai_config_router",
-    "strategy_backtest_router",
-    "ai_discovery_router",
 ]
