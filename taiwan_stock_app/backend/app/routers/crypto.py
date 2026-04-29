@@ -3,7 +3,7 @@
 公開加密貨幣市場數據、K線圖、市場概覽、AI 分析與相關性分析的端點
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 import logging
 from typing import List, Dict, Optional, Any
 
@@ -336,7 +336,7 @@ async def get_crypto_ai_analysis(
 
 @router.get("/correlation/{stock_id}")
 async def get_crypto_stock_correlation(
-    stock_id: str = Query(..., min_length=2, max_length=20),
+    stock_id: str = Path(..., min_length=2, max_length=20),
     crypto: str = Query("BTC", min_length=2, max_length=10),
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
