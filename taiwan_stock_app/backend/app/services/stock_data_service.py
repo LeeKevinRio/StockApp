@@ -206,9 +206,31 @@ class StockDataService:
             market: 'TW' for Taiwan stocks, 'US' for US stocks
         """
         if market == "US":
-            # Use US stock fetcher for real-time search
-            results = self.us_fetcher.search_stocks(query)
-            return results
+            # 優先 DB 查（快、穩定），找不到才打 yfinance（補冷門代碼）
+            db_hits = (
+                db.query(Stock)
+                .filter(
+                    (Stock.market_region == "US") &
+                    ((Stock.stock_id.ilike(f"%{query}%"))
+                     | (Stock.name.ilike(f"%{query}%")))
+                )
+                .limit(20)
+                .all()
+            )
+            if db_hits:
+                return [
+                    {
+                        "stock_id": s.stock_id,
+                        "symbol": s.stock_id,
+                        "name": s.name,
+                        "industry": s.industry or "",
+                        "exchange": s.market or "",
+                        "market_region": "US",
+                    }
+                    for s in db_hits
+                ]
+            # DB 未命中 → fallback 到 yfinance（冷門代碼）
+            return self.us_fetcher.search_stocks(query)
         else:
             # Search from database for Taiwan stocks
             return (
@@ -232,7 +254,25 @@ class StockDataService:
             market: 'TW' for Taiwan stocks, 'US' for US stocks
         """
         if market == "US":
-            return self.us_fetcher.get_stock_info(stock_id)
+            info = self.us_fetcher.get_stock_info(stock_id)
+            if info:
+                return info
+            # yfinance 取不到 → 從 DB 拿基本資料避免回 404
+            stock = db.query(Stock).filter(
+                Stock.stock_id == stock_id,
+                Stock.market_region == "US",
+            ).first()
+            if stock:
+                return {
+                    "stock_id": stock.stock_id,
+                    "symbol": stock.stock_id,
+                    "name": stock.name,
+                    "industry": stock.industry or "",
+                    "sector": getattr(stock, "sector", "") or "",
+                    "exchange": stock.market or "",
+                    "market_region": "US",
+                }
+            return None
         else:
             stock = db.query(Stock).filter(Stock.stock_id == stock_id).first()
             if stock:
