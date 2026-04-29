@@ -71,7 +71,12 @@ class USStockFetcher:
             ticker = self._get_ticker(symbol)
             info = ticker.info
 
-            if not info or info.get('regularMarketPrice') is None:
+            # 條件放寬：只要 info 有基本識別資訊就回
+            # 原本 require regularMarketPrice 會在收盤 / yfinance 暫延遲時誤判為「不存在」
+            if not info:
+                return None
+            has_identity = info.get("shortName") or info.get("longName") or info.get("symbol")
+            if not has_identity:
                 return None
 
             return {

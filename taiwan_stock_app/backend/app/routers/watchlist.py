@@ -132,8 +132,16 @@ def add_to_watchlist(
         # For US stocks, create a new stock record if it doesn't exist
         if market == "US":
             stock_info = stock_service.get_stock(db, data.stock_id, market="US")
+            # yfinance 偶爾抓不到（rate limit / 閉盤）— 仍建一筆 stub 讓使用者加得進去
+            # 後續打股價／詳情時 yfinance 自然會補資料
             if not stock_info:
-                raise HTTPException(status_code=404, detail="Stock not found")
+                stock_info = {
+                    "name": data.stock_id.upper(),
+                    "long_name": "",
+                    "industry": "",
+                    "sector": "",
+                    "exchange": "NYSE",
+                }
 
             # Create new stock record for US stock
             stock = Stock(
