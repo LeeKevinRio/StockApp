@@ -12,8 +12,9 @@ print(f"=== DATABASE_URL={'set' if os.getenv('DATABASE_URL') else 'NOT SET'} ===
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy.exc import OperationalError, DBAPIError
 
 from app.logging_config import setup_logging
 from app.config import settings
@@ -146,6 +147,17 @@ app = FastAPI(
 # --- Rate Limiting ---
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+
+# --- DB 不可用：統一回 503，避免前端拿到 500 卻不知道是 DB 問題 ---
+@app.exception_handler(OperationalError)
+@app.exception_handler(DBAPIError)
+def _db_unavailable_handler(request: Request, exc: Exception):
+    logger.error(f"Database unavailable: {exc}")
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "資料庫暫時無法連線，請稍後再試", "error_type": "db_unavailable"},
+    )
 
 # 注意：不使用 HTTPSRedirectMiddleware
 # Railway/Render 等 PaaS 在 reverse proxy 層已處理 HTTPS

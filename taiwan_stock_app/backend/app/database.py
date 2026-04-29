@@ -31,11 +31,15 @@ if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
     # PostgreSQL 連線池設定（適用於生產環境）
+    # pool_recycle: 1 小時後丟棄連線，避免雲端 PG provider 主動斷線造成 stale connection
+    # connect_timeout=10: 避免 DB 不通時 worker hang 死
     engine = create_engine(
         DATABASE_URL,
         pool_size=5,
         max_overflow=10,
         pool_pre_ping=True,
+        pool_recycle=3600,
+        connect_args={"connect_timeout": 10},
     )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
