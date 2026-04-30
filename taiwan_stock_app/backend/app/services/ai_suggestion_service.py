@@ -285,7 +285,8 @@ class AISuggestionService:
             return "macro", self._analyze_macro_data()
 
         def _fetch_social():
-            return "social", self._analyze_social_sentiment(stock_id)
+            # 美股路徑：明確傳 market="US"，走 Reddit + Threads(en)
+            return "social", self._analyze_social_sentiment(stock_id, market="US")
 
         with ThreadPoolExecutor(max_workers=5) as executor:
             futures = [
@@ -382,7 +383,8 @@ class AISuggestionService:
             return "macro", self._analyze_macro_data()
 
         def _fetch_social():
-            return "social", self._analyze_social_sentiment(stock_id)
+            # 台股路徑：明確傳 market="TW"
+            return "social", self._analyze_social_sentiment(stock_id, market="TW")
 
         def _fetch_price():
             """TWSE 即時報價"""
@@ -1405,11 +1407,17 @@ class AISuggestionService:
             logger.error(f"宏觀數據分析失敗: {e}")
             return {"macro_score": 0, "macro_signal": "no_data", "details": {}}
 
-    def _analyze_social_sentiment(self, stock_id: str, db=None) -> Dict:
+    def _analyze_social_sentiment(self, stock_id: str, db=None, market: str = None) -> Dict:
         """
         社群情緒分析（強化版）
-        整合 PTT + Dcard + Mobile01 + Threads，使用進階語意分析器
+        - TW: PTT + Dcard + Mobile01 + Threads(zh)
+        - US: Reddit + Threads(en)
+        使用進階語意分析器
         """
+        # 自動推測市場（純英文 → 美股）
+        if market is None:
+            market = "US" if (stock_id or "").isalpha() else "TW"
+
         result = {
             "social_score": 0,
             "social_signal": "no_data",
@@ -1427,44 +1435,60 @@ class AISuggestionService:
         all_posts = []
 
         try:
-            # ===== 1. 從 DB 或直接爬蟲取得 PTT/Dcard/Mobile01 貼文 =====
-            if db is not None:
+            if market == "TW":
+                # ===== TW: 從 DB 或直接爬蟲取得 PTT/Dcard/Mobile01 貼文 =====
+                if db is not None:
+                    try:
+                        from app.services.sentiment_service import sentiment_service
+                        import concurrent.futures
+                        with concurrent.futures.ThreadPoolExecutor() as pool:
+                            social_data = pool.submit(
+                                asyncio.run,
+                                sentiment_service.get_social_sentiment_for_ai(db, stock_id)
+                            ).result(timeout=15)
+                        if social_data and social_data.get('total_mentions', 0) > 0:
+                            result.update(social_data)
+                    except Exception as e:
+                        logger.warning(f"DB 社群數據取得失敗，改用爬蟲: {e}")
+
+                if result['total_mentions'] < 3:
+                    from app.data_fetchers.taiwan_social_fetcher import taiwan_social_fetcher
+                    tw_posts = taiwan_social_fetcher.fetch_stock_discussions(stock_id, limit=25)
+                    if tw_posts:
+                        for post in tw_posts:
+                            platform = post.get('platform', 'unknown')
+                            analysis = _get_enhanced_analyzer().analyze(
+                                f"{post.get('title', '')} {post.get('content', '')}",
+                                platform=platform,
+                                push_count=post.get('push_count', 0),
+                                boo_count=post.get('boo_count', 0)
+                            )
+                            post['enhanced_sentiment'] = analysis
+                            post['sentiment_score'] = analysis['score']
+                            post['sentiment'] = analysis['sentiment'].replace('very_', '')
+                        all_posts.extend(tw_posts)
+            else:
+                # ===== US: Reddit r/wallstreetbets, r/stocks 等 =====
                 try:
-                    from app.services.sentiment_service import sentiment_service
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as pool:
-                        social_data = pool.submit(
-                            asyncio.run,
-                            sentiment_service.get_social_sentiment_for_ai(db, stock_id)
-                        ).result(timeout=15)
-                    if social_data and social_data.get('total_mentions', 0) > 0:
-                        result.update(social_data)
+                    from app.data_fetchers.reddit_fetcher import reddit_fetcher
+                    reddit_posts = reddit_fetcher.fetch_stock_discussions(stock_id, limit=30)
+                    if reddit_posts:
+                        for post in reddit_posts:
+                            analysis = _get_enhanced_analyzer().analyze(
+                                f"{post.get('title', '')} {post.get('content', '')}",
+                                platform=post.get('platform', 'reddit'),
+                            )
+                            post['enhanced_sentiment'] = analysis
+                            post['sentiment_score'] = analysis['score']
+                            post['sentiment'] = analysis['sentiment'].replace('very_', '')
+                        all_posts.extend(reddit_posts)
                 except Exception as e:
-                    logger.warning(f"DB 社群數據取得失敗，改用爬蟲: {e}")
+                    logger.warning(f"Reddit 社群數據取得失敗 ({stock_id}): {e}")
 
-            # 如果 DB 沒拿到足夠數據，直接爬蟲
-            if result['total_mentions'] < 3:
-                from app.data_fetchers.taiwan_social_fetcher import taiwan_social_fetcher
-                tw_posts = taiwan_social_fetcher.fetch_stock_discussions(stock_id, limit=25)
-                if tw_posts:
-                    # 使用進階情緒分析器重新分析
-                    for post in tw_posts:
-                        platform = post.get('platform', 'unknown')
-                        analysis = _get_enhanced_analyzer().analyze(
-                            f"{post.get('title', '')} {post.get('content', '')}",
-                            platform=platform,
-                            push_count=post.get('push_count', 0),
-                            boo_count=post.get('boo_count', 0)
-                        )
-                        post['enhanced_sentiment'] = analysis
-                        post['sentiment_score'] = analysis['score']
-                        post['sentiment'] = analysis['sentiment'].replace('very_', '')
-                    all_posts.extend(tw_posts)
-
-            # ===== 2. Threads 社群數據 =====
+            # ===== Threads 社群數據（依市場使用對應語言） =====
             try:
                 from app.data_fetchers.threads_fetcher import threads_fetcher
-                threads_posts = threads_fetcher.fetch_stock_discussions(stock_id, market="TW", limit=15)
+                threads_posts = threads_fetcher.fetch_stock_discussions(stock_id, market=market, limit=15)
                 if threads_posts:
                     for post in threads_posts:
                         analysis = _get_enhanced_analyzer().analyze(
