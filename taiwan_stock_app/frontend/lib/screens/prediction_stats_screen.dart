@@ -1674,6 +1674,25 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
     final predictions = (data['predictions'] as List?) ?? [];
     final accuracy = data['direction_accuracy'];
 
+    // 顯示實際的「上一交易日」（週末/連假後可能不是字面上的昨天）
+    String dateLabel = '上一交易日';
+    int? gapFromToday;
+    final dateStr = data['date'] as String?;
+    if (dateStr != null && dateStr.isNotEmpty) {
+      try {
+        final d = DateTime.parse(dateStr);
+        const weekdayTw = ['一', '二', '三', '四', '五', '六', '日'];
+        final w = '週${weekdayTw[d.weekday - 1]}';
+        dateLabel = '${d.month}/${d.day} ($w)';
+        final today = DateTime.now();
+        final t0 = DateTime(today.year, today.month, today.day);
+        gapFromToday = t0.difference(d).inDays;
+      } catch (_) {}
+    }
+    final titleText = (gapFromToday != null && gapFromToday > 1)
+        ? '上一交易日 · $dateLabel'
+        : '昨日預測結果 · $dateLabel';
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1684,11 +1703,13 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
               children: [
                 const Icon(Icons.today, color: Colors.orange),
                 const SizedBox(width: 8),
-                Text(
-                  '昨日預測結果',
-                  style: Theme.of(context).textTheme.titleMedium,
+                Expanded(
+                  child: Text(
+                    titleText,
+                    style: Theme.of(context).textTheme.titleMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                const Spacer(),
                 if (accuracy != null)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1705,9 +1726,9 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
             ),
             const Divider(),
             if (predictions.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(child: Text('昨日無預測記錄')),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: Text('$dateLabel 無預測記錄')),
               )
             else
               ListView.builder(

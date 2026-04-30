@@ -1075,12 +1075,23 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
     final directionText = isUp ? '預測上漲' : '預測下跌';
     final changeSign = predictedChange >= 0 ? '+' : '';
 
-    // 格式化目標日期
+    // 格式化目標日期 + 計算 gap
     String targetDateDisplay = '';
+    int? gapDays;
+    String prefix = '隔日';
     if (targetDate != null && targetDate.isNotEmpty) {
       try {
         final dt = DateTime.parse(targetDate);
-        targetDateDisplay = '${dt.month}/${dt.day}';
+        const weekdayTw = ['一', '二', '三', '四', '五', '六', '日'];
+        targetDateDisplay = '${dt.month}/${dt.day} (週${weekdayTw[dt.weekday - 1]})';
+        final today = DateTime.now();
+        final t0 = DateTime(today.year, today.month, today.day);
+        gapDays = dt.difference(t0).inDays;
+        if (gapDays <= 1) {
+          prefix = '明日';
+        } else {
+          prefix = '下個交易日';
+        }
       } catch (_) {
         targetDateDisplay = targetDate;
       }
@@ -1107,29 +1118,16 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
                 Icon(Icons.schedule, size: 20, color: directionColor),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: targetDateDisplay.isNotEmpty
-                              ? '$targetDateDisplay 漲跌預測'
-                              : '隔日漲跌預測',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: directionColor,
-                          ),
-                        ),
-                        if (targetDate != null && targetDate.isNotEmpty)
-                          TextSpan(
-                            text: ' ($targetDate)',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF90A4AE),
-                            ),
-                          ),
-                      ],
+                  child: Text(
+                    targetDateDisplay.isNotEmpty
+                        ? '$prefix漲跌預測 · $targetDateDisplay'
+                        : '隔日漲跌預測',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: directionColor,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Container(
@@ -1156,6 +1154,33 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
                 ),
               ],
             ),
+            // 長假 gap 提示
+            if (gapDays != null && gapDays >= 4) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withAlpha(40),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withAlpha(120)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.event_busy, size: 14, color: Colors.orange.shade800),
+                    const SizedBox(width: 6),
+                    Text(
+                      '跨假期 $gapDays 天，開盤波動可能放大 1.5–2.5x',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange.shade900,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             // 預測數據
             Row(
