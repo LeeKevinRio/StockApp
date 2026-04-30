@@ -6,6 +6,7 @@ from datetime import date, timedelta
 import logging
 
 from app.data_fetchers import FinMindFetcher, USStockFetcher
+from app.data_fetchers.us_stock_fetcher import USStockFundamentalFetcher
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,9 @@ class CalendarService:
 
     def __init__(self):
         self.finmind = FinMindFetcher(settings.FINMIND_TOKEN)
-        self.us_fetcher = USStockFetcher()
+        # 行情用 USStockFetcher，但 get_earnings_history / get_dividends 屬於
+        # USStockFundamentalFetcher，原本只 init 行情類別會 silent AttributeError。
+        self.us_fetcher = USStockFundamentalFetcher()
 
     def get_earnings_calendar(self, market: str = "TW", month: int = None, year: int = None) -> Dict:
         """取得財報公佈日曆"""

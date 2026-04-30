@@ -216,7 +216,10 @@ class PortfolioRecommendationService:
                     fundamentals = None
                     if market == "US":
                         try:
-                            fundamentals = self.stock_service.us_fetcher.get_fundamentals(sid)
+                            # us_fetcher 為 USStockFetcher（行情）— 沒有 get_fundamentals
+                            # 改用 USStockFundamentalFetcher 的全域實例
+                            from app.data_fetchers.us_stock_fetcher import us_fundamental_fetcher
+                            fundamentals = us_fundamental_fetcher.get_fundamentals(sid)
                         except Exception as fe:
                             logger.debug("get_fundamentals 失敗 %s: %s", sid, fe)
 
