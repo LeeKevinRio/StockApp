@@ -181,18 +181,18 @@ class PortfolioRecommendationService:
 
     # ==================== 風險偏好檢測 ====================
 
-    def detect_risk_profile(self, positions: List[Position]) -> str:
+    def detect_risk_profile(self, positions: List[Position], db: Optional[Session] = None) -> str:
         """
         根據現有持倉自動檢測用戶的風險偏好
 
         分析指標：
-        - 股票波動率（Beta）
+        - 股票波動率（Beta，僅美股可取得；台股 fallback 為 1.0）
         - 產業集中度
-        - 平均市值
-        - 持有期模式
+        - 平均市值（僅美股能精準取得）
 
         Args:
             positions: 持倉列表
+            db: Optional DB session（取得台股 industry 用）
 
         Returns:
             風險偏好級別: 保守型, 穩健型, 積極型
@@ -209,21 +209,31 @@ class PortfolioRecommendationService:
 
             for position in positions:
                 try:
-                    # 獲取股票基本資料
-                    stock_data = self.stock_service.get_stock_detail(position.stock_id)
+                    # 推測市場：純英文 → 美股，否則 → 台股（與專案其他處同樣的 heuristic）
+                    sid = position.stock_id or ""
+                    market = "US" if sid.isalpha() else "TW"
+                    base = self.stock_service.get_stock(db, sid, market=market) if db else None
+                    fundamentals = None
+                    if market == "US":
+                        try:
+                            fundamentals = self.stock_service.us_fetcher.get_fundamentals(sid)
+                        except Exception as fe:
+                            logger.debug("get_fundamentals 失敗 %s: %s", sid, fe)
 
-                    if stock_data:
-                        # 累計波動率（使用 Beta 或預估）
-                        beta = float(stock_data.get("beta", 1.0))
-                        total_volatility += beta
+                    # Beta：美股 fundamentals 提供，台股暫無公開來源 → 1.0
+                    beta_val = (fundamentals or {}).get("beta")
+                    beta = float(beta_val) if beta_val is not None else 1.0
+                    total_volatility += beta
 
-                        # 產業集中度
-                        industry = stock_data.get("industry", "其他")
-                        industry_concentration[industry] = industry_concentration.get(industry, 0) + 1
+                    # 產業集中度
+                    industry = ((base or {}).get("industry")
+                                or (fundamentals or {}).get("industry")
+                                or "其他")
+                    industry_concentration[industry] = industry_concentration.get(industry, 0) + 1
 
-                        # 市值統計
-                        market_cap = float(stock_data.get("market_cap", 0))
-                        total_market_cap += market_cap
+                    # 市值統計（僅美股有）
+                    market_cap_val = (fundamentals or {}).get("market_cap") or 0
+                    total_market_cap += float(market_cap_val or 0)
                 except Exception as e:
                     logger.warning(f"無法取得股票 {position.stock_id} 的資料: {e}")
                     continue
@@ -406,7 +416,7 @@ class PortfolioRecommendationService:
                 }
 
             # 檢測當前風險偏好
-            risk_level = self.detect_risk_profile(positions)
+            risk_level = self.detect_risk_profile(positions, db=db)
             profile = RISK_PROFILES.get(risk_level, RISK_PROFILES["穩健型"])
             target_allocation = profile["allocation"]
 

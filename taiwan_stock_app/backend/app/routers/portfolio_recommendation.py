@@ -67,7 +67,7 @@ async def get_portfolio_recommendation(
                 if portfolios and len(portfolios) > 0:
                     portfolio = portfolios[0]
                     positions = portfolio_service.get_positions(db, portfolio.id, current_user.id)
-                    final_risk_level = service.detect_risk_profile(positions)
+                    final_risk_level = service.detect_risk_profile(positions, db=db)
                 else:
                     final_risk_level = "穩健型"
 
@@ -137,7 +137,7 @@ async def get_risk_profile(
         positions = portfolio_service.get_positions(db, portfolio.id, current_user.id)
 
         # 檢測風險偏好
-        detected_risk = service.detect_risk_profile(positions)
+        detected_risk = service.detect_risk_profile(positions, db=db)
 
         # 計算投資組合指標
         metrics = service.calculate_portfolio_metrics(positions)
