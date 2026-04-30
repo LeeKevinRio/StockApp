@@ -19,7 +19,7 @@ from app.data_fetchers.news_fetcher import NewsFetcher
 from app.data_fetchers.twse_fetcher import TWSEFetcher
 from app.config import settings
 from app.services.technical_indicators import TechnicalIndicators
-from app.services.trading_calendar import get_calendar_gap_days
+from app.services.trading_calendar import get_calendar_gap_days, get_next_trading_date
 
 # 延遲載入新增模組，避免 import 失敗影響核心功能
 _enhanced_news_fetcher = None
