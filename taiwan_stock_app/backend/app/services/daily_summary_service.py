@@ -303,23 +303,37 @@ class DailySummaryService:
     async def _get_key_events(self) -> List[Dict]:
         """
         取得今日重點事件
-        包括：財報發布、經濟數據公布、央行會議等
+        包括：經濟數據公布、央行會議、財報等
+
+        從 get_economic_calendar / get_earnings_calendar 撈出當月資料，
+        過濾出今日且高影響力的事件。
         """
         try:
             from app.services.calendar_service import CalendarService
 
             calendar_service = CalendarService()
             today = datetime.now().date()
+            today_str = today.isoformat()
 
-            events = calendar_service.get_events_by_date(today)
+            events: List[Dict] = []
+            # 經濟事件（CPI、GDP、FOMC、非農）— 涵蓋台美兩個市場
+            for mkt in ("TW", "US"):
+                try:
+                    eco = calendar_service.get_economic_calendar(
+                        market=mkt, month=today.month, year=today.year
+                    )
+                    for ev in eco.get("events", []) or []:
+                        if str(ev.get("date", "")).startswith(today_str):
+                            events.append({**ev, "market": mkt, "type": "economic"})
+                except Exception as e:
+                    logger.warning(f"取得 {mkt} 經濟日曆失敗: {e}")
 
-            # 篩選重要事件（高影響力）
-            important_events = [
+            # 過濾重要事件（high / medium）
+            important = [
                 e for e in events
-                if e.get("importance", "low") in ["medium", "high"]
-            ][:5]
-
-            return important_events
+                if str(e.get("importance", "")).lower() in ("medium", "high")
+            ]
+            return important[:5]
 
         except Exception as e:
             logger.warning(f"取得日曆事件失敗: {e}")
@@ -328,32 +342,34 @@ class DailySummaryService:
     async def _get_ai_watchlist_alerts(self) -> List[Dict]:
         """
         取得 AI 監控清單中的強信號股票
+        從 PredictionRecord 撈出今日產生、預測機率 > 0.75 的隔日預測
         """
         try:
-            # 簡化版：返回空列表或模擬數據
-            # 實際應該從 AI 建議服務或預測追蹤器獲取
-            alerts = []
+            from app.database import SessionLocal
+            from app.services.prediction_tracker import PredictionTracker
 
+            tracker = PredictionTracker()
+            today = datetime.now().date()
+            db = SessionLocal()
             try:
-                from app.services.prediction_tracker import PredictionTracker
+                # 取得今日產生的所有預測（不論 target_date）
+                predictions = tracker.get_predictions_made_on(
+                    db=db, prediction_date=today
+                )
+            finally:
+                db.close()
 
-                tracker = PredictionTracker()
-                today = datetime.now().date()
-
-                # 取得今日高信心預測
-                predictions = tracker.get_predictions_for_date(today)
-
-                strong_signals = [
-                    p for p in predictions
-                    if p.get("confidence", 0) > 0.75
-                ][:5]
-
-                alerts = strong_signals
-
-            except Exception as e:
-                logger.warning(f"無法取得預測信號: {e}")
-
-            return alerts
+            # 過濾出高信心預測（predicted_probability > 0.75）
+            strong_signals = [
+                p for p in predictions
+                if (p.get("predicted_probability") or 0) > 0.75
+            ]
+            # 依信心度由高到低排序，取前 5
+            strong_signals.sort(
+                key=lambda x: (x.get("predicted_probability") or 0),
+                reverse=True,
+            )
+            return strong_signals[:5]
 
         except Exception as e:
             logger.warning(f"取得 AI 監控警報失敗: {e}")
