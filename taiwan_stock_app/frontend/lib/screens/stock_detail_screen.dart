@@ -781,6 +781,8 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
           'key_factors': suggestion.keyFactors,
           'report_date': suggestion.reportDate,
           'next_day_prediction': suggestion.nextDayPrediction,
+          'ai_provider': suggestion.aiProvider,
+          'historical_accuracy': suggestion.historicalAccuracy,
         };
         _isLoading = false;
       });
@@ -905,6 +907,33 @@ class _StockAISuggestionViewState extends State<_StockAISuggestionView> {
                         color: suggestionColor,
                       ),
                     ),
+                    // Mock fallback 警示（AI API 不可用時）
+                    if (_suggestion!['ai_provider'] == 'Mock') ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withAlpha(40),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.withAlpha(120)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.warning_amber, size: 14, color: Colors.orange.shade800),
+                            const SizedBox(width: 6),
+                            Text(
+                              'AI 暫不可用，此為基於本地評分的數據推導',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.orange.shade900,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     Row(
                       children: [
