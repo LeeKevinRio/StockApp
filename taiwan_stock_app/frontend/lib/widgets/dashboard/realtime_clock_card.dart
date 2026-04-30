@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../services/api_service.dart';
 
 /// 即時時間顯示卡片，附帶資料更新時間說明
 class RealtimeClockCard extends StatefulWidget {
@@ -15,6 +17,7 @@ class RealtimeClockCard extends StatefulWidget {
 class _RealtimeClockCardState extends State<RealtimeClockCard> {
   late Timer _timer;
   DateTime _now = DateTime.now();
+  Map<String, dynamic>? _tradingStatus; // 後端傳回的交易日狀態（含國定假日）
 
   @override
   void initState() {
@@ -24,6 +27,27 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
         _now = DateTime.now();
       });
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadTradingStatus());
+  }
+
+  @override
+  void didUpdateWidget(covariant RealtimeClockCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.market != widget.market) {
+      _loadTradingStatus();
+    }
+  }
+
+  Future<void> _loadTradingStatus() async {
+    try {
+      final api = context.read<ApiService>();
+      final status = await api.getTradingStatus(market: widget.market);
+      if (mounted) {
+        setState(() => _tradingStatus = status);
+      }
+    } catch (_) {
+      // 後端無法取得不影響顯示，fallback 為僅看 weekday/hour
+    }
   }
 
   @override
@@ -63,8 +87,30 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
     return utc.isAfter(marchStart) && utc.isBefore(novEnd);
   }
 
-  /// 判斷市場是否在交易時段
+  /// 後端 is_trading_day（包含國定假日判斷），未取得則 null
+  bool? get _backendIsTradingDay {
+    final s = _tradingStatus;
+    if (s == null) return null;
+    final v = s['is_trading_day'];
+    if (v is bool) return v;
+    return null;
+  }
+
+  /// 是否為國定假日（透過後端 is_trading_day=false 但今日非週末判斷）
+  bool get _isHoliday {
+    final isTd = _backendIsTradingDay;
+    if (isTd == null) return false;
+    final localTime = _marketLocalTime;
+    final isWeekend = localTime.weekday > 5;
+    return !isTd && !isWeekend;
+  }
+
+  /// 判斷市場是否在交易時段（國定假日一律 false）
   bool get _isMarketOpen {
+    // 後端說今天不是交易日 → 直接 closed
+    final isTd = _backendIsTradingDay;
+    if (isTd == false) return false;
+
     final localTime = _marketLocalTime;
     final weekday = localTime.weekday;
     if (weekday > 5) return false; // 週末
@@ -80,6 +126,9 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
   }
 
   String get _marketStatusText {
+    if (_isHoliday) {
+      return _isUS ? 'Market Holiday' : '國定假日休市';
+    }
     if (_isUS) {
       return _isMarketOpen ? 'Market Open' : 'Market Closed';
     }
@@ -102,8 +151,31 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
   }
 
   Color _marketStatusColor(BuildContext context) {
+    if (_isHoliday) return Colors.orange;
     if (_isMarketOpen) return Colors.green;
     return Colors.grey;
+  }
+
+  /// 提示「下個交易日為 X，跨假期 N 天」（國定假日或長假時顯示）
+  String? get _nextTradingHint {
+    final s = _tradingStatus;
+    if (s == null) return null;
+    final next = s['next_trading_date'] as String?;
+    final gap = s['gap_days'];
+    final longGap = s['long_gap'] == true;
+    if (next == null) return null;
+    if (!_isHoliday && !longGap) return null;
+    try {
+      final dt = DateTime.parse(next);
+      const weekdayTw = ['一', '二', '三', '四', '五', '六', '日'];
+      final w = '週${weekdayTw[dt.weekday - 1]}';
+      if (_isHoliday) {
+        return '下個交易日：${dt.month}/${dt.day} ($w)${gap != null ? "，跨 $gap 天" : ""}';
+      }
+      return '長假後開盤：${dt.month}/${dt.day} ($w)${gap != null ? "，跨 $gap 天波動可能放大" : ""}';
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -199,6 +271,36 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
                 color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.7),
               ),
             ),
+
+            // 國定假日 / 長假後開盤提示
+            if (_nextTradingHint != null) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.event_busy,
+                        size: 13, color: Colors.orange.shade800),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _nextTradingHint!,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: Colors.orange.shade900,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
 
             const Divider(height: 16),
 

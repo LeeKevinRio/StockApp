@@ -1039,6 +1039,18 @@ class ApiService {
     return _safeJsonDecode(response.body);
   }
 
+  /// 取得指定市場「今日」交易狀態（含國定假日判斷）
+  /// 回傳 is_trading_day / next_trading_date / previous_trading_date /
+  /// gap_days / long_gap 等資訊。
+  Future<Map<String, dynamic>> getTradingStatus({String market = 'TW'}) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/api/calendar/trading-status?market=$market'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return _safeJsonDecode(response.body);
+  }
+
   // ==================== 風險指標相關 ====================
 
   Future<Map<String, dynamic>> getStockRisk(String stockId, {int days = 252, String market = 'TW'}) async {
