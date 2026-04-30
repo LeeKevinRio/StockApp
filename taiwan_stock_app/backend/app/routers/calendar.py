@@ -100,7 +100,7 @@ def get_trading_status(
         - next_trading_date: 下一個交易日
         - previous_trading_date: 上一個交易日
         - gap_days: 上一個交易日到下一個交易日的日曆天數差
-        - long_gap: gap_days >= 4，代表長假後開盤
+        - long_gap: gap_days >= 5，代表跨國定假日（避免一般 Fri→Mon 週末誤判）
     """
     today = date.today()
     market = market.upper() if market else "TW"
@@ -115,7 +115,7 @@ def get_trading_status(
         "next_trading_date": next_d.isoformat(),
         "previous_trading_date": prev_d.isoformat(),
         "gap_days": gap,
-        "long_gap": gap >= 4,
+        "long_gap": gap >= 5,
     }
 
 
