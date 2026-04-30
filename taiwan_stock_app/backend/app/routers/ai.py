@@ -294,6 +294,11 @@ def get_ai_suggestions(
                         logger.warning(f"Failed to save prediction record for {stock.stock_id}: {pred_error}")
 
                 quota.increment()
+                # 注入 target_date 到 next_day_prediction（與單股 endpoint 一致，
+                # 否則新生成的批次預測 target_date 會缺失，前端只能顯示「明日」）
+                _ndp = suggestion_data.get("next_day_prediction")
+                if isinstance(_ndp, dict) and "target_date" not in _ndp:
+                    _ndp["target_date"] = _get_next_trading_date_str(market)
                 results.append(AISuggestion(**suggestion_data))
             except Exception as e:
                 db.rollback()  # Important: rollback on error
