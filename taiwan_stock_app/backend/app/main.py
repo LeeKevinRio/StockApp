@@ -216,20 +216,26 @@ def on_startup():
         try:
             create_tables()
             print("=== Database tables created OK ===", flush=True)
-            # 自動遷移：新增 last_login_at 欄位（如果不存在）
+            # 自動遷移：補上既有 PG DB 缺少的欄位
+            # SQLite 上 create_tables() 已從 model 建好所有欄位，且 SQLite
+            # 不支援 ALTER TABLE ADD COLUMN IF NOT EXISTS，跳過避免噪音
             try:
-                from sqlalchemy import text
-                with engine.connect() as conn:
-                    conn.execute(text(
-                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ"
-                    ))
-                    conn.execute(text(
-                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_summary_enabled BOOLEAN DEFAULT FALSE"
-                    ))
-                    conn.execute(text(
-                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS risk_preference VARCHAR(20) DEFAULT 'moderate'"
-                    ))
-                    conn.commit()
+                dialect = engine.dialect.name
+                if dialect == "postgresql":
+                    from sqlalchemy import text
+                    with engine.connect() as conn:
+                        conn.execute(text(
+                            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ"
+                        ))
+                        conn.execute(text(
+                            "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_summary_enabled BOOLEAN DEFAULT FALSE"
+                        ))
+                        conn.execute(text(
+                            "ALTER TABLE users ADD COLUMN IF NOT EXISTS risk_preference VARCHAR(20) DEFAULT 'moderate'"
+                        ))
+                        conn.commit()
+                else:
+                    logger.info(f"Skip ALTER TABLE migrations on dialect={dialect}")
             except Exception as mig_e:
                 logger.warning(f"Migration skipped: {mig_e}")
         except Exception as e:
