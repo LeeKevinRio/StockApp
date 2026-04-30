@@ -227,8 +227,10 @@ class TradingService:
         ).all()
 
         for position in positions:
-            # 獲取當前價格
-            price_data = self.stock_service.get_realtime_price(position.stock_id)
+            # 獲取當前價格（推測市場以正確路由 yfinance vs TWSE）
+            sid = position.stock_id or ""
+            _market = "US" if sid.isalpha() else "TW"
+            price_data = self.stock_service.get_realtime_price(sid, market=_market)
             if price_data and 'current_price' in price_data:
                 current_price = Decimal(str(price_data['current_price']))
                 position.current_price = current_price

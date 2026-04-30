@@ -271,7 +271,10 @@ class PortfolioService:
 
         for position in positions:
             try:
-                price_data = self.stock_service.get_realtime_price(position.stock_id)
+                # 推測市場：純英文 → 美股，否則 → 台股（與其他處 heuristic 一致）
+                sid = position.stock_id or ""
+                _market = "US" if sid.isalpha() else "TW"
+                price_data = self.stock_service.get_realtime_price(sid, market=_market)
                 if price_data:
                     current_price = float(price_data.get('current_price', 0))
                     position.current_price = current_price
