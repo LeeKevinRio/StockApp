@@ -63,7 +63,7 @@ async def get_portfolio_recommendation(
                 portfolio_service = PortfolioService()
 
                 # 取得用戶的主投資組合
-                portfolios = portfolio_service.get_user_portfolios(db, current_user.id)
+                portfolios = portfolio_service.get_portfolios(db, current_user.id)
                 if portfolios and len(portfolios) > 0:
                     portfolio = portfolios[0]
                     positions = portfolio_service.get_positions(db, portfolio.id, current_user.id)
@@ -120,7 +120,7 @@ async def get_risk_profile(
         portfolio_service = PortfolioService()
 
         # 取得用戶的主投資組合
-        portfolios = portfolio_service.get_user_portfolios(db, current_user.id)
+        portfolios = portfolio_service.get_portfolios(db, current_user.id)
 
         if not portfolios:
             return {

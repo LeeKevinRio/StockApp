@@ -105,7 +105,7 @@ class DailySummaryService:
 
             for symbol, name in indices.items():
                 try:
-                    data = fetcher.get_quote(symbol)
+                    data = fetcher.get_realtime_quote(symbol)
                     if data:
                         summary["indices"].append({
                             "symbol": symbol,
@@ -189,34 +189,36 @@ class DailySummaryService:
 
             indicators = {}
 
-            # 從 FRED 取得利率與殖利率
+            # 從 FRED 取得所有指標一次（已快取 1 小時）
             try:
-                fed_rate = self._fred_fetcher.get_latest_value("fed_rate")
-                if fed_rate:
-                    indicators["fed_rate"] = {
-                        "name": "聯邦基金利率",
-                        "value": fed_rate.get("value"),
-                        "date": fed_rate.get("date"),
-                        "previous_value": fed_rate.get("previous_value")
-                    }
+                fred_all = self._fred_fetcher.fetch_all_indicators() or {}
             except Exception as e:
-                logger.warning(f"無法取得 Fed 利率: {e}")
+                logger.warning(f"FRED fetch_all_indicators 失敗: {e}")
+                fred_all = {}
 
-            try:
-                us10y = self._fred_fetcher.get_latest_value("us10y_yield")
-                if us10y:
-                    indicators["us10y_yield"] = {
-                        "name": "10年期公債殖利率",
-                        "value": us10y.get("value"),
-                        "date": us10y.get("date"),
-                        "previous_value": us10y.get("previous_value")
-                    }
-            except Exception as e:
-                logger.warning(f"無法取得 10年殖利率: {e}")
+            fed = fred_all.get("fed_rate") or {}
+            if fed.get("latest_value") is not None:
+                indicators["fed_rate"] = {
+                    "name": fed.get("name", "聯邦基金利率"),
+                    "value": fed.get("latest_value"),
+                    "date": fed.get("latest_date"),
+                    "previous_value": fed.get("prev_value"),
+                    "change_pct": fed.get("change_pct"),
+                }
+
+            us10 = fred_all.get("us10y_yield") or {}
+            if us10.get("latest_value") is not None:
+                indicators["us10y_yield"] = {
+                    "name": us10.get("name", "10年期公債殖利率"),
+                    "value": us10.get("latest_value"),
+                    "date": us10.get("latest_date"),
+                    "previous_value": us10.get("prev_value"),
+                    "change_pct": us10.get("change_pct"),
+                }
 
             # 從 yfinance 取得美元/台幣匯率
             try:
-                usd_twd = self._us_stock_fetcher.get_quote("USDTWD=X")
+                usd_twd = self._us_stock_fetcher.get_realtime_quote("USDTWD=X")
                 if usd_twd:
                     indicators["usd_twd"] = {
                         "name": "美元/台幣匯率",
