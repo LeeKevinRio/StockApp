@@ -105,8 +105,10 @@ def generate_daily_predictions():
                 # 該市場休市時跳過此股，避免浪費 AI 配額
                 if not is_trading_day(today, market=market):
                     continue
-                service = AISuggestionService.for_user(user)
-                suggestion = service.generate_suggestion(stock.stock_id, stock.name, market=market)
+                # 傳入 db 讓 generate_suggestion 內部能讀到歷史準確率回饋，
+                # 自動依過往幅度偏差調整新預測（少了 db 此校正會永遠跳過）
+                service = AISuggestionService.for_user(user, db=db)
+                suggestion = service.generate_suggestion(stock.stock_id, stock.name, market=market, db=db)
 
                 # 儲存預測記錄
                 if suggestion and suggestion.get("next_day_prediction"):
