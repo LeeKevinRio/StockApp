@@ -57,6 +57,10 @@ class AISuggestion(BaseModel):
     # 個股歷史準確率（信任徽章用，僅 n_records >= 3 才提供）
     historical_accuracy: Optional[dict] = None
 
+    # AI 提供者：'Gemini' / 'Groq' / 'Mock' / 自定義 BYOK 名稱
+    # 前端可在 Mock 時顯示提示，避免使用者誤以為是真 AI 結果
+    ai_provider: Optional[str] = None
+
     class Config:
         from_attributes = True
         json_encoders = {

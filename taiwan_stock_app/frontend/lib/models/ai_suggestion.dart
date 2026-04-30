@@ -122,6 +122,9 @@ class AISuggestion {
   // 個股歷史準確率（信任徽章用，無樣本時為 null）
   final HistoricalAccuracy? historicalAccuracy;
 
+  // AI 提供者（Gemini / Groq / Mock / BYOK 名稱）
+  final String? aiProvider;
+
   AISuggestion({
     required this.stockId,
     required this.name,
@@ -142,6 +145,7 @@ class AISuggestion {
     this.predictedChangePercent,
     this.nextDayPrediction,
     this.historicalAccuracy,
+    this.aiProvider,
   });
 
   factory AISuggestion.fromJson(Map<String, dynamic> json) {
@@ -189,6 +193,7 @@ class AISuggestion {
       historicalAccuracy: json['historical_accuracy'] != null
           ? HistoricalAccuracy.fromJson(json['historical_accuracy'])
           : null,
+      aiProvider: json['ai_provider'] as String?,
     );
   }
 

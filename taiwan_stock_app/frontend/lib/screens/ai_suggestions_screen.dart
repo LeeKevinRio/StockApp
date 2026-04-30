@@ -276,12 +276,39 @@ class SuggestionCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${suggestion.stockId} ${suggestion.name}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '${suggestion.stockId} ${suggestion.name}',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          // AI 失敗 fallback 警示（Mock 數據）
+                          if (suggestion.aiProvider == 'Mock') ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withAlpha(40),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.orange.withAlpha(120)),
+                              ),
+                              child: Text(
+                                isTaiwan ? 'AI 暫不可用 · 數據推導' : 'AI Down · Fallback',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.orange.shade900,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       Text(
                         suggestion.reportDate.toString().substring(0, 10),
