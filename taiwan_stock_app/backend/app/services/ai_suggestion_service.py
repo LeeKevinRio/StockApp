@@ -1257,21 +1257,24 @@ class AISuggestionService:
             )
 
             # ===== 2. 擴充新聞源（國內外 RSS）=====
+            # 註：asyncio.coroutine 在 Python 3.10+ 已移除，3.12 會 AttributeError
             enhanced_tw = []
             enhanced_intl = []
-            try:
-                enhanced_tw = loop.run_until_complete(
-                    _get_enhanced_news_fetcher().fetch_tw_stock_news(stock_id, stock_name, limit=10) if _get_enhanced_news_fetcher() else asyncio.coroutine(lambda: [])()
-                )
-            except Exception as e:
-                logger.warning(f"擴充台灣新聞失敗: {e}")
+            _enh = _get_enhanced_news_fetcher()
+            if _enh is not None:
+                try:
+                    enhanced_tw = loop.run_until_complete(
+                        _enh.fetch_tw_stock_news(stock_id, stock_name, limit=10)
+                    )
+                except Exception as e:
+                    logger.warning(f"擴充台灣新聞失敗: {e}")
 
-            try:
-                enhanced_intl = loop.run_until_complete(
-                    _get_enhanced_news_fetcher().fetch_market_overview_news(market="TW", limit=8) if _get_enhanced_news_fetcher() else asyncio.coroutine(lambda: [])()
-                )
-            except Exception as e:
-                logger.warning(f"擴充國際新聞失敗: {e}")
+                try:
+                    enhanced_intl = loop.run_until_complete(
+                        _enh.fetch_market_overview_news(market="TW", limit=8)
+                    )
+                except Exception as e:
+                    logger.warning(f"擴充國際新聞失敗: {e}")
 
             # AI 語意分析（原有邏輯）
             if original_news:
