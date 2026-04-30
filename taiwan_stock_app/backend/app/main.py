@@ -254,6 +254,16 @@ def on_startup():
     print("=== Startup complete, app is ready ===", flush=True)
 
 
+@app.on_event("shutdown")
+def on_shutdown():
+    """應用關閉時優雅停止 APScheduler，避免 daemon thread 殘留"""
+    try:
+        from app.scheduler import stop_scheduler
+        stop_scheduler()
+    except Exception as e:
+        logger.warning(f"Could not stop scheduler cleanly: {e}")
+
+
 @app.get("/")
 def root():
     """Root endpoint"""
