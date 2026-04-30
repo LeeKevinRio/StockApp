@@ -258,22 +258,32 @@ class DailySummaryService:
             }
 
             try:
-                # 嘗試從社群平台抓取數據
+                # 從社群平台抓取最近文章
                 from app.data_fetchers.taiwan_social_fetcher import TaiwanSocialFetcher
-                from app.data_fetchers.threads_fetcher import ThreadsFetcher
 
                 tw_fetcher = TaiwanSocialFetcher()
-
-                # 抓取 PTT 文章
-                ptt_posts = tw_fetcher.get_posts_by_keyword("股票", limit=20)
+                # fetch_all_platforms 涵蓋 PTT/Dcard/Mobile01，每平台抓 20 篇
+                posts = tw_fetcher.fetch_all_platforms(limit_per_platform=20) or []
 
                 bullish = 0
                 bearish = 0
-                total_score = 0.0
+                score_sum = 0.0
+                analyzed = 0
 
-                for post in ptt_posts:
-                    score, _ = self._enhanced_analyzer.analyze(post.get("content", ""))
-                    total_score += score
+                for post in posts:
+                    text = (post.get("content") or post.get("title") or "")
+                    if not text:
+                        continue
+                    platform = (post.get("platform") or post.get("source") or "general").lower()
+                    push_count = int(post.get("push_count") or 0)
+                    boo_count = int(post.get("boo_count") or 0)
+                    result = self._enhanced_analyzer.analyze(
+                        text, platform=platform,
+                        push_count=push_count, boo_count=boo_count,
+                    ) or {}
+                    score = float(result.get("score") or 0.0)
+                    score_sum += score
+                    analyzed += 1
                     if score > 0.3:
                         bullish += 1
                     elif score < -0.3:
@@ -283,9 +293,10 @@ class DailySummaryService:
                 if total > 0:
                     sentiment_data["bullish_count"] = bullish
                     sentiment_data["bearish_count"] = bearish
-                    sentiment_data["bullish_ratio"] = bullish / total
-                    sentiment_data["bearish_ratio"] = bearish / total
-                    sentiment_data["avg_sentiment"] = total_score / len(ptt_posts)
+                    sentiment_data["bullish_ratio"] = round(bullish / total, 3)
+                    sentiment_data["bearish_ratio"] = round(bearish / total, 3)
+                if analyzed > 0:
+                    sentiment_data["avg_sentiment"] = round(score_sum / analyzed, 3)
 
             except Exception as e:
                 logger.warning(f"社群數據收集失敗: {e}")
