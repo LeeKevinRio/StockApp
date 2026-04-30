@@ -1827,26 +1827,47 @@ class AISuggestionService:
             return ""
 
     def _get_holiday_gap_context(self, market: str = "TW") -> str:
-        """取得長假 gap 資訊，提醒 AI 調整預測幅度"""
+        """
+        取得目標日期 + 長假 gap 資訊，提醒 AI 調整預測幅度
+        始終提供 target date 上下文（即使非長假）— 讓 AI 知道在預測哪一天
+        """
         try:
-            gap = get_calendar_gap_days(market=market)
+            from datetime import date as _date
+            today = _date.today()
+            target = get_next_trading_date(today, market=market)
+            gap = get_calendar_gap_days(today, market=market)
         except Exception:
             return ""
 
+        weekday_tw = ["一", "二", "三", "四", "五", "六", "日"]
+        weekday_en = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        market_label = "台股" if market == "TW" else "美股"
+        target_label = (
+            f"{target.month}/{target.day} (週{weekday_tw[target.weekday()]})"
+            if market == "TW" else
+            f"{target.month}/{target.day} ({weekday_en[target.weekday()]})"
+        )
+
+        # 一律提供 target date 與 gap，避免 AI 把週五的「明日」當成週六
+        lines = [
+            "\n## 目標日期",
+            f"- 此預測的目標交易日：**{target.isoformat()} {target_label}**",
+            f"- 距離今天 ({today.isoformat()}) 有 **{gap} 天**",
+        ]
+
         if gap >= 4:
-            market_label = "台股" if market == "TW" else "美股"
             if market == "TW":
                 range_hint = "±3%~±5%（台股），極端情況可達 ±5%~±8%"
             else:
                 range_hint = "±2%~±4%（美股），極端情況可達 ±3%~±6%"
-            return (
-                f"\n## ⚠️ 長假缺口提醒\n"
-                f"- 上一個交易日到下一個交易日相隔 **{gap} 天**（長假後開盤）\n"
-                f"- {market_label}長假後首日通常波動放大 1.5x~2.5x\n"
-                f"- 建議預測幅度範圍：{range_hint}\n"
-                f"- 請將預測幅度乘以 1.5~2.0 倍修正\n"
-            )
-        return ""
+            lines.extend([
+                "\n## ⚠️ 長假缺口提醒",
+                f"- 上一個交易日到下一個交易日相隔 **{gap} 天**（長假後開盤）",
+                f"- {market_label}長假後首日通常波動放大 1.5x~2.5x",
+                f"- 建議預測幅度範圍：{range_hint}",
+                "- 請將預測幅度乘以 1.5~2.0 倍修正",
+            ])
+        return "\n".join(lines)
 
     def generate_suggestion(self, stock_id: str, stock_name: str, market: str = "TW", db=None) -> Dict:
         """
