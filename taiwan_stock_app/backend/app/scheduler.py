@@ -151,25 +151,32 @@ def fetch_market_news_task():
     try:
         from app.services.news_service import news_service
 
-        # 抓取自選股中的熱門股票新聞
-        watchlist_stocks = db.query(Watchlist.stock_id).distinct().limit(20).all()
-        stock_ids = [w[0] for w in watchlist_stocks]
+        # 抓取自選股中的熱門股票新聞（含市場資訊以路由 TW/US 不同來源）
+        watchlist_stocks = db.query(Watchlist, Stock).join(
+            Stock, Watchlist.stock_id == Stock.stock_id
+        ).distinct().limit(20).all()
+        stock_market_pairs = [
+            (s.stock_id, s.market_region or "TW") for _, s in watchlist_stocks
+        ]
 
-        if not stock_ids:
-            stock_ids = ['2330', '2317', '2454', '2308', '2881']  # 預設熱門台股
+        if not stock_market_pairs:
+            stock_market_pairs = [
+                ('2330', 'TW'), ('2317', 'TW'), ('2454', 'TW'),
+                ('2308', 'TW'), ('2881', 'TW'),
+            ]
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         async def _fetch_all_news():
-            """並行抓取多支股票新聞"""
+            """並行抓取多支股票新聞，依市場走 TW / US 路徑"""
             tasks = [
-                news_service.get_stock_news(db, sid, limit=5, use_cache=False)
-                for sid in stock_ids
+                news_service.get_stock_news(db, sid, limit=5, use_cache=False, market=mkt)
+                for sid, mkt in stock_market_pairs
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             count = 0
-            for sid, result in zip(stock_ids, results):
+            for (sid, _mkt), result in zip(stock_market_pairs, results):
                 if isinstance(result, Exception):
                     logger.warning("新聞抓取失敗 %s: %s", sid, result)
                 else:
@@ -178,7 +185,7 @@ def fetch_market_news_task():
 
         fetched_count = loop.run_until_complete(_fetch_all_news())
         loop.close()
-        logger.info("Fetched news for %d/%d stocks", fetched_count, len(stock_ids))
+        logger.info("Fetched news for %d/%d stocks", fetched_count, len(stock_market_pairs))
     except Exception as e:
         logger.error("Market news fetch error: %s", e)
     finally:
