@@ -354,8 +354,14 @@ class DailySummaryService:
 
     async def _get_ai_watchlist_alerts(self) -> List[Dict]:
         """
-        取得 AI 監控清單中的強信號股票
-        從 PredictionRecord 撈出今日產生、預測機率 > 0.75 的隔日預測
+        取得「今日盤前」AI 高信心預測：
+        - target_date = 今天的所有預測（即昨晚生成、目標為今日的預測）
+        - probability > 0.75 視為強信號
+        - 依信心度由高到低排序，取前 5
+
+        盤前郵件在 TW 08:00 發送，此時當日的 09:30 排程尚未執行，
+        所以要找的是「昨日生成、target=今天」的預測，而非
+        「今日生成」（後者此時還是空的）。
         """
         try:
             from app.database import SessionLocal
@@ -365,10 +371,8 @@ class DailySummaryService:
             today = datetime.now().date()
             db = SessionLocal()
             try:
-                # 取得今日產生的所有預測（不論 target_date）
-                predictions = tracker.get_predictions_made_on(
-                    db=db, prediction_date=today
-                )
+                summary = tracker.get_daily_summary(db=db, target_date=today)
+                predictions = summary.get("predictions", []) if summary else []
             finally:
                 db.close()
 
@@ -377,7 +381,6 @@ class DailySummaryService:
                 p for p in predictions
                 if (p.get("predicted_probability") or 0) > 0.75
             ]
-            # 依信心度由高到低排序，取前 5
             strong_signals.sort(
                 key=lambda x: (x.get("predicted_probability") or 0),
                 reverse=True,
