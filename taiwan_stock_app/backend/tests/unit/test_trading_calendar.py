@@ -164,11 +164,25 @@ def test_calendar_gap_normal_weekday_tw():
     assert gap == 2
 
 
-def test_calendar_gap_long_holiday_tw():
-    # 端午節 (Fri) 當日：上一個 Thu, 下一個 Mon → gap = 4
-    holiday = date(2025, 5, 30)
-    gap = get_calendar_gap_days(holiday, market="TW")
-    assert gap >= 4  # 至少 4 天，視 thu→mon 計算
+def test_calendar_gap_normal_friday_tw():
+    """一般週五 gap=4（跨週末）— 不應視為長假，避免誤觸發 AI 提醒"""
+    d = date(2025, 4, 18)  # Fri (非假日)
+    gap = get_calendar_gap_days(d, market="TW")
+    assert gap == 4
+
+
+def test_calendar_gap_pre_holiday_tw():
+    """端午前一天 Thu：gap=5（跨假日 Fri + 週末），應觸發長假提醒（>= 5）"""
+    d = date(2025, 5, 29)  # 端午 5/30 前的週四
+    gap = get_calendar_gap_days(d, market="TW")
+    assert gap == 5
+
+
+def test_calendar_gap_post_holiday_tw():
+    """端午後第一個交易日 Mon：gap=5（跨假日週五 + 週末），應觸發長假提醒"""
+    d = date(2025, 6, 2)  # 端午 5/30 後的週一
+    gap = get_calendar_gap_days(d, market="TW")
+    assert gap == 5
 
 
 # ============================================================
