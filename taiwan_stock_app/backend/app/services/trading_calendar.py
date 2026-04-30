@@ -184,11 +184,15 @@ def get_previous_trading_date(from_date: date = None, market: str = "TW") -> dat
 
 def get_calendar_gap_days(from_date: date = None, market: str = "TW") -> int:
     """
-    計算上一個交易日到下一個交易日之間的日曆天數差。
+    計算 from_date 的「上一個交易日」到「下一個交易日」之間的日曆天數差。
 
-    正常工作日 → 1 天
-    週末後開盤 → 3 天
-    長假後開盤 → 7-10+ 天（春節等）
+    範例：
+    - 週三：prev=週二, next=週四 → gap=2
+    - 週五：prev=週四, next=週一（含週末）→ gap=4
+    - 端午（週五）：prev=週四, next=下週一 → gap=4
+    - 春節（10 天）：prev=節前最後交易日, next=節後第一個交易日 → gap=10+
+
+    判斷「真正跨假期長假」應使用閾值 >= 5（避免誤判一般 Fri→Mon 週末）。
 
     Args:
         from_date: 基準日期，預設為今天

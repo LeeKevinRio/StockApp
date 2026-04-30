@@ -1855,14 +1855,16 @@ class AISuggestionService:
             f"- 距離今天 ({today.isoformat()}) 有 **{gap} 天**",
         ]
 
-        if gap >= 4:
+        # gap >= 5 才視為「跨假期」— 一般週五→週一 gap=4，不應觸發長假修正
+        # 端午/雙十/勞動節等假日才會讓 gap >= 5
+        if gap >= 5:
             if market == "TW":
                 range_hint = "±3%~±5%（台股），極端情況可達 ±5%~±8%"
             else:
                 range_hint = "±2%~±4%（美股），極端情況可達 ±3%~±6%"
             lines.extend([
                 "\n## ⚠️ 長假缺口提醒",
-                f"- 上一個交易日到下一個交易日相隔 **{gap} 天**（長假後開盤）",
+                f"- 上一個交易日到下一個交易日相隔 **{gap} 天**（含國定假日）",
                 f"- {market_label}長假後首日通常波動放大 1.5x~2.5x",
                 f"- 建議預測幅度範圍：{range_hint}",
                 "- 請將預測幅度乘以 1.5~2.0 倍修正",
@@ -2398,7 +2400,7 @@ class AISuggestionService:
                 gap_days = 1
 
             holiday_hint_us = ""
-            if gap_days >= 4:
+            if gap_days >= 5:
                 holiday_hint_us = f"""
    - ⚠️ **長假後開盤（休市 {gap_days} 天）**：波動幅度應放大 1.5x~2.5x
    - 長假後預測範圍：±3%~±6%（美股），極端情況可達 ±8%"""
@@ -2465,7 +2467,7 @@ class AISuggestionService:
                 gap_days = 1
 
             holiday_hint_tw = ""
-            if gap_days >= 4:
+            if gap_days >= 5:
                 holiday_hint_tw = f"""
    - ⚠️ **長假後開盤（休市 {gap_days} 天）**：波動幅度應放大 1.5x~2.5x
    - 長假後預測範圍：±3%~±5%（台股），極端情況可達 ±5%~±8%"""
