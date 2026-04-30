@@ -38,5 +38,8 @@ pytest==8.0.0
 # AttributeError: 'Package' object has no attribute 'obj'。0.23.5+ 修復。
 pytest-asyncio>=0.23.5
 pytest-cov==4.1.0
-httpx>=0.26.0
+# 上限固定 < 0.28：httpx 0.28 移除 Client(app=...) 參數，
+# FastAPI 0.110 的 TestClient 仍會傳此 kwarg，會 TypeError；
+# 升級 fastapi 至 0.111+ 也可，但避免相容性風險先鎖 httpx。
+httpx>=0.26.0,<0.28.0
 factory-boy==3.3.0
