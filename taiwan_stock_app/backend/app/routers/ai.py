@@ -97,6 +97,44 @@ def _inject_target_date(suggestion_obj, market: str = "TW"):
         if isinstance(pred, dict) and 'target_date' not in pred:
             pred['target_date'] = _get_next_trading_date_str(market)
     return suggestion_obj
+
+
+def _compute_historical_accuracy(db: Session, stock_id: str) -> Optional[dict]:
+    """
+    從 PredictionRecord 計算個股歷史準確率（給快取的舊報告用）。
+    僅當有 >= 3 筆已驗證的預測時回傳，避免樣本太小誤導使用者。
+    """
+    try:
+        from app.models import PredictionRecord
+        records = (
+            db.query(PredictionRecord)
+            .filter(
+                PredictionRecord.stock_id == stock_id,
+                PredictionRecord.actual_close_price.isnot(None),
+            )
+            .order_by(PredictionRecord.target_date.desc())
+            .limit(20)
+            .all()
+        )
+        if len(records) < 3:
+            return None
+        n = len(records)
+        correct = sum(1 for r in records if r.direction_correct)
+        avg_err = sum(float(r.error_percent or 0) for r in records) / n
+        pred_abs = sum(abs(float(r.predicted_change_percent or 0)) for r in records)
+        actual_abs = sum(abs(float(r.actual_change_percent or 0)) for r in records)
+        amp_ratio = (pred_abs / actual_abs) if actual_abs > 0 else 1.0
+        return {
+            "direction_accuracy_percent": round(correct / n * 100, 1),
+            "avg_error_percent": round(avg_err, 2),
+            "amplitude_ratio": round(amp_ratio, 2),
+            "n_records": n,
+        }
+    except Exception as e:
+        logger.warning("computing historical_accuracy failed for %s: %s", stock_id, e)
+        return None
+
+
 stock_service = StockDataService()
 
 
@@ -173,6 +211,7 @@ def get_ai_suggestions(
                 "time_horizon": existing_report.time_horizon,
                 "predicted_change_percent": existing_report.predicted_change_percent,
                 "next_day_prediction": existing_report.next_day_prediction,
+                "historical_accuracy": _compute_historical_accuracy(db, existing_report.stock_id),
             }
             cp = float(existing_report.current_price or 0)
             if cp > 0:
@@ -355,6 +394,7 @@ def get_stock_suggestion(
                 "time_horizon": existing_report.time_horizon,
                 "predicted_change_percent": existing_report.predicted_change_percent,
                 "next_day_prediction": next_pred,
+                "historical_accuracy": _compute_historical_accuracy(db, existing_report.stock_id),
             }
             cp = float(existing_report.current_price or 0)
             if cp > 0:

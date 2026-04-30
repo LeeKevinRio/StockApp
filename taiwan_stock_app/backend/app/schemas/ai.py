@@ -54,6 +54,9 @@ class AISuggestion(BaseModel):
     # 隔天漲跌預測
     next_day_prediction: Optional[dict] = None  # NextDayPrediction 格式
 
+    # 個股歷史準確率（信任徽章用，僅 n_records >= 3 才提供）
+    historical_accuracy: Optional[dict] = None
+
     class Config:
         from_attributes = True
         json_encoders = {

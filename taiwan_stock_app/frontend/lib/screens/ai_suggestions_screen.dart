@@ -354,6 +354,11 @@ class SuggestionCard extends StatelessWidget {
                 ),
               ],
             ),
+            // 個股歷史準確率徽章
+            if (suggestion.historicalAccuracy != null) ...[
+              const SizedBox(height: 8),
+              _buildAccuracyBadge(context, suggestion.historicalAccuracy!, isTaiwan),
+            ],
             // 隔天漲跌預測區塊
             if (suggestion.nextDayPrediction != null) ...[
               const SizedBox(height: 12),
@@ -495,6 +500,79 @@ class SuggestionCard extends StatelessWidget {
               fontSize: 16,
               fontWeight: FontWeight.bold,
               color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 建構個股歷史準確率徽章
+  Widget _buildAccuracyBadge(BuildContext context, HistoricalAccuracy h, bool isTaiwan) {
+    final acc = h.directionAccuracyPercent;
+    Color color;
+    String label;
+    if (acc >= 80) {
+      color = const Color(0xFF2E7D32);
+      label = isTaiwan ? '優異' : 'Excellent';
+    } else if (acc >= 60) {
+      color = const Color(0xFF66BB6A);
+      label = isTaiwan ? '可信' : 'Reliable';
+    } else if (acc >= 50) {
+      color = const Color(0xFFFB8C00);
+      label = isTaiwan ? '中性' : 'Neutral';
+    } else {
+      color = const Color(0xFFE53935);
+      label = isTaiwan ? '偏低' : 'Low';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withAlpha(25),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withAlpha(80)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.verified_user, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            isTaiwan ? '個股歷史準確率' : 'Stock Accuracy',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).hintColor,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '${acc.toStringAsFixed(1)}%',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: color.withAlpha(35),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const Spacer(),
+          Text(
+            isTaiwan
+                ? '${h.nRecords} 筆 · 誤差 ${h.avgErrorPercent.toStringAsFixed(1)}%'
+                : '${h.nRecords} preds · err ${h.avgErrorPercent.toStringAsFixed(1)}%',
+            style: TextStyle(
+              fontSize: 11,
+              color: Theme.of(context).hintColor,
             ),
           ),
         ],

@@ -2159,6 +2159,17 @@ class AISuggestionService:
                 "latest_price": data.get("latest_price", 0)
             }
 
+            # 將個股歷史準確率回饋曝露給前端做信任徽章（n_records >= 3 才有意義）
+            fb = data.get('accuracy_feedback') or {}
+            if fb.get('n_records', 0) >= 3:
+                result["historical_accuracy"] = {
+                    # direction_accuracy 是 0~1 比例，乘 100 給前端顯示百分比
+                    "direction_accuracy_percent": round(float(fb.get('direction_accuracy', 0)) * 100, 1),
+                    "avg_error_percent": float(fb.get('avg_error', 0)),
+                    "amplitude_ratio": float(fb.get('amplitude_ratio', 1.0)),
+                    "n_records": int(fb.get('n_records', 0)),
+                }
+
             return result
 
         except Exception as e:

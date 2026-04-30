@@ -20,6 +20,31 @@ class TakeProfitTarget {
   }
 }
 
+/// 個股歷史預測準確率（用於信任徽章）
+class HistoricalAccuracy {
+  final double directionAccuracyPercent; // 方向正確率 0~100
+  final double avgErrorPercent; // 平均預測誤差 %
+  final double amplitudeRatio; // 預測幅度 / 實際幅度
+  final int nRecords; // 樣本數
+
+  HistoricalAccuracy({
+    required this.directionAccuracyPercent,
+    required this.avgErrorPercent,
+    required this.amplitudeRatio,
+    required this.nRecords,
+  });
+
+  factory HistoricalAccuracy.fromJson(Map<String, dynamic> json) {
+    return HistoricalAccuracy(
+      directionAccuracyPercent:
+          (json['direction_accuracy_percent'] as num?)?.toDouble() ?? 0,
+      avgErrorPercent: (json['avg_error_percent'] as num?)?.toDouble() ?? 0,
+      amplitudeRatio: (json['amplitude_ratio'] as num?)?.toDouble() ?? 1.0,
+      nRecords: (json['n_records'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 /// 隔天漲跌預測
 class NextDayPrediction {
   final String direction; // 'UP' or 'DOWN'
@@ -94,6 +119,9 @@ class AISuggestion {
   // 隔天漲跌預測
   final NextDayPrediction? nextDayPrediction;
 
+  // 個股歷史準確率（信任徽章用，無樣本時為 null）
+  final HistoricalAccuracy? historicalAccuracy;
+
   AISuggestion({
     required this.stockId,
     required this.name,
@@ -113,6 +141,7 @@ class AISuggestion {
     this.timeHorizon,
     this.predictedChangePercent,
     this.nextDayPrediction,
+    this.historicalAccuracy,
   });
 
   factory AISuggestion.fromJson(Map<String, dynamic> json) {
@@ -156,6 +185,9 @@ class AISuggestion {
           : null,
       nextDayPrediction: json['next_day_prediction'] != null
           ? NextDayPrediction.fromJson(json['next_day_prediction'])
+          : null,
+      historicalAccuracy: json['historical_accuracy'] != null
+          ? HistoricalAccuracy.fromJson(json['historical_accuracy'])
           : null,
     );
   }
