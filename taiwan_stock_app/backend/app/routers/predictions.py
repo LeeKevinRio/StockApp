@@ -55,6 +55,7 @@ def get_prediction_statistics(
 @router.get("/daily/{target_date}")
 def get_daily_predictions(
     target_date: str,
+    market: Optional[str] = Query(None, description="市場過濾: TW or US"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -63,13 +64,14 @@ def get_daily_predictions(
 
     Args:
         target_date: 目標日期 (YYYY-MM-DD)
+        market: 市場過濾 TW/US（可選）
     """
     try:
         dt = date.fromisoformat(target_date)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
 
-    return tracker.get_daily_summary(db=db, target_date=dt)
+    return tracker.get_daily_summary(db=db, target_date=dt, market=market)
 
 
 @router.get("/yesterday")
@@ -80,6 +82,9 @@ def get_yesterday_predictions(
 ):
     """
     獲取昨日預測與實際結果比較
+
+    註：「昨日」採該 market 的上一個交易日（台股/美股假期不同）。
+    未指定 market 時使用 TW 行事曆。
     """
     # 自動更新尚未驗證的預測結果
     try:
@@ -87,7 +92,8 @@ def get_yesterday_predictions(
     except Exception as e:
         logger.warning(f"Auto-update prediction results failed: {e}")
 
-    yesterday = get_previous_trading_date()
+    # 依 market 取上一交易日（避免美股 view 拿到台股的上一交易日）
+    yesterday = get_previous_trading_date(market=market or "TW")
 
     return tracker.get_daily_summary(db=db, target_date=yesterday, market=market)
 

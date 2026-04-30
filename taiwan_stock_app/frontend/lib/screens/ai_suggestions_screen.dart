@@ -511,6 +511,43 @@ class SuggestionCard extends StatelessWidget {
         ? (isTaiwan ? '預測上漲' : 'Predicted UP')
         : (isTaiwan ? '預測下跌' : 'Predicted DOWN');
 
+    // 計算與今天的 gap（台股/美股假期皆已由後端 target_date 反映）
+    int? gapDays;
+    String? targetLabel;
+    if (prediction.targetDate != null && prediction.targetDate!.isNotEmpty) {
+      try {
+        final target = DateTime.parse(prediction.targetDate!);
+        final today = DateTime.now();
+        final todayMidnight = DateTime(today.year, today.month, today.day);
+        gapDays = target.difference(todayMidnight).inDays;
+        // 顯示為「下個交易日 (M/D, 週X)」當 gap > 1，否則「明日 (M/D)」
+        const weekdayTw = ['一', '二', '三', '四', '五', '六', '日'];
+        const weekdayEn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        final w = isTaiwan
+            ? '週${weekdayTw[target.weekday - 1]}'
+            : weekdayEn[target.weekday - 1];
+        targetLabel = '${target.month}/${target.day} ($w)';
+      } catch (_) {
+        gapDays = null;
+        targetLabel = null;
+      }
+    }
+
+    final titleBase = isTaiwan ? '漲跌預測' : 'Price Prediction';
+    String titleText;
+    if (gapDays != null && targetLabel != null) {
+      if (gapDays <= 1) {
+        titleText = isTaiwan ? '明日$titleBase · $targetLabel' : 'Tomorrow $titleBase · $targetLabel';
+      } else {
+        // 跨假日 / 週末
+        titleText = isTaiwan
+            ? '下個交易日$titleBase · $targetLabel'
+            : 'Next Trading Day · $targetLabel';
+      }
+    } else {
+      titleText = isTaiwan ? '明日$titleBase' : 'Tomorrow $titleBase';
+    }
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -531,15 +568,18 @@ class SuggestionCard extends StatelessWidget {
             children: [
               Icon(Icons.schedule, size: 16, color: directionColor),
               const SizedBox(width: 4),
-              Text(
-                isTaiwan ? '明日漲跌預測' : 'Tomorrow Prediction',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: directionColor,
+              Expanded(
+                child: Text(
+                  titleText,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: directionColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -564,6 +604,35 @@ class SuggestionCard extends StatelessWidget {
               ),
             ],
           ),
+          // 長假提示
+          if (gapDays != null && gapDays >= 4) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.orange.withAlpha(40),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withAlpha(120)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.event_busy, size: 12, color: Colors.orange.shade800),
+                  const SizedBox(width: 4),
+                  Text(
+                    isTaiwan
+                        ? '跨假期 $gapDays 天，開盤波動可能放大'
+                        : '$gapDays-day gap, expect higher volatility',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.orange.shade900,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           // 預測數據
           Row(
