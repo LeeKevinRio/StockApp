@@ -183,9 +183,11 @@ def fetch_market_news_task():
                     count += 1
             return count
 
-        fetched_count = loop.run_until_complete(_fetch_all_news())
-        loop.close()
-        logger.info("Fetched news for %d/%d stocks", fetched_count, len(stock_market_pairs))
+        try:
+            fetched_count = loop.run_until_complete(_fetch_all_news())
+            logger.info("Fetched news for %d/%d stocks", fetched_count, len(stock_market_pairs))
+        finally:
+            loop.close()
     except Exception as e:
         logger.error("Market news fetch error: %s", e)
     finally:
@@ -220,9 +222,11 @@ def fetch_social_data_task():
                 if isinstance(result, Exception):
                     logger.warning("社群數據抓取失敗 %s: %s", sid, result)
 
-        loop.run_until_complete(_fetch_all_social())
-        loop.close()
-        logger.info("Social data fetch completed")
+        try:
+            loop.run_until_complete(_fetch_all_social())
+            logger.info("Social data fetch completed")
+        finally:
+            loop.close()
     except Exception as e:
         logger.error("Social data fetch error: %s", e)
     finally:
