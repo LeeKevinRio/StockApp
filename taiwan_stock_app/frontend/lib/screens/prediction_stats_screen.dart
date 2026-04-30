@@ -267,6 +267,49 @@ class _PredictionStatsScreenState extends State<PredictionStatsScreen> {
   }
 
   Widget _buildOverviewTab() {
+    final stats = _statistics;
+    final total = (stats?['total_predictions'] ?? 0) as int;
+    final isGenerating = _isGenerating;
+
+    // 0 預測時顯示明確的引導，避免整頁空白
+    if (!isGenerating && total == 0) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        children: [
+          const SizedBox(height: 60),
+          Icon(Icons.insights, size: 64, color: Theme.of(context).disabledColor),
+          const SizedBox(height: 16),
+          const Center(
+            child: Text(
+              '尚無預測樣本',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              '在自選股中產生 AI 建議後，預測會自動寫入並在每個交易日盤後驗證；\n累積至少 3 筆即會顯示準確率與信任徽章。',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).textTheme.bodySmall?.color,
+                fontSize: 13,
+                height: 1.6,
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Center(
+            child: ElevatedButton.icon(
+              onPressed: _loadDataAndGenerate,
+              icon: const Icon(Icons.refresh),
+              label: const Text('重新整理'),
+            ),
+          ),
+        ],
+      );
+    }
+
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
