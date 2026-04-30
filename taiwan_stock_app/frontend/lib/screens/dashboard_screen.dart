@@ -7,6 +7,7 @@ import '../widgets/dashboard/market_overview_card.dart';
 import '../widgets/dashboard/watchlist_summary_card.dart';
 import '../widgets/dashboard/ai_picks_card.dart';
 import '../widgets/dashboard/ai_discovery_card.dart';
+import '../widgets/dashboard/ai_accuracy_card.dart';
 
 import '../widgets/dashboard/realtime_clock_card.dart';
 import '../widgets/common/skeleton_loader.dart';
@@ -198,6 +199,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               market: marketProvider.marketCode,
               onTap: () => _navigateToWatchlist(context),
             ),
+
+          const SizedBox(height: 12),
+
+          // AI 預測準確率（信任背書）
+          AIAccuracyCard(
+            market: marketProvider.marketCode,
+            onTap: () => Navigator.pushNamed(context, '/prediction-stats'),
+          ),
 
           const SizedBox(height: 12),
 
