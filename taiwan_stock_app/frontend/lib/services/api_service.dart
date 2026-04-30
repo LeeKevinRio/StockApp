@@ -1051,6 +1051,19 @@ class ApiService {
     return _safeJsonDecode(response.body);
   }
 
+  /// 取得未來 N 天內的市場休市日清單（含日期、星期、名稱）
+  Future<Map<String, dynamic>> getMarketHolidays({
+    String market = 'TW',
+    int days = 90,
+  }) async {
+    final response = await _get(
+      Uri.parse('$baseUrl/api/calendar/holidays?market=$market&days=$days'),
+      headers: _headers,
+    );
+    _checkResponse(response);
+    return _safeJsonDecode(response.body);
+  }
+
   // ==================== 風險指標相關 ====================
 
   Future<Map<String, dynamic>> getStockRisk(String stockId, {int days = 252, String market = 'TW'}) async {

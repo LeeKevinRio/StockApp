@@ -6,7 +6,7 @@ GET /api/calendar/economic - 經濟行事曆
 GET /api/calendar/trading-status - 交易日狀態（含國定假日）
 """
 from fastapi import APIRouter, Query
-from datetime import date
+from datetime import date, timedelta
 
 from app.services.calendar_service import CalendarService
 from app.services.trading_calendar import (
@@ -14,11 +14,76 @@ from app.services.trading_calendar import (
     get_next_trading_date,
     get_previous_trading_date,
     get_calendar_gap_days,
+    TAIWAN_HOLIDAYS,
+    US_HOLIDAYS,
 )
 
 router = APIRouter(prefix="/api/calendar", tags=["Calendar"])
 
 _service = CalendarService()
+
+
+@router.get("/holidays")
+def get_market_holidays(
+    market: str = Query("TW", description="市場: TW 或 US"),
+    days: int = Query(90, ge=7, le=365, description="未來多少天內"),
+):
+    """
+    取得未來 N 天內的市場休市日清單（含名稱）。
+
+    用途：
+    - 前端日曆/即時時鐘卡可在此先預覽接下來的長假
+    - 讓使用者一眼看出下個交易日
+
+    Returns:
+        - market: 市場代碼
+        - from_date / to_date: 查詢範圍
+        - holidays: [{date, weekday, name}]，date 升序
+    """
+    market = market.upper() if market else "TW"
+    src = US_HOLIDAYS if market == "US" else TAIWAN_HOLIDAYS
+
+    today = date.today()
+    end = today + timedelta(days=days)
+
+    # 為了在 API 上提供「假日名稱」，這裡用一個小型查表
+    # （與 trading_calendar 內的中文註解對應，缺項 fallback 為空字串）
+    name_map_tw = {
+        (1, 1): "元旦",
+        (2, 28): "和平紀念日",
+        (4, 4): "清明節",
+        (4, 5): "兒童節 / 清明節",
+        (5, 1): "勞動節",
+        (10, 10): "國慶日",
+        (12, 25): "行憲紀念日",
+    }
+    name_map_us = {
+        (1, 1): "New Year's Day",
+        (7, 4): "Independence Day",
+        (12, 25): "Christmas Day",
+        (6, 19): "Juneteenth",
+    }
+    name_map = name_map_us if market == "US" else name_map_tw
+
+    weekday_tw = ["一", "二", "三", "四", "五", "六", "日"]
+    holidays = []
+    for d in sorted(src):
+        if today <= d <= end:
+            name = name_map.get((d.month, d.day), "市場休市")
+            holidays.append({
+                "date": d.isoformat(),
+                "weekday": f"週{weekday_tw[d.weekday()]}" if market == "TW"
+                else ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][d.weekday()],
+                "name": name,
+            })
+
+    return {
+        "market": market,
+        "from_date": today.isoformat(),
+        "to_date": end.isoformat(),
+        "total": len(holidays),
+        "holidays": holidays,
+    }
 
 
 @router.get("/trading-status")

@@ -16,6 +16,7 @@ class _CalendarScreenState extends State<CalendarScreen>
   Map<String, dynamic>? _earningsData;
   Map<String, dynamic>? _dividendsData;
   Map<String, dynamic>? _economicData;
+  Map<String, dynamic>? _holidaysData;
   bool _isLoading = true;
   String? _error;
   late DateTime _selectedMonth;
@@ -23,7 +24,7 @@ class _CalendarScreenState extends State<CalendarScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _selectedMonth = DateTime.now();
     _loadData();
   }
@@ -56,6 +57,7 @@ class _CalendarScreenState extends State<CalendarScreen>
             market: market,
             month: _selectedMonth.month,
             year: _selectedMonth.year),
+        api.getMarketHolidays(market: market, days: 180),
       ]);
 
       if (mounted) {
@@ -63,6 +65,7 @@ class _CalendarScreenState extends State<CalendarScreen>
           _earningsData = results[0];
           _dividendsData = results[1];
           _economicData = results[2];
+          _holidaysData = results[3];
           _isLoading = false;
         });
       }
@@ -104,10 +107,12 @@ class _CalendarScreenState extends State<CalendarScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           tabs: const [
             Tab(text: '財報日曆'),
             Tab(text: '除息日曆'),
             Tab(text: '經濟行事曆'),
+            Tab(text: '休市日'),
           ],
         ),
       ),
@@ -157,6 +162,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                           _buildEventList(_earningsData),
                           _buildEventList(_dividendsData),
                           _buildEventList(_economicData),
+                          _buildHolidaysList(_holidaysData),
                         ],
                       ),
           ),
@@ -190,6 +196,102 @@ class _CalendarScreenState extends State<CalendarScreen>
         itemBuilder: (context, index) {
           final event = events[index];
           return _buildEventCard(event);
+        },
+      ),
+    );
+  }
+
+  /// 建構未來休市日列表（含日期、星期、假日名稱）
+  Widget _buildHolidaysList(Map<String, dynamic>? data) {
+    final holidays = (data?['holidays'] as List?) ?? [];
+    final fromDate = data?['from_date'] ?? '';
+    final toDate = data?['to_date'] ?? '';
+
+    if (holidays.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.celebration, size: 64, color: Colors.green),
+            const SizedBox(height: 12),
+            Text('$fromDate ~ $toDate',
+                style: const TextStyle(color: Colors.grey, fontSize: 12)),
+            const SizedBox(height: 4),
+            const Text('未來無國定休市日',
+                style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(12),
+        itemCount: holidays.length + 1,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            // 標頭：說明範圍與用途
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8, left: 4),
+              child: Text(
+                '$fromDate ~ $toDate · 共 ${holidays.length} 個休市日',
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            );
+          }
+          final h = holidays[index - 1] as Map<String, dynamic>;
+          final dateStr = h['date'] ?? '';
+          final weekday = h['weekday'] ?? '';
+          final name = h['name'] ?? '市場休市';
+          // 計算距離今天天數
+          int? daysFromNow;
+          try {
+            final d = DateTime.parse(dateStr);
+            final now = DateTime.now();
+            final t0 = DateTime(now.year, now.month, now.day);
+            daysFromNow = d.difference(t0).inDays;
+          } catch (_) {}
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.orange.withValues(alpha: 0.15),
+                child: Icon(Icons.event_busy, color: Colors.orange.shade800),
+              ),
+              title: Text(name,
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text('$dateStr · $weekday',
+                  style: const TextStyle(color: Colors.grey)),
+              trailing: daysFromNow != null
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: daysFromNow <= 7
+                            ? Colors.red.withValues(alpha: 0.1)
+                            : Colors.grey.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        daysFromNow == 0
+                            ? '今日'
+                            : daysFromNow < 0
+                                ? '已過'
+                                : '$daysFromNow 天後',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: daysFromNow <= 7
+                              ? Colors.red.shade700
+                              : Colors.grey.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )
+                  : null,
+            ),
+          );
         },
       ),
     );
