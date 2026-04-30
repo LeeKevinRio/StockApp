@@ -8,7 +8,7 @@ Scheduler - 定時任務排程器
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from datetime import datetime
+from datetime import datetime, date
 import asyncio
 import logging
 import pytz
@@ -16,6 +16,7 @@ import pytz
 from app.database import SessionLocal
 from app.services.prediction_tracker import PredictionTracker
 from app.services.ai_suggestion_service import AISuggestionService
+from app.services.trading_calendar import is_trading_day
 from app.models import Watchlist, Stock, User
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,12 @@ def update_tw_predictions():
     """
     更新台股預測的實際結果
     排程：每個交易日 16:30（收盤後3小時）
+    台股休市日（國定假日）跳過，避免無謂查詢與 log 噪音。
     """
+    today = date.today()
+    if not is_trading_day(today, market="TW"):
+        logger.info("Skip TW prediction update: %s 為台股休市日", today)
+        return
     logger.info("Starting TW prediction update...")
     db = SessionLocal()
     try:
@@ -47,7 +53,14 @@ def update_us_predictions():
     """
     更新美股預測的實際結果
     排程：每個交易日 07:00（美股收盤後約3小時，台灣時間）
+    對應的美股交易日為 _TW 時區的「昨天」，需以美東日期判斷。
     """
+    # 07:00 TW ≈ 18:00 (前一日) ET，對應的美股交易日是「TW 昨天」
+    from datetime import timedelta
+    us_business_day = date.today() - timedelta(days=1)
+    if not is_trading_day(us_business_day, market="US"):
+        logger.info("Skip US prediction update: %s 為美股休市日", us_business_day)
+        return
     logger.info("Starting US prediction update...")
     db = SessionLocal()
     try:
@@ -63,7 +76,12 @@ def generate_daily_predictions():
     """
     為所有用戶的自選股生成新的每日預測
     排程：台股 09:30（開盤後），美股 22:00（開盤後，台灣時間）
+    台股休市日跳過台股部分；美股交易日獨立判斷。
     """
+    today = date.today()
+    tw_open = is_trading_day(today, market="TW")
+    if not tw_open:
+        logger.info("%s 為台股休市日，將僅處理美股自選股", today)
     logger.info("Starting daily prediction generation...")
     db = SessionLocal()
     try:
@@ -84,6 +102,9 @@ def generate_daily_predictions():
 
             try:
                 market = stock.market_region or "TW"
+                # 該市場休市時跳過此股，避免浪費 AI 配額
+                if not is_trading_day(today, market=market):
+                    continue
                 service = AISuggestionService.for_user(user)
                 suggestion = service.generate_suggestion(stock.stock_id, stock.name, market=market)
 
@@ -118,7 +139,11 @@ def fetch_market_news_task():
     """
     排程抓取市場新聞
     交易時段每 30 分鐘抓取熱門股票新聞
+    台股休市日跳過（國際/美股新聞另由 fetch_social_data_task 涵蓋部分）
     """
+    if not is_trading_day(date.today(), market="TW"):
+        logger.info("Skip market news fetch: 台股休市日")
+        return
     logger.info("Starting market news fetch...")
     db = SessionLocal()
     try:
