@@ -232,8 +232,9 @@ def get_ai_suggestions(
 
                 # Create service instance based on user's subscription tier
                 suggestion_service = AISuggestionService.for_user(current_user, db)
+                # 傳入 db 啟用歷史準確率回饋與 historical_accuracy 欄位
                 suggestion_data = suggestion_service.generate_suggestion(
-                    stock.stock_id, stock.name, market=market
+                    stock.stock_id, stock.name, market=market, db=db
                 )
 
                 # Check again if report exists (race condition protection)
