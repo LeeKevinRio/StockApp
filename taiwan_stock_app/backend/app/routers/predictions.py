@@ -125,6 +125,33 @@ def get_stock_predictions(
     )
 
 
+@router.get("/stock/{stock_id}/timeline")
+def get_stock_prediction_timeline(
+    stock_id: str,
+    days: int = Query(90, ge=1, le=365, description="回溯天數"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    獲取特定股票的預測時間軸（用於疊加在 K 線上）
+
+    回傳該股票歷史所有預測點，每個點包含：
+    - 預測方向（UP/DOWN）
+    - 預測日期 vs 目標日期
+    - 命中與否
+    - 預測誤差
+
+    可直接給前端 K 線圖用來繪製命中/未中標記。
+    """
+    # 自動更新尚未驗證的預測結果
+    try:
+        tracker.update_actual_results(db=db)
+    except Exception as e:
+        logger.warning(f"Auto-update prediction results failed: {e}")
+
+    return tracker.get_stock_timeline(db=db, stock_id=stock_id, days=days)
+
+
 @router.get("/all-stocks")
 def get_all_stocks_statistics(
     days: int = Query(30, ge=1, le=365, description="統計天數"),

@@ -1171,6 +1171,103 @@ class PredictionTracker:
             "worst_stocks": stock_list[-limit:][::-1]  # 反序回傳
         }
 
+    def get_stock_timeline(
+        self, db: Session, stock_id: str, days: int = 90
+    ) -> Dict:
+        """
+        取得單一股票的預測時間軸（用於疊加在 K 線圖上）
+
+        Args:
+            db: Database session
+            stock_id: 股票代碼
+            days: 回溯天數
+
+        Returns:
+            {
+                "stock_id": ...,
+                "total": 已驗證筆數,
+                "correct": 命中筆數,
+                "accuracy": 命中率 %,
+                "avg_error": 平均誤差 %,
+                "marks": [
+                    {
+                        "date": "YYYY-MM-DD",          # target_date
+                        "prediction_date": "...",
+                        "predicted_direction": "UP/DOWN",
+                        "predicted_change": float,
+                        "actual_direction": "UP/DOWN" or None,
+                        "actual_change": float or None,
+                        "base_price": float,
+                        "actual_close": float or None,
+                        "correct": bool or None,        # None = 尚未驗證
+                        "error_percent": float or None,
+                    }, ...
+                ]
+            }
+        """
+        start_date = date.today() - timedelta(days=days)
+
+        query = db.query(PredictionRecord).filter(
+            PredictionRecord.stock_id == stock_id,
+            PredictionRecord.target_date >= start_date,
+        ).order_by(PredictionRecord.target_date.asc())
+
+        records = self._dedup_records(query.all())
+        # 重新排序（_dedup_records 不保證順序）
+        records.sort(key=lambda r: r.target_date)
+
+        marks = []
+        verified = 0
+        correct = 0
+        total_error = 0.0
+
+        for r in records:
+            mark = {
+                "date": r.target_date.isoformat(),
+                "prediction_date": r.prediction_date.isoformat(),
+                "predicted_direction": r.predicted_direction,
+                "predicted_change": float(r.predicted_change_percent or 0),
+                "predicted_probability": float(r.predicted_probability or 0),
+                "base_price": float(r.base_close_price or 0),
+                "ai_provider": r.ai_provider,
+            }
+            if r.actual_close_price is not None:
+                mark.update({
+                    "actual_direction": r.actual_direction,
+                    "actual_change": float(r.actual_change_percent or 0),
+                    "actual_close": float(r.actual_close_price),
+                    "correct": bool(r.direction_correct),
+                    "error_percent": float(r.error_percent or 0),
+                })
+                verified += 1
+                if r.direction_correct:
+                    correct += 1
+                total_error += float(r.error_percent or 0)
+            else:
+                mark.update({
+                    "actual_direction": None,
+                    "actual_change": None,
+                    "actual_close": None,
+                    "correct": None,
+                    "error_percent": None,
+                })
+            marks.append(mark)
+
+        accuracy = round((correct / verified) * 100, 1) if verified > 0 else 0
+        avg_error = round(total_error / verified, 2) if verified > 0 else 0
+
+        return {
+            "stock_id": stock_id,
+            "stock_name": records[-1].stock_name if records else None,
+            "period_days": days,
+            "total": len(marks),
+            "verified": verified,
+            "correct": correct,
+            "accuracy": accuracy,
+            "avg_error": avg_error,
+            "marks": marks,
+        }
+
     def get_dashboard_data(self, db: Session, days: int = 30, market: str = None) -> Dict:
         """
         取得完整的儀表板數據，包含所有分析指標

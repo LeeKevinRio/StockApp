@@ -478,6 +478,30 @@ class ApiService {
     return _safeJsonDecode(response.body);
   }
 
+  /// 取得單一股票的預測時間軸（用於疊加 K 線歷史預測點）
+  Future<Map<String, dynamic>> getStockPredictionTimeline(
+    String stockId, {
+    int days = 90,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/predictions/stock/$stockId/timeline')
+        .replace(queryParameters: {'days': days.toString()});
+    final response = await _get(uri, headers: _headers);
+    _checkResponse(response);
+    return _safeJsonDecode(response.body);
+  }
+
+  /// 取得趨勢強度分數（0-100）+ 白話結論
+  Future<Map<String, dynamic>> getTrendScore(
+    String stockId, {
+    String market = 'TW',
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/stocks/$stockId/trend-score')
+        .replace(queryParameters: {'market': market});
+    final response = await _get(uri, headers: _headers);
+    _checkResponse(response);
+    return _safeJsonDecode(response.body);
+  }
+
   // ==================== 價格警示相關 ====================
 
   Future<List<PriceAlert>> getAlerts({bool? activeOnly}) async {

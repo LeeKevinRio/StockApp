@@ -14,6 +14,8 @@ import '../widgets/fundamental_card.dart';
 import '../widgets/dividend_history.dart';
 import '../widgets/institutional_chart.dart';
 import '../widgets/margin_chart.dart';
+import '../widgets/trend_score_card.dart';
+import '../widgets/prediction_timeline_bar.dart';
 import 'comprehensive_analysis_screen.dart';
 import 'trading_screen.dart';
 
@@ -383,6 +385,9 @@ class _StockDetailScreenState extends State<StockDetailScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 趨勢強度分數（核心：把指標濃縮成一個分數 + 白話結論）
+          TrendScoreCard(stockId: widget.stockId, market: widget.market),
+          const SizedBox(height: 16),
           _buildInfoCard(
             '基本資訊',
             [
@@ -716,16 +721,24 @@ class _KLineTabContentState extends State<_KLineTabContent>
           );
         }
 
-        return FutureBuilder<List<PatternMarker>>(
-          future: _patternsFuture,
-          builder: (context, patternsSnapshot) {
-            return EnhancedCandlestickChart(
-              data: snapshot.data!,
-              settings: _chartSettings,
-              patterns: patternsSnapshot.data ?? [],
-              onSettingsChanged: _onSettingsChanged,
-            );
-          },
+        return Column(
+          children: [
+            // AI 預測戰績條：放在 K 線上方，讓使用者看 K 線時就能看到 AI 在這支股票的命中率與歷史預測點
+            PredictionTimelineBar(stockId: widget.stockId),
+            Expanded(
+              child: FutureBuilder<List<PatternMarker>>(
+                future: _patternsFuture,
+                builder: (context, patternsSnapshot) {
+                  return EnhancedCandlestickChart(
+                    data: snapshot.data!,
+                    settings: _chartSettings,
+                    patterns: patternsSnapshot.data ?? [],
+                    onSettingsChanged: _onSettingsChanged,
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );

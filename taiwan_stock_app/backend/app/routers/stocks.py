@@ -22,6 +22,7 @@ from app.schemas import (
 from app.services import StockDataService
 from app.services.technical_indicators import TechnicalIndicators
 from app.services.pattern_recognition import PatternRecognitionService
+from app.services.trend_score_service import calculate_trend_score
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/api/stocks", tags=["stocks"])
@@ -500,6 +501,39 @@ def _classify_risk_level(volatility: float, max_drawdown: float, beta: float = N
         return "中"
     else:
         return "低"
+
+
+@router.get("/{stock_id}/trend-score")
+def get_trend_score(
+    stock_id: str,
+    market: str = Query("TW", description="Market region: TW or US"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    取得股票趨勢強度分數（0-100）+ 白話結論
+
+    把均線排列、MACD、RSI、KD、布林通道、量能濃縮成一個分數，
+    50 分為中性，越高代表多方氣勢越強。
+
+    Returns:
+        - score: 0-100
+        - verdict: 強多/偏多/中性/偏空/強空
+        - summary: 一句白話結論
+        - breakdown: 各維度分數細項
+        - highlights: 關鍵訊號（金叉/死叉/超買/超賣...）
+    """
+    df = _get_history_dataframe(stock_id, db, 120, market=market)
+    if df.empty or len(df) < 30:
+        raise HTTPException(status_code=404, detail="歷史資料不足，無法計算趨勢分數")
+
+    result = calculate_trend_score(df)
+    if result is None:
+        raise HTTPException(status_code=404, detail="無法計算趨勢分數")
+
+    result["stock_id"] = stock_id
+    result["market"] = market
+    return result
 
 
 @router.get("/{stock_id}/patterns", response_model=PatternResponse)
