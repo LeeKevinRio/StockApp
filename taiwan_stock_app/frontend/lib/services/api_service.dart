@@ -1345,8 +1345,12 @@ class ApiService {
 
       switch (response.statusCode) {
         case 401:
-          // 觸發全域 401 回呼（自動登出 + 跳轉登入頁），防止並行請求重複觸發
-          if (!_unauthorizedHandled) {
+          // 只在「認證端點」（/api/auth/me）的 401 才觸發強制登出 —
+          // 其他端點的 401 可能只是該功能本身的權限/暫時性問題，
+          // 不該因此把使用者整個踢出 app。
+          final reqPath = response.request?.url.path ?? '';
+          final isAuthEndpoint = reqPath.endsWith('/api/auth/me');
+          if (isAuthEndpoint && !_unauthorizedHandled) {
             _unauthorizedHandled = true;
             onUnauthorized?.call();
           }

@@ -124,7 +124,8 @@ class AuthService {
 
   /// 從伺服器刷新使用者資料
   /// - 成功：回傳更新後的 User
-  /// - 401（token 過期）：清除本地 auth 資料並 rethrow，讓呼叫端處理登出
+  /// - 401（token 過期）：重試 1 次仍失敗才清除本地 auth 資料並 rethrow
+  ///   （避免後端冷啟動 / 暫時性錯誤把使用者誤踢出去）
   /// - 其他錯誤（網路/伺服器）：回傳 null，保留 cached user
   Future<User?> refreshUser() async {
     try {
@@ -134,9 +135,23 @@ class AuthService {
       return user;
     } on ApiException catch (e) {
       if (e.isUnauthorized) {
-        // Token 已過期或無效，清除本地 auth 資料
-        await logout();
-        rethrow;
+        // 401 第一次：稍等一下重試，避免後端剛重啟、JWT 中介還沒就緒的瞬時 401
+        await Future.delayed(const Duration(milliseconds: 800));
+        try {
+          final retryData = await _apiService.getCurrentUser();
+          final user = User.fromJson(retryData);
+          await _storage.write(_userKey, jsonEncode(user.toJson()));
+          return user;
+        } on ApiException catch (e2) {
+          if (e2.isUnauthorized) {
+            // 重試仍 401，token 確實已失效
+            await logout();
+            rethrow;
+          }
+          return null;
+        } catch (_) {
+          return null; // 網路錯誤等，保留 cached user
+        }
       }
       return null;
     } catch (e) {
