@@ -73,17 +73,11 @@ class Settings:
 
 settings = Settings()
 
-# 安全警告：檢查 JWT 密鑰是否為預設值
+# 安全警告：檢查 JWT 密鑰是否為預設值。
+# 注意：實際 JWT 加解密改用 app.auth_secret.get_jwt_secret()（lazy load + DB 持久化），
+# 這裡的 settings.JWT_SECRET 只是 fallback，不再由本檔案動態生成。
 _DEFAULT_SECRETS = {"your-secret-key-change-in-production", "your_jwt_secret_key_change_in_production", ""}
-if settings.IS_PRODUCTION and settings.JWT_SECRET in _DEFAULT_SECRETS:
-    # 生產環境缺少 JWT_SECRET：自動生成隨機密鑰（重啟後失效，用戶需重新登入）
-    _auto_secret = secrets.token_urlsafe(48)
-    settings.JWT_SECRET = _auto_secret
-    logger.critical(
-        "⚠️ 生產環境未設定 JWT_SECRET，已自動生成臨時密鑰（重啟後失效）。"
-        "請在 Railway 環境變數中設定永久的 JWT_SECRET！"
-    )
-elif settings.JWT_SECRET in _DEFAULT_SECRETS:
+if settings.JWT_SECRET in _DEFAULT_SECRETS:
     logger.warning(
-        "JWT_SECRET 使用預設值，請在 .env 中設定安全的隨機密鑰！"
+        "JWT_SECRET 環境變數未設定，將使用 DB 持久化的隨機 secret（請參見 app.auth_secret）。"
     )

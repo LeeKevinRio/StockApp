@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 from app.models import User
 from app.config import settings
+from app.auth_secret import get_jwt_secret
 from app.schemas.alert import (
     AlertCreate,
     AlertResponse,
@@ -130,7 +131,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
     """
     # JWT 驗證
     try:
-        payload = jose_jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        payload = jose_jwt.decode(token, get_jwt_secret(), algorithms=[settings.JWT_ALGORITHM])
         user_id_str = payload.get("sub")
         if user_id_str is None:
             await websocket.close(code=4001, reason="Invalid token")

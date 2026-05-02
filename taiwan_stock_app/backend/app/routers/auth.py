@@ -13,6 +13,7 @@ from app.database import get_db
 from app.models import User
 from app.schemas import UserCreate, UserLogin, Token, UserResponse, GoogleAuthRequest, GoogleAccessTokenRequest
 from app.config import settings
+from app.auth_secret import get_jwt_secret
 from app.services.oauth_service import oauth_service
 from app.rate_limit import limiter
 
@@ -36,7 +37,7 @@ def create_access_token(user_id: int) -> str:
     to_encode = {"sub": str(user_id)}
     expire = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, get_jwt_secret(), algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
 
 
@@ -46,7 +47,7 @@ def get_current_user(
     """Get current authenticated user"""
     try:
         token = credentials.credentials
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[settings.JWT_ALGORITHM])
         user_id_str: str = payload.get("sub")
         if user_id_str is None:
             raise HTTPException(status_code=401, detail="Invalid authentication credentials")

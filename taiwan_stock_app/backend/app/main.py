@@ -209,49 +209,6 @@ for _name, _router in [
         print(f"=== {_name}_router registered OK ===", flush=True)
 
 
-_DEFAULT_JWT_SECRETS = {
-    "your-secret-key-change-in-production",
-    "your_jwt_secret_key_change_in_production",
-    "",
-}
-
-
-def _bootstrap_jwt_secret():
-    """
-    JWT secret 持久化：
-    - 若使用者已設定環境變數 JWT_SECRET（非預設值），直接沿用，不動 DB。
-    - 若沒設定：從 DB system_config 讀取 jwt_secret；DB 也沒有就生成一個寫入。
-    - 之後每次重啟都從 DB 讀同一把 secret，token 不會失效。
-    """
-    import secrets as _secrets
-    from sqlalchemy.orm import Session
-    from app.database import SessionLocal
-    from app.models import SystemConfig
-
-    # 環境變數已設定就尊重它（不用 DB）
-    env_secret = os.getenv("JWT_SECRET", "")
-    if env_secret and env_secret not in _DEFAULT_JWT_SECRETS:
-        print("=== JWT_SECRET from env (persistent) ===", flush=True)
-        return
-
-    db: Session = SessionLocal()
-    try:
-        cfg = db.query(SystemConfig).filter(SystemConfig.key == "jwt_secret").first()
-        if cfg and cfg.value:
-            settings.JWT_SECRET = cfg.value
-            print("=== JWT_SECRET loaded from DB (persistent) ===", flush=True)
-            return
-
-        # 第一次啟動：生成並寫入 DB
-        new_secret = _secrets.token_urlsafe(48)
-        db.add(SystemConfig(key="jwt_secret", value=new_secret))
-        db.commit()
-        settings.JWT_SECRET = new_secret
-        print("=== JWT_SECRET generated and stored in DB (will persist) ===", flush=True)
-    finally:
-        db.close()
-
-
 @app.on_event("startup")
 def on_startup():
     """Create database tables on startup — 失敗不阻止 app 啟動"""
@@ -275,18 +232,20 @@ def on_startup():
                     conn.commit()
             except Exception as mig_e:
                 logger.warning(f"Migration skipped: {mig_e}")
-
-            # JWT_SECRET 持久化：未設環境變數時，從 DB system_config 讀/寫一個固定 secret，
-            # 避免每次重啟生成新 secret 導致所有使用者被踢出。
-            try:
-                _bootstrap_jwt_secret()
-            except Exception as jwt_e:
-                logger.warning(f"JWT secret bootstrap skipped: {jwt_e}")
         except Exception as e:
             logger.error(f"Database table creation failed (app will still start): {e}")
             print(f"=== WARNING: create_tables failed: {e} ===", flush=True)
     else:
         print("=== Skipping create_tables (DB not available) ===", flush=True)
+
+    # JWT secret 預載入：失敗也沒關係，第一個 request 會 lazy load。
+    # 故意放在 create_tables 的 try 之外，即使 tables 建立失敗也會試。
+    try:
+        from app.auth_secret import preload_jwt_secret
+        ok = preload_jwt_secret()
+        print(f"=== JWT secret preload: {'OK' if ok else 'WILL_RETRY_ON_REQUEST'} ===", flush=True)
+    except Exception as jwt_e:
+        print(f"=== JWT secret preload error (will retry on first request): {jwt_e} ===", flush=True)
 
     # 啟動排程器
     try:
