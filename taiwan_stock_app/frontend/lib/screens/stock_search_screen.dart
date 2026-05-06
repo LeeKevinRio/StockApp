@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/watchlist_provider.dart';
 import '../providers/market_provider.dart';
+import '../providers/locale_provider.dart';
 import '../services/api_service.dart';
 import '../models/stock.dart';
 import '../utils/debouncer.dart';
@@ -23,6 +24,7 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
   bool _isSearching = false;
   String? _error;
   String _lastQuery = '';
+  String? _lastMarket;
 
   @override
   void dispose() {
@@ -87,24 +89,45 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
     }
   }
 
+  /// 切換市場時清空搜尋框、結果與錯誤狀態，避免上一個市場的內容殘留
+  void _clearSearchOnMarketChange() {
+    _debouncer.cancel();
+    _searchController.clear();
+    setState(() {
+      _searchResults = [];
+      _error = null;
+      _isSearching = false;
+      _lastQuery = '';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Consumer<MarketProvider>(
-      builder: (context, marketProvider, child) {
+    return Consumer2<MarketProvider, LocaleProvider>(
+      builder: (context, marketProvider, locale, child) {
+        // 偵測市場切換並清空輸入框/結果
+        final currentMarket = marketProvider.marketCode;
+        if (_lastMarket != null && _lastMarket != currentMarket) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _clearSearchOnMarketChange();
+          });
+        }
+        _lastMarket = currentMarket;
+
+        final marketLabel = marketProvider.isUSMarket
+            ? locale.tr('美股', 'US')
+            : locale.tr('台股', 'TW');
+
         return Scaffold(
           appBar: AppBar(
-            title: Text('搜尋${marketProvider.marketDisplayName}'),
+            title: Text(locale.tr('搜尋$marketLabel', 'Search $marketLabel')),
             actions: [
               Padding(
                 padding: const EdgeInsets.only(right: 8.0),
                 child: CompactMarketSwitcher(
                   onMarketChanged: () {
-                    // Re-search when market changes
-                    if (_searchController.text.isNotEmpty) {
-                      _search(_searchController.text);
-                    } else {
-                      setState(() {});  // Refresh suggestions
-                    }
+                    // 切市場直接清空，不沿用上一市場的查詢字串
+                    _clearSearchOnMarketChange();
                   },
                 ),
               ),
@@ -117,9 +140,14 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    hintText: marketProvider.isUSMarket
-                        ? 'Enter stock symbol (e.g., AAPL)'
-                        : '輸入股票代碼或名稱',
+                    hintText: locale.tr(
+                      marketProvider.isUSMarket
+                          ? '輸入美股代碼（例如 AAPL）'
+                          : '輸入股票代碼或名稱',
+                      marketProvider.isUSMarket
+                          ? 'Enter stock symbol (e.g., AAPL)'
+                          : 'Enter stock ID or name',
+                    ),
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
@@ -157,8 +185,9 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
 
   Widget _buildRecentSearches() {
     final marketProvider = context.watch<MarketProvider>();
+    final locale = context.watch<LocaleProvider>();
 
-    // Popular/suggested stocks based on market
+    // Popular/suggested stocks 是依市場決定（資料），與語系無關
     final suggestions = marketProvider.isUSMarket
         ? ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'NVDA', 'META']
         : ['2330', '2317', '2454', '2412', '2882'];
@@ -169,7 +198,7 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            marketProvider.isUSMarket ? 'Popular Stocks' : '熱門搜尋',
+            locale.tr('熱門搜尋', 'Popular Stocks'),
             style: TextStyle(
               fontSize: 12,
               color: Theme.of(context).textTheme.bodySmall?.color,
@@ -205,9 +234,11 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
       );
     }
 
+    final locale = context.watch<LocaleProvider>();
+
     if (_error != null) {
       return ErrorView(
-        message: '搜尋失敗',
+        message: locale.tr('搜尋失敗', 'Search failed'),
         details: _error,
         onRetry: () => _search(_searchController.text),
       );
@@ -215,18 +246,22 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
 
     if (_searchController.text.isEmpty) {
       final marketProvider = context.watch<MarketProvider>();
+      // 例子是市場決定的資料；外框文案是語系決定
+      final example = marketProvider.isUSMarket ? 'AAPL、GOOGL' : '2330、台積電';
+      final exampleEn = marketProvider.isUSMarket ? 'AAPL, GOOGL' : '2330, TSMC';
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.search, size: 64, color: Theme.of(context).disabledColor),
             const SizedBox(height: 16),
-            Text(marketProvider.isUSMarket
-                ? 'Enter stock symbol to search'
-                : '輸入股票代碼或名稱開始搜尋'),
+            Text(locale.tr(
+              '輸入股票代碼或名稱開始搜尋',
+              'Enter stock symbol to search',
+            )),
             const SizedBox(height: 8),
             Text(
-              marketProvider.isUSMarket ? 'e.g., AAPL, GOOGL' : '例如：2330、台積電',
+              locale.tr('例如：$example', 'e.g., $exampleEn'),
               style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
             ),
           ],
@@ -236,7 +271,10 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
 
     if (_searchResults.isEmpty) {
       return ErrorView.notFound(
-        message: '找不到符合「${_searchController.text}」的股票',
+        message: locale.tr(
+          '找不到符合「${_searchController.text}」的股票',
+          'No results for "${_searchController.text}"',
+        ),
         onRetry: () => _search(_searchController.text),
       );
     }
@@ -297,6 +335,7 @@ class _AddToWatchlistButtonState extends State<_AddToWatchlistButton> {
 
     setState(() => _isAdding = true);
 
+    final locale = context.read<LocaleProvider>();
     try {
       await context.read<WatchlistProvider>().addStock(
         widget.stockId,
@@ -305,7 +344,7 @@ class _AddToWatchlistButtonState extends State<_AddToWatchlistButton> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.market == 'US' ? 'Added to watchlist' : '已加入自選股'),
+            content: Text(locale.tr('已加入自選股', 'Added to watchlist')),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -314,7 +353,7 @@ class _AddToWatchlistButtonState extends State<_AddToWatchlistButton> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.market == 'US' ? 'Error: $e' : '錯誤：$e'),
+            content: Text(locale.tr('錯誤：$e', 'Error: $e')),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -328,8 +367,8 @@ class _AddToWatchlistButtonState extends State<_AddToWatchlistButton> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<WatchlistProvider>(
-      builder: (context, watchlistProvider, child) {
+    return Consumer2<WatchlistProvider, LocaleProvider>(
+      builder: (context, watchlistProvider, locale, child) {
         final isInWatchlist = watchlistProvider.isInWatchlist(widget.stockId);
 
         if (isInWatchlist) {
@@ -346,7 +385,7 @@ class _AddToWatchlistButtonState extends State<_AddToWatchlistButton> {
                 const Icon(Icons.check_circle, size: 18, color: Colors.green),
                 const SizedBox(width: 4),
                 Text(
-                  widget.market == 'US' ? 'Added' : '已加入',
+                  locale.tr('已加入', 'Added'),
                   style: const TextStyle(
                     color: Colors.green,
                     fontWeight: FontWeight.w500,
@@ -357,7 +396,6 @@ class _AddToWatchlistButtonState extends State<_AddToWatchlistButton> {
           );
         }
 
-        final isUS = widget.market == 'US';
         return ElevatedButton.icon(
           icon: _isAdding
               ? const SizedBox(
@@ -367,8 +405,8 @@ class _AddToWatchlistButtonState extends State<_AddToWatchlistButton> {
                 )
               : const Icon(Icons.add, size: 18),
           label: Text(_isAdding
-              ? (isUS ? 'Adding...' : '加入中...')
-              : (isUS ? 'Add' : '加入')),
+              ? locale.tr('加入中...', 'Adding...')
+              : locale.tr('加入', 'Add')),
           onPressed: _isAdding ? null : _addToWatchlist,
         );
       },

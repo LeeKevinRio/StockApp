@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/locale_provider.dart';
 import '../providers/market_provider.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -129,24 +130,59 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Widget _buildPreferencesSection(BuildContext context) {
-    return Consumer<MarketProvider>(
-      builder: (context, market, _) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSectionTitle(context, '偏好設定'),
-            ListTile(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(context, '偏好設定'),
+        // 語言（系統級，不隨市場連動）
+        Consumer<LocaleProvider>(
+          builder: (context, localeProvider, _) {
+            return ListTile(
               leading: const Icon(Icons.language),
-              title: const Text('預設市場'),
-              subtitle: Text(market.isUSMarket ? '美股' : '台股'),
+              title: Text(localeProvider.tr('語言', 'Language')),
+              subtitle: Text(localeProvider.displayName),
+              trailing: SegmentedButton<Locale>(
+                segments: const [
+                  ButtonSegment(
+                    value: LocaleProvider.zhTW,
+                    label: Text('中'),
+                  ),
+                  ButtonSegment(
+                    value: LocaleProvider.enUS,
+                    label: Text('EN'),
+                  ),
+                ],
+                selected: {localeProvider.locale},
+                onSelectionChanged: (set) =>
+                    localeProvider.setLocale(set.first),
+                showSelectedIcon: false,
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            );
+          },
+        ),
+        // 預設市場（資料來源，不影響語言）
+        Consumer2<MarketProvider, LocaleProvider>(
+          builder: (context, market, locale, _) {
+            return ListTile(
+              leading: const Icon(Icons.public),
+              title: Text(locale.tr('預設市場', 'Default Market')),
+              subtitle: Text(
+                market.isUSMarket
+                    ? locale.tr('美股', 'US Stocks')
+                    : locale.tr('台股', 'TW Stocks'),
+              ),
               trailing: Switch(
                 value: market.isUSMarket,
                 onChanged: (_) => market.toggleMarket(),
               ),
-            ),
-          ],
-        );
-      },
+            );
+          },
+        ),
+      ],
     );
   }
 

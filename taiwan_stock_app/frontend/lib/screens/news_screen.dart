@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
+import '../providers/locale_provider.dart';
 import '../models/news.dart';
 
 class NewsScreen extends StatefulWidget {
@@ -229,7 +230,12 @@ class _NewsScreenState extends State<NewsScreen>
   }
 
   Widget _buildNewsCard(StockNews news, String source) {
-    final isUS = source == 'US';
+    // 顏色與 fallback 標籤依新聞「來源市場」決定（資料），標籤文字依「語系」決定
+    final isUSSource = source == 'US';
+    final locale = context.watch<LocaleProvider>();
+    final fallbackLabel = isUSSource
+        ? locale.tr('國際新聞', 'Global News')
+        : locale.tr('台灣新聞', 'Taiwan News');
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -246,14 +252,14 @@ class _NewsScreenState extends State<NewsScreen>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: (isUS ? Colors.blue : Colors.red).withAlpha(26),
+                      color: (isUSSource ? Colors.blue : Colors.red).withAlpha(26),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      news.source ?? (isUS ? 'Global News' : 'Taiwan News'),
+                      news.source ?? fallbackLabel,
                       style: TextStyle(
                         fontSize: 12,
-                        color: isUS ? Colors.blue : Colors.red,
+                        color: isUSSource ? Colors.blue : Colors.red,
                       ),
                     ),
                   ),

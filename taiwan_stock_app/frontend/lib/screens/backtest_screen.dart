@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../providers/market_provider.dart';
+import '../providers/locale_provider.dart';
 import '../models/stock.dart';
 
 class BacktestScreen extends StatefulWidget {
@@ -181,11 +182,12 @@ class _BacktestScreenState extends State<BacktestScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isUS = !context.watch<MarketProvider>().isTaiwanMarket;
+    // isEn 由「語系」決定（系統級設定），與市場無關
+    final isEn = context.watch<LocaleProvider>().isEnglish;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isUS ? 'Strategy Backtest' : '策略回測'),
+        title: Text(isEn ? 'Strategy Backtest' : '策略回測'),
       ),
       body: _isLoadingStrategies
           ? const Center(child: CircularProgressIndicator())
@@ -194,7 +196,7 @@ class _BacktestScreenState extends State<BacktestScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildSettingsSection(isUS),
+                  _buildSettingsSection(isEn),
                   if (_isLoading)
                     const Padding(
                       padding: EdgeInsets.all(32),
@@ -214,7 +216,7 @@ class _BacktestScreenState extends State<BacktestScreen> {
                     ),
                   if (_result != null) ...[
                     const SizedBox(height: 16),
-                    _buildResultTabs(isUS),
+                    _buildResultTabs(isEn),
                   ],
                 ],
               ),
@@ -224,14 +226,16 @@ class _BacktestScreenState extends State<BacktestScreen> {
 
   // ---- 設定區 ----
 
-  Widget _buildSettingsSection(bool isUS) {
+  Widget _buildSettingsSection(bool isEn) {
+    // 幣別前綴是市場決定的資料，不隨語系變動
+    final currencyPrefix = context.watch<MarketProvider>().currencySymbol;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(isUS ? 'Backtest Settings' : '回測設定',
+            Text(isEn ? 'Backtest Settings' : '回測設定',
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
 
@@ -239,8 +243,8 @@ class _BacktestScreenState extends State<BacktestScreen> {
             TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                labelText: isUS ? 'Search Stock' : '搜尋股票',
-                hintText: isUS ? 'Stock ID or name' : '輸入股票代碼或名稱',
+                labelText: isEn ? 'Search Stock' : '搜尋股票',
+                hintText: isEn ? 'Stock ID or name' : '輸入股票代碼或名稱',
                 prefixIcon: const Icon(Icons.search),
                 border: const OutlineInputBorder(),
                 suffixIcon: _isSearching
@@ -304,13 +308,13 @@ class _BacktestScreenState extends State<BacktestScreen> {
             DropdownButtonFormField<String>(
               initialValue: _selectedStrategy,
               decoration: InputDecoration(
-                labelText: isUS ? 'Strategy' : '策略',
+                labelText: isEn ? 'Strategy' : '策略',
                 border: const OutlineInputBorder(),
               ),
               items: _strategies.map((s) {
                 return DropdownMenuItem<String>(
                   value: s['name'] as String,
-                  child: Text(isUS
+                  child: Text(isEn
                       ? (s['name'] as String)
                       : (s['display_name'] as String? ?? s['name'] as String)),
                 );
@@ -321,7 +325,7 @@ class _BacktestScreenState extends State<BacktestScreen> {
             // 策略參數
             if (_strategyParams.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text(isUS ? 'Parameters' : '參數',
+              Text(isEn ? 'Parameters' : '參數',
                   style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 8),
               Wrap(
@@ -357,7 +361,7 @@ class _BacktestScreenState extends State<BacktestScreen> {
               onTap: _pickDateRange,
               child: InputDecorator(
                 decoration: InputDecoration(
-                  labelText: isUS ? 'Date Range' : '日期範圍',
+                  labelText: isEn ? 'Date Range' : '日期範圍',
                   border: const OutlineInputBorder(),
                   suffixIcon: const Icon(Icons.calendar_today),
                 ),
@@ -369,13 +373,13 @@ class _BacktestScreenState extends State<BacktestScreen> {
 
             const SizedBox(height: 12),
 
-            // 初始資金
+            // 初始資金（幣別跟隨「市場」，文字標籤跟隨「語系」）
             TextField(
               controller: _capitalController,
               decoration: InputDecoration(
-                labelText: isUS ? 'Initial Capital' : '初始資金',
+                labelText: isEn ? 'Initial Capital' : '初始資金',
                 border: const OutlineInputBorder(),
-                prefixText: isUS ? '\$ ' : 'NT\$ ',
+                prefixText: '$currencyPrefix ',
               ),
               keyboardType: TextInputType.number,
             ),
@@ -389,7 +393,7 @@ class _BacktestScreenState extends State<BacktestScreen> {
               child: ElevatedButton.icon(
                 onPressed: _isLoading ? null : _runBacktest,
                 icon: const Icon(Icons.speed),
-                label: Text(isUS ? 'Run Backtest' : '開始回測'),
+                label: Text(isEn ? 'Run Backtest' : '開始回測'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
@@ -404,8 +408,8 @@ class _BacktestScreenState extends State<BacktestScreen> {
 
   // ---- 結果區 ----
 
-  Widget _buildResultTabs(bool isUS) {
-    final tabLabels = isUS
+  Widget _buildResultTabs(bool isEn) {
+    final tabLabels = isEn
         ? ['Overview', 'Equity Curve', 'Trades']
         : ['總覽', '權益曲線', '交易紀錄'];
 
@@ -451,16 +455,16 @@ class _BacktestScreenState extends State<BacktestScreen> {
         const SizedBox(height: 8),
 
         // Tab 內容
-        if (_selectedTab == 0) _buildOverviewTab(isUS),
-        if (_selectedTab == 1) _buildEquityCurveTab(isUS),
-        if (_selectedTab == 2) _buildTradesTab(isUS),
+        if (_selectedTab == 0) _buildOverviewTab(isEn),
+        if (_selectedTab == 1) _buildEquityCurveTab(isEn),
+        if (_selectedTab == 2) _buildTradesTab(isEn),
       ],
     );
   }
 
   // ---- Tab 1: 總覽 ----
 
-  Widget _buildOverviewTab(bool isUS) {
+  Widget _buildOverviewTab(bool isEn) {
     final metrics = _result!['metrics'] as Map<String, dynamic>? ?? {};
     final stockName = _result!['stock_name'] ?? _result!['stock_id'] ?? '';
     final stratName = _result!['strategy'] ?? '';
@@ -498,53 +502,53 @@ class _BacktestScreenState extends State<BacktestScreen> {
           childAspectRatio: 2.2,
           children: [
             _metricCard(
-              isUS ? 'Total Return' : '總報酬率',
+              isEn ? 'Total Return' : '總報酬率',
               '${metrics['total_return'] ?? 0}%',
               (metrics['total_return'] ?? 0) >= 0
                   ? Colors.green
                   : Colors.red,
             ),
             _metricCard(
-              isUS ? 'Annualized' : '年化報酬',
+              isEn ? 'Annualized' : '年化報酬',
               '${metrics['annualized_return'] ?? 0}%',
               (metrics['annualized_return'] ?? 0) >= 0
                   ? Colors.green
                   : Colors.red,
             ),
             _metricCard(
-              isUS ? 'Max Drawdown' : '最大回撤',
+              isEn ? 'Max Drawdown' : '最大回撤',
               '${metrics['max_drawdown'] ?? 0}%',
               Colors.orange,
             ),
             _metricCard(
-              isUS ? 'Sharpe Ratio' : 'Sharpe',
+              isEn ? 'Sharpe Ratio' : 'Sharpe',
               '${metrics['sharpe_ratio'] ?? 0}',
               (metrics['sharpe_ratio'] ?? 0) >= 1
                   ? Colors.green
                   : Colors.grey,
             ),
             _metricCard(
-              isUS ? 'Win Rate' : '勝率',
+              isEn ? 'Win Rate' : '勝率',
               '${metrics['win_rate'] ?? 0}%',
               (metrics['win_rate'] ?? 0) >= 50
                   ? Colors.green
                   : Colors.red,
             ),
             _metricCard(
-              isUS ? 'Profit Factor' : '獲利因子',
+              isEn ? 'Profit Factor' : '獲利因子',
               '${metrics['profit_factor'] ?? 0}',
               (metrics['profit_factor'] ?? 0) >= 1
                   ? Colors.green
                   : Colors.red,
             ),
             _metricCard(
-              isUS ? 'Total Trades' : '交易次數',
+              isEn ? 'Total Trades' : '交易次數',
               '${metrics['total_trades'] ?? 0}',
               Colors.blue,
             ),
             _metricCard(
-              isUS ? 'Avg Holding' : '平均持倉',
-              '${metrics['avg_holding_days'] ?? 0} ${isUS ? "days" : "天"}',
+              isEn ? 'Avg Holding' : '平均持倉',
+              '${metrics['avg_holding_days'] ?? 0} ${isEn ? "days" : "天"}',
               Colors.blueGrey,
             ),
           ],
@@ -582,7 +586,7 @@ class _BacktestScreenState extends State<BacktestScreen> {
 
   // ---- Tab 2: 權益曲線 ----
 
-  Widget _buildEquityCurveTab(bool isUS) {
+  Widget _buildEquityCurveTab(bool isEn) {
     final curve = (_result!['equity_curve'] as List<dynamic>?)
             ?.cast<Map<String, dynamic>>() ??
         [];
@@ -612,7 +616,7 @@ class _BacktestScreenState extends State<BacktestScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(isUS ? 'Equity Curve' : '權益曲線',
+            Text(isEn ? 'Equity Curve' : '權益曲線',
                 style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 16),
             SizedBox(
@@ -703,7 +707,7 @@ class _BacktestScreenState extends State<BacktestScreen> {
 
   // ---- Tab 3: 交易紀錄 ----
 
-  Widget _buildTradesTab(bool isUS) {
+  Widget _buildTradesTab(bool isEn) {
     final trades = (_result!['trades'] as List<dynamic>?)
             ?.cast<Map<String, dynamic>>() ??
         [];
@@ -711,7 +715,7 @@ class _BacktestScreenState extends State<BacktestScreen> {
     if (trades.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(32),
-        child: Center(child: Text(isUS ? 'No trades' : '無交易紀錄')),
+        child: Center(child: Text(isEn ? 'No trades' : '無交易紀錄')),
       );
     }
 
@@ -747,9 +751,9 @@ class _BacktestScreenState extends State<BacktestScreen> {
               ],
             ),
             subtitle: Text(
-              '${isUS ? "Entry" : "買"} ${t['entry_price']} → '
-              '${isUS ? "Exit" : "賣"} ${t['exit_price']}  '
-              '(${t['holding_days']} ${isUS ? "days" : "天"})',
+              '${isEn ? "Entry" : "買"} ${t['entry_price']} → '
+              '${isEn ? "Exit" : "賣"} ${t['exit_price']}  '
+              '(${t['holding_days']} ${isEn ? "days" : "天"})',
               style: const TextStyle(fontSize: 12),
             ),
             trailing: Column(

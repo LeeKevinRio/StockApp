@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../providers/market_provider.dart';
+import '../providers/locale_provider.dart';
 import '../widgets/market_switcher.dart';
 
 class MarketHeatmapScreen extends StatefulWidget {
@@ -88,7 +89,8 @@ class _MarketHeatmapScreenState extends State<MarketHeatmapScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isUS = context.watch<MarketProvider>().isUSMarket;
+    // 文字依「語系」決定，不再連動市場
+    final isEn = context.watch<LocaleProvider>().isEnglish;
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -101,7 +103,7 @@ class _MarketHeatmapScreenState extends State<MarketHeatmapScreen>
             }
           },
         ),
-        title: Text(isUS ? 'Market Heatmap' : '市場熱力圖'),
+        title: Text(isEn ? 'Market Heatmap' : '市場熱力圖'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 4),
@@ -112,8 +114,8 @@ class _MarketHeatmapScreenState extends State<MarketHeatmapScreen>
         bottom: TabBar(
           controller: _tabController,
           tabs: [
-            Tab(text: isUS ? 'Sector Heatmap' : '產業熱力圖'),
-            Tab(text: isUS ? 'Rankings' : '漲跌排行'),
+            Tab(text: isEn ? 'Sector Heatmap' : '產業熱力圖'),
+            Tab(text: isEn ? 'Rankings' : '漲跌排行'),
           ],
         ),
       ),
@@ -246,7 +248,7 @@ class _MarketHeatmapScreenState extends State<MarketHeatmapScreen>
 
   // === 排行榜 Tab ===
   Widget _buildRankingsTab() {
-    final isUS = context.read<MarketProvider>().isUSMarket;
+    final isEn = context.watch<LocaleProvider>().isEnglish;
     return Column(
       children: [
         // 分類選擇
@@ -254,10 +256,10 @@ class _MarketHeatmapScreenState extends State<MarketHeatmapScreen>
           padding: const EdgeInsets.all(12),
           child: SegmentedButton<String>(
             segments: [
-              ButtonSegment(value: 'gainers', label: Text(isUS ? 'Gainers' : '漲幅')),
-              ButtonSegment(value: 'losers', label: Text(isUS ? 'Losers' : '跌幅')),
-              ButtonSegment(value: 'volume', label: Text(isUS ? 'Volume' : '成交量')),
-              ButtonSegment(value: 'active', label: Text(isUS ? 'Active' : '波動')),
+              ButtonSegment(value: 'gainers', label: Text(isEn ? 'Gainers' : '漲幅')),
+              ButtonSegment(value: 'losers', label: Text(isEn ? 'Losers' : '跌幅')),
+              ButtonSegment(value: 'volume', label: Text(isEn ? 'Volume' : '成交量')),
+              ButtonSegment(value: 'active', label: Text(isEn ? 'Active' : '波動')),
             ],
             selected: {_rankCategory},
             onSelectionChanged: (values) {

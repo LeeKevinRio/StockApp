@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/locale_provider.dart';
 
 /// 即時時間顯示卡片，附帶資料更新時間說明
 class RealtimeClockCard extends StatefulWidget {
@@ -79,11 +81,10 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
     return timeVal >= 540 && timeVal <= 810;
   }
 
-  String get _marketStatusText {
-    if (_isUS) {
-      return _isMarketOpen ? 'Market Open' : 'Market Closed';
-    }
-    return _isMarketOpen ? '開盤中' : '已收盤';
+  String _marketStatusText(LocaleProvider locale) {
+    return _isMarketOpen
+        ? locale.tr('開盤中', 'Market Open')
+        : locale.tr('已收盤', 'Market Closed');
   }
 
   static const _weekdays = ['', '週一', '週二', '週三', '週四', '週五', '週六', '週日'];
@@ -109,9 +110,17 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final locale = context.watch<LocaleProvider>();
+    // 日期星期幾的格式跟「語系」走，不再跟市場
     final marketLocal = _marketLocalTime;
     final timeStr = _formatTime(marketLocal);
-    final dateStr = _formatDate(marketLocal, english: _isUS);
+    final dateStr = _formatDate(marketLocal, english: locale.isEnglish);
+    // 時區資訊：時區事實依市場決定，描述文字依語系決定
+    final tzText = _isUS
+        ? (_isDaylightSaving(_now.toUtc())
+            ? locale.tr('美東 EDT (UTC-4)', 'US ET EDT (UTC-4)')
+            : locale.tr('美東 EST (UTC-5)', 'US ET EST (UTC-5)'))
+        : locale.tr('台灣 TST (UTC+8)', 'Taiwan TST (UTC+8)');
 
     final lastRefreshStr = widget.lastDataRefresh != null
         ? _formatTime(widget.lastDataRefresh!)
@@ -157,7 +166,7 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        _marketStatusText,
+                        _marketStatusText(locale),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -173,7 +182,7 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      _isUS ? 'Updated' : '資料更新',
+                      locale.tr('資料更新', 'Updated'),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.textTheme.bodySmall?.color,
                       ),
@@ -194,7 +203,7 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
 
             // 第二行：日期 + 時區
             Text(
-              '$dateStr  ${_isUS ? (_isDaylightSaving(_now.toUtc()) ? "美東 EDT (UTC-4)" : "美東 EST (UTC-5)") : "台灣 TST (UTC+8)"}',
+              '$dateStr  $tzText',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.7),
               ),
@@ -212,19 +221,20 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
 
   Widget _buildScheduleInfo(BuildContext context) {
     final theme = Theme.of(context);
+    final locale = context.watch<LocaleProvider>();
     final labelStyle = theme.textTheme.labelSmall?.copyWith(
       color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.8),
       height: 1.5,
     );
 
-    final items = _isUS
-        ? [
+    final items = locale.isEnglish
+        ? const [
             ('Quotes', 'Refresh every 30s (open) / 5min (closed)'),
             ('Watchlist', 'Loaded on each visit'),
             ('AI Tips', 'Loaded async after dashboard'),
             ('Heatmap', 'Cached 5 min, pull to refresh'),
           ]
-        : [
+        : const [
             ('即時報價', '盤中每 30 秒 / 收盤後每 5 分鐘'),
             ('自選股', '每次進入首頁時讀取'),
             ('AI 建議', '首頁載入後非同步讀取'),
@@ -239,7 +249,7 @@ class _RealtimeClockCardState extends State<RealtimeClockCard> {
             Icon(Icons.info_outline, size: 13, color: theme.colorScheme.primary.withValues(alpha: 0.7)),
             const SizedBox(width: 4),
             Text(
-              _isUS ? 'Data Refresh Rate' : '資料讀取頻率',
+              locale.tr('資料讀取頻率', 'Data Refresh Rate'),
               style: theme.textTheme.labelSmall?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: theme.colorScheme.primary.withValues(alpha: 0.9),

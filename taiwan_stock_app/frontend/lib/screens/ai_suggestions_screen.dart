@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/ai_provider.dart';
-import '../providers/market_provider.dart';
+import '../providers/locale_provider.dart';
 import '../models/ai_suggestion.dart';
-import '../widgets/market_switcher.dart';
 
 class AISuggestionsScreen extends StatefulWidget {
   const AISuggestionsScreen({super.key});
@@ -33,9 +32,10 @@ class _AISuggestionsScreenState extends State<AISuggestionsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final locale = context.watch<LocaleProvider>();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Daily Suggestions'),
+        title: Text(locale.tr('AI 每日建議', 'AI Daily Suggestions')),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -44,14 +44,14 @@ class _AISuggestionsScreenState extends State<AISuggestionsScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
+          tabs: [
             Tab(
-              icon: Icon(Icons.flag),
-              text: 'Taiwan Stocks',
+              icon: const Icon(Icons.flag),
+              text: locale.tr('台股', 'Taiwan Stocks'),
             ),
             Tab(
-              icon: Icon(Icons.public),
-              text: 'US Stocks',
+              icon: const Icon(Icons.public),
+              text: locale.tr('美股', 'US Stocks'),
             ),
           ],
         ),
@@ -59,25 +59,34 @@ class _AISuggestionsScreenState extends State<AISuggestionsScreen>
       body: Consumer<AIProvider>(
         builder: (context, provider, child) {
           if (provider.isLoadingSuggestions) {
-            return const Center(
+            return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
                   Text(
-                    'AI is analyzing your watchlist...',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                    locale.tr(
+                      'AI 正在分析您的自選股...',
+                      'AI is analyzing your watchlist...',
+                    ),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
-                    'First generation takes 30-60 seconds',
-                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                    locale.tr(
+                      '首次生成需要 30-60 秒',
+                      'First generation takes 30-60 seconds',
+                    ),
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
-                    'Please wait, do not close this page',
-                    style: TextStyle(fontSize: 12, color: Colors.orange),
+                    locale.tr(
+                      '請耐心等待，請勿關閉此頁面',
+                      'Please wait, do not close this page',
+                    ),
+                    style: const TextStyle(fontSize: 12, color: Colors.orange),
                   ),
                 ],
               ),
@@ -171,6 +180,7 @@ class _AISuggestionsScreenState extends State<AISuggestionsScreen>
     AIProvider provider, {
     required bool isTaiwan,
   }) {
+    final locale = context.watch<LocaleProvider>();
     if (suggestions.isEmpty) {
       return Center(
         child: Column(
@@ -183,29 +193,31 @@ class _AISuggestionsScreenState extends State<AISuggestionsScreen>
             ),
             const SizedBox(height: 16),
             Text(
-              isTaiwan ? '尚無 AI 建議' : 'No AI Suggestions',
+              locale.tr('尚無 AI 建議', 'No AI Suggestions'),
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 8),
             Text(
-              isTaiwan
-                  ? '點擊下方按鈕為自選股生成 AI 分析'
-                  : 'Click below to generate AI analysis for your watchlist',
+              locale.tr(
+                '點擊下方按鈕為自選股生成 AI 分析',
+                'Click below to generate AI analysis for your watchlist',
+              ),
               style: const TextStyle(color: Colors.grey),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              isTaiwan
-                  ? '（首次生成需要 30-60 秒）'
-                  : '(First generation takes 30-60 seconds)',
+              locale.tr(
+                '（首次生成需要 30-60 秒）',
+                '(First generation takes 30-60 seconds)',
+              ),
               style: const TextStyle(color: Colors.orange, fontSize: 12),
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () => provider.refreshSuggestions(),
               icon: const Icon(Icons.auto_awesome),
-              label: Text(isTaiwan ? '生成 AI 建議' : 'Generate AI Suggestions'),
+              label: Text(locale.tr('生成 AI 建議', 'Generate AI Suggestions')),
             ),
           ],
         ),
@@ -243,6 +255,8 @@ class SuggestionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final suggestionColor = _getSuggestionColor(suggestion.suggestion);
     final suggestionIcon = _getSuggestionIcon(suggestion.suggestion);
+    final locale = context.watch<LocaleProvider>();
+    // 幣別跟「市場」走（資料）；UI 文字跟「語系」走（系統設定）
     final currencySymbol = isTaiwan ? 'NT\$' : '\$';
 
     return Card(
@@ -310,7 +324,7 @@ class SuggestionCard extends StatelessWidget {
                       Icon(suggestionIcon, color: suggestionColor, size: 20),
                       const SizedBox(width: 4),
                       Text(
-                        _getSuggestionText(suggestion.suggestion, isTaiwan),
+                        _getSuggestionText(suggestion.suggestion, locale),
                         style: TextStyle(
                           color: suggestionColor,
                           fontWeight: FontWeight.bold,
@@ -325,7 +339,7 @@ class SuggestionCard extends StatelessWidget {
             // Bullish Probability (看漲機率) - 更直覺的指標
             Row(
               children: [
-                Text(isTaiwan ? '看漲機率：' : 'Bullish: '),
+                Text(locale.tr('看漲機率：', 'Bullish: ')),
                 Expanded(
                   child: LinearProgressIndicator(
                     value: suggestion.bullishProbability ??
@@ -357,7 +371,7 @@ class SuggestionCard extends StatelessWidget {
             // 隔天漲跌預測區塊
             if (suggestion.nextDayPrediction != null) ...[
               const SizedBox(height: 12),
-              _buildNextDayPrediction(context, suggestion.nextDayPrediction!, currencySymbol, isTaiwan),
+              _buildNextDayPrediction(context, suggestion.nextDayPrediction!, currencySymbol, locale),
             ],
             if (suggestion.currentPrice != null ||
                 suggestion.targetPrice != null ||
@@ -368,7 +382,7 @@ class SuggestionCard extends StatelessWidget {
                   if (suggestion.currentPrice != null)
                     Expanded(
                       child: _buildPriceInfo(
-                        isTaiwan ? '現價' : 'Current',
+                        locale.tr('現價', 'Current'),
                         suggestion.currentPrice!,
                         Colors.blueGrey,
                         currencySymbol,
@@ -380,7 +394,7 @@ class SuggestionCard extends StatelessWidget {
                   if (suggestion.targetPrice != null)
                     Expanded(
                       child: _buildPriceInfo(
-                        isTaiwan ? '目標價' : 'Target',
+                        locale.tr('目標價', 'Target'),
                         suggestion.targetPrice!,
                         Colors.green,
                         currencySymbol,
@@ -392,7 +406,7 @@ class SuggestionCard extends StatelessWidget {
                   if (suggestion.stopLossPrice != null)
                     Expanded(
                       child: _buildPriceInfo(
-                        isTaiwan ? '停損價' : 'Stop Loss',
+                        locale.tr('停損價', 'Stop Loss'),
                         suggestion.stopLossPrice!,
                         Colors.red,
                         currencySymbol,
@@ -404,7 +418,7 @@ class SuggestionCard extends StatelessWidget {
             const SizedBox(height: 12),
             // Reasoning
             Text(
-              isTaiwan ? '分析理由' : 'Analysis',
+              locale.tr('分析理由', 'Analysis'),
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
@@ -421,7 +435,7 @@ class SuggestionCard extends StatelessWidget {
             if (suggestion.keyFactors.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
-                isTaiwan ? '關鍵因素' : 'Key Factors',
+                locale.tr('關鍵因素', 'Key Factors'),
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
@@ -503,13 +517,13 @@ class SuggestionCard extends StatelessWidget {
   }
 
   /// 建構隔天預測區塊
-  Widget _buildNextDayPrediction(BuildContext context, NextDayPrediction prediction, String currency, bool isTaiwan) {
+  Widget _buildNextDayPrediction(BuildContext context, NextDayPrediction prediction, String currency, LocaleProvider locale) {
     final isUp = prediction.direction == 'UP';
     final directionColor = isUp ? Colors.red : Colors.green;
     final directionIcon = isUp ? Icons.arrow_upward : Icons.arrow_downward;
     final directionText = isUp
-        ? (isTaiwan ? '預測上漲' : 'Predicted UP')
-        : (isTaiwan ? '預測下跌' : 'Predicted DOWN');
+        ? locale.tr('預測上漲', 'Predicted UP')
+        : locale.tr('預測下跌', 'Predicted DOWN');
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -532,7 +546,7 @@ class SuggestionCard extends StatelessWidget {
               Icon(Icons.schedule, size: 16, color: directionColor),
               const SizedBox(width: 4),
               Text(
-                isTaiwan ? '明日漲跌預測' : 'Tomorrow Prediction',
+                locale.tr('明日漲跌預測', 'Tomorrow Prediction'),
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
@@ -573,7 +587,7 @@ class SuggestionCard extends StatelessWidget {
                 child: Column(
                   children: [
                     Text(
-                      isTaiwan ? '預測漲跌幅' : 'Change',
+                      locale.tr('預測漲跌幅', 'Change'),
                       style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
                     ),
                     const SizedBox(height: 4),
@@ -593,7 +607,7 @@ class SuggestionCard extends StatelessWidget {
                 child: Column(
                   children: [
                     Text(
-                      isTaiwan ? '預測信心度' : 'Confidence',
+                      locale.tr('預測信心度', 'Confidence'),
                       style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
                     ),
                     const SizedBox(height: 4),
@@ -614,7 +628,7 @@ class SuggestionCard extends StatelessWidget {
                   child: Column(
                     children: [
                       Text(
-                        isTaiwan ? '預測區間' : 'Range',
+                        locale.tr('預測區間', 'Range'),
                         style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
                       ),
                       const SizedBox(height: 4),
@@ -681,14 +695,14 @@ class SuggestionCard extends StatelessWidget {
     }
   }
 
-  String _getSuggestionText(String suggestion, bool isTaiwan) {
+  String _getSuggestionText(String suggestion, LocaleProvider locale) {
     switch (suggestion.toUpperCase()) {
       case 'BUY':
-        return isTaiwan ? '買進' : 'BUY';
+        return locale.tr('買進', 'BUY');
       case 'SELL':
-        return isTaiwan ? '賣出' : 'SELL';
+        return locale.tr('賣出', 'SELL');
       default:
-        return isTaiwan ? '持有' : 'HOLD';
+        return locale.tr('持有', 'HOLD');
     }
   }
 

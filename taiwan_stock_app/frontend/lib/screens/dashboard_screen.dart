@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/market_provider.dart';
+import '../providers/locale_provider.dart';
 import '../providers/notification_provider.dart';
 import '../widgets/dashboard/market_overview_card.dart';
 import '../widgets/dashboard/watchlist_summary_card.dart';
 import '../widgets/dashboard/ai_picks_card.dart';
 import '../widgets/dashboard/ai_discovery_card.dart';
+import '../widgets/dashboard/quick_actions_card.dart';
 
 import '../widgets/dashboard/realtime_clock_card.dart';
 import '../widgets/common/skeleton_loader.dart';
@@ -157,7 +159,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     MarketProvider marketProvider,
   ) {
     final data = dashboardProvider.dashboardData;
-    final isUS = marketProvider.isUSMarket;
+    // 文字依語系決定，市場標籤事實依市場決定
+    final locale = context.watch<LocaleProvider>();
+    final marketLabelZh = marketProvider.isUSMarket ? '美股' : '台股';
+    final marketLabelEn = marketProvider.isUSMarket ? 'US' : 'TW';
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -227,7 +232,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // 底部提示
           Center(
             child: Text(
-              isUS ? 'US Market Data' : '台股市場數據',
+              locale.tr(
+                '$marketLabelZh市場數據',
+                '$marketLabelEn Market Data',
+              ),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),

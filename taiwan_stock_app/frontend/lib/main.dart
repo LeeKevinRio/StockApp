@@ -10,6 +10,7 @@ import 'providers/ai_provider.dart';
 import 'providers/alert_provider.dart';
 import 'providers/app_state_provider.dart';
 import 'providers/theme_provider.dart';
+import 'providers/locale_provider.dart';
 import 'providers/market_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/dashboard_provider.dart';
@@ -115,6 +116,9 @@ class MyApp extends StatelessWidget {
           create: (_) => ThemeProvider(),
         ),
         ChangeNotifierProvider(
+          create: (_) => LocaleProvider(),
+        ),
+        ChangeNotifierProvider(
           create: (_) => NotificationProvider(),
         ),
         ChangeNotifierProvider(
@@ -130,14 +134,19 @@ class MyApp extends StatelessWidget {
           create: (_) => BrokerProvider(apiService),
         ),
       ],
-      child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, child) {
+      child: Consumer2<ThemeProvider, LocaleProvider>(
+        builder: (context, themeProvider, localeProvider, child) {
           return MaterialApp(
             navigatorKey: navigatorKey,
             title: '台股智慧助手',
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.defaultTheme,
             themeMode: themeProvider.themeMode,
+            locale: localeProvider.locale,
+            supportedLocales: const [
+              LocaleProvider.zhTW,
+              LocaleProvider.enUS,
+            ],
             debugShowCheckedModeBanner: false,
             initialRoute: '/splash',
             routes: {

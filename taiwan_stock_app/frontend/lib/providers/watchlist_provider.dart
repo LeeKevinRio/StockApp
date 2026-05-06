@@ -80,7 +80,8 @@ class WatchlistProvider with ChangeNotifier {
   Future<void> addStock(String stockId, {String? notes, String market = 'TW'}) async {
     // 先檢查是否已在自選股中
     if (isInWatchlist(stockId)) {
-      throw Exception(market == 'US' ? 'Already in watchlist' : '此股票已在自選股中');
+      // 例外訊息固定使用中文，UI 層可依語系決定是否翻譯
+      throw Exception('此股票已在自選股中');
     }
 
     try {

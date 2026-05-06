@@ -1,11 +1,46 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Stock market enum
 enum StockMarket { taiwan, us }
 
 /// Market provider for managing current market selection
+///
+/// 注意：此 provider 只決定「資料來源市場」，不影響 UI 語系（語系由 LocaleProvider 管理）。
 class MarketProvider with ChangeNotifier {
+  static const String _key = 'app_default_market';
+
   StockMarket _currentMarket = StockMarket.taiwan;
+  bool _initialized = false;
+
+  MarketProvider() {
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final code = prefs.getString(_key);
+      if (code == 'US') {
+        _currentMarket = StockMarket.us;
+      }
+    } catch (_) {
+      // 失敗時保留預設台股
+    }
+    _initialized = true;
+    notifyListeners();
+  }
+
+  Future<void> _persist() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_key, marketCode);
+    } catch (_) {
+      // 儲存失敗不影響 in-memory 狀態
+    }
+  }
+
+  bool get initialized => _initialized;
 
   /// Get current market
   StockMarket get currentMarket => _currentMarket;
@@ -33,6 +68,7 @@ class MarketProvider with ChangeNotifier {
     if (_currentMarket != market) {
       _currentMarket = market;
       notifyListeners();
+      _persist();
     }
   }
 
@@ -42,6 +78,7 @@ class MarketProvider with ChangeNotifier {
         ? StockMarket.us
         : StockMarket.taiwan;
     notifyListeners();
+    _persist();
   }
 
   /// Set market by code string

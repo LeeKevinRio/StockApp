@@ -288,7 +288,8 @@ class _StockDetailScreenState extends State<StockDetailScreen>
   Future<void> _addToWatchlist() async {
     try {
       final apiService = Provider.of<ApiService>(context, listen: false);
-      await apiService.addToWatchlist(widget.stockId);
+      // 必須帶上 widget.market，否則美股詳情頁加入會被當成 TW（之前的 bug）
+      await apiService.addToWatchlist(widget.stockId, market: widget.market);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${widget.stockId} 已加入自選')),

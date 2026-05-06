@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/market_provider.dart';
+import '../providers/locale_provider.dart';
 import '../providers/watchlist_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/notification_provider.dart';
@@ -77,9 +78,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Consumer<MarketProvider>(
-          builder: (context, marketProvider, child) {
-            return Text('${marketProvider.marketDisplayName} AI 投資建議');
+        title: Consumer2<MarketProvider, LocaleProvider>(
+          builder: (context, marketProvider, locale, child) {
+            final marketLabel = marketProvider.isUSMarket
+                ? locale.tr('美股', 'US')
+                : locale.tr('台股', 'TW');
+            return Text(locale.tr(
+              '$marketLabel AI 投資建議',
+              '$marketLabel AI Insights',
+            ));
           },
         ),
         actions: [
@@ -97,9 +104,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: _screens[_selectedIndex],
-      bottomNavigationBar: Consumer<MarketProvider>(
-        builder: (context, marketProvider, child) {
-          final isUS = marketProvider.isUSMarket;
+      bottomNavigationBar: Consumer<LocaleProvider>(
+        builder: (context, locale, child) {
           return BottomNavigationBar(
             type: BottomNavigationBarType.fixed,
             currentIndex: _selectedIndex,
@@ -113,19 +119,19 @@ class _HomeScreenState extends State<HomeScreen> {
             items: [
               BottomNavigationBarItem(
                 icon: const Icon(Icons.dashboard),
-                label: isUS ? 'Home' : '首頁',
+                label: locale.tr('首頁', 'Home'),
               ),
               BottomNavigationBarItem(
                 icon: const Icon(Icons.star),
-                label: isUS ? 'Watchlist' : '自選股',
+                label: locale.tr('自選股', 'Watchlist'),
               ),
               BottomNavigationBarItem(
                 icon: const Icon(Icons.lightbulb),
-                label: isUS ? 'AI Tips' : 'AI 建議',
+                label: locale.tr('AI 建議', 'AI Tips'),
               ),
               BottomNavigationBarItem(
                 icon: const Icon(Icons.notifications),
-                label: isUS ? 'Alerts' : '警示',
+                label: locale.tr('警示', 'Alerts'),
               ),
             ],
           );
@@ -245,14 +251,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               },
             ),
-            Consumer<MarketProvider>(
-              builder: (context, marketProvider, child) {
-                final isUS = marketProvider.isUSMarket;
+            Consumer<LocaleProvider>(
+              builder: (context, locale, child) {
                 return Column(
                   children: [
                     ListTile(
                       leading: const Icon(Icons.swap_horiz),
-                      title: Text(isUS ? 'Paper Trading' : '模擬交易'),
+                      title: Text(locale.tr('模擬交易', 'Paper Trading')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.push(
@@ -265,7 +270,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.pie_chart),
-                      title: Text(isUS ? 'Portfolio' : '投資組合'),
+                      title: Text(locale.tr('投資組合', 'Portfolio')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.pushNamed(context, '/portfolio');
@@ -273,7 +278,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.grid_view),
-                      title: Text(isUS ? 'Market Heatmap' : '市場熱力圖'),
+                      title: Text(locale.tr('市場熱力圖', 'Market Heatmap')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.pushNamed(context, '/market-heatmap');
@@ -281,7 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.filter_list),
-                      title: Text(isUS ? 'Stock Screener' : '股票篩選'),
+                      title: Text(locale.tr('股票篩選', 'Stock Screener')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.push(
@@ -294,7 +299,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.compare_arrows),
-                      title: Text(isUS ? 'Stock Compare' : '個股比較'),
+                      title: Text(locale.tr('個股比較', 'Stock Compare')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.pushNamed(context, '/stock-compare');
@@ -302,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.calendar_month),
-                      title: Text(isUS ? 'Calendar' : '財報/除息日曆'),
+                      title: Text(locale.tr('財報/除息日曆', 'Calendar')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.pushNamed(context, '/calendar');
@@ -310,7 +315,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.analytics),
-                      title: Text(isUS ? 'AI Prediction Stats' : 'AI 預測準確度'),
+                      title: Text(locale.tr('AI 預測準確度', 'AI Prediction Stats')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.pushNamed(context, '/prediction-stats');
@@ -318,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.book),
-                      title: Text(isUS ? 'Trading Diary' : '交易日記'),
+                      title: Text(locale.tr('交易日記', 'Trading Diary')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.pushNamed(context, '/trading-diary');
@@ -326,7 +331,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.speed),
-                      title: Text(isUS ? 'Strategy Backtest' : '策略回測'),
+                      title: Text(locale.tr('策略回測', 'Strategy Backtest')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.pushNamed(context, '/backtest');
@@ -335,7 +340,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Divider(),
                     ListTile(
                       leading: const Icon(Icons.newspaper),
-                      title: Text(isUS ? 'Financial News' : '財經新聞'),
+                      title: Text(locale.tr('財經新聞', 'Financial News')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.push(
@@ -348,7 +353,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.forum),
-                      title: Text(isUS ? 'Social Sentiment' : '社群情緒'),
+                      title: Text(locale.tr('社群情緒', 'Social Sentiment')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.push(
@@ -365,7 +370,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (authProvider.isAdmin) {
                           return ListTile(
                             leading: const Icon(Icons.admin_panel_settings),
-                            title: Text(isUS ? 'Admin Panel' : '管理後台'),
+                            title: Text(locale.tr('管理後台', 'Admin Panel')),
                             onTap: () {
                               Navigator.pop(context);
                               Navigator.pushNamed(context, '/admin');
@@ -377,7 +382,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.trending_up),
-                      title: Text(isUS ? 'Industry Trends' : '產業趨勢'),
+                      title: Text(locale.tr('產業趨勢', 'Industry Trends')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.push(
@@ -393,7 +398,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         return ListTile(
                           leading: Icon(themeProvider.themeModeIcon),
                           title: Text(themeProvider.themeModeLabel),
-                          subtitle: const Text('點擊切換主題'),
+                          subtitle: Text(locale.tr('點擊切換主題', 'Tap to toggle theme')),
                           onTap: () {
                             themeProvider.toggleTheme();
                           },
@@ -402,7 +407,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.settings),
-                      title: Text(isUS ? 'Settings' : '設定'),
+                      title: Text(locale.tr('設定', 'Settings')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.pushNamed(context, '/settings');
@@ -410,7 +415,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.privacy_tip),
-                      title: Text(isUS ? 'Privacy Policy' : '隱私權政策'),
+                      title: Text(locale.tr('隱私權政策', 'Privacy Policy')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.pushNamed(context, '/privacy');
@@ -418,7 +423,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.description),
-                      title: Text(isUS ? 'Terms of Service' : '使用條款'),
+                      title: Text(locale.tr('使用條款', 'Terms of Service')),
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.pushNamed(context, '/terms');
@@ -427,7 +432,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Divider(),
                     ListTile(
                       leading: const Icon(Icons.logout),
-                      title: Text(isUS ? 'Logout' : '登出'),
+                      title: Text(locale.tr('登出', 'Logout')),
                       onTap: () async {
                         await context.read<AuthProvider>().logout();
                         if (context.mounted) {

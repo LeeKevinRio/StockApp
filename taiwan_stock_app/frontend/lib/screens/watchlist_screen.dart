@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/watchlist_provider.dart';
 import '../providers/market_provider.dart';
+import '../providers/locale_provider.dart';
 import '../services/api_service.dart';
 import '../widgets/stock_card.dart';
 import '../widgets/common/sort_filter_bar.dart';
@@ -55,11 +56,11 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<MarketProvider>(
-      builder: (context, marketProvider, child) {
+    return Consumer2<MarketProvider, LocaleProvider>(
+      builder: (context, marketProvider, locale, child) {
         return Scaffold(
       appBar: AppBar(
-        title: Text(marketProvider.isUSMarket ? 'Watchlist' : '自選股'),
+        title: Text(locale.tr('自選股', 'Watchlist')),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
@@ -87,7 +88,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
 
           if (provider.error != null) {
             return ErrorView(
-              message: '載入自選股失敗',
+              message: locale.tr('載入自選股失敗', 'Failed to load watchlist'),
               details: provider.error,
               onRetry: () => provider.loadWatchlist(),
             );
@@ -100,16 +101,16 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                 children: [
                   Icon(Icons.star_border, size: 64, color: Theme.of(context).disabledColor),
                   const SizedBox(height: 16),
-                  Text(marketProvider.isUSMarket ? 'No stocks in watchlist' : '尚無自選股'),
+                  Text(locale.tr('尚無自選股', 'No stocks in watchlist')),
                   Text(
-                    marketProvider.isUSMarket ? 'Tap + to add stocks' : '點擊右上角 + 新增股票',
+                    locale.tr('點擊右上角 + 新增股票', 'Tap + to add stocks'),
                     style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton.icon(
                     onPressed: () => Navigator.pushNamed(context, '/search'),
                     icon: const Icon(Icons.search),
-                    label: Text(marketProvider.isUSMarket ? 'Search Stocks' : '搜尋股票'),
+                    label: Text(locale.tr('搜尋股票', 'Search Stocks')),
                   ),
                 ],
               ),
@@ -129,7 +130,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                       Padding(
                         padding: const EdgeInsets.only(right: 6, top: 6, bottom: 6),
                         child: ChoiceChip(
-                          label: Text(marketProvider.isUSMarket ? 'All' : '全部'),
+                          label: Text(locale.tr('全部', 'All')),
                           selected: _selectedGroupId == null,
                           onSelected: (_) => setState(() => _selectedGroupId = null),
                           visualDensity: VisualDensity.compact,
@@ -168,9 +169,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  marketProvider.isUSMarket
-                      ? '${provider.items.length} stocks'
-                      : '共 ${provider.items.length} 檔股票',
+                  locale.tr(
+                    '共 ${provider.items.length} 檔股票',
+                    '${provider.items.length} stocks',
+                  ),
                   style: TextStyle(
                     fontSize: 12,
                     color: Theme.of(context).textTheme.bodySmall?.color,
@@ -203,21 +205,22 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                           return await showDialog<bool>(
                             context: context,
                             builder: (context) => AlertDialog(
-                              title: Text(marketProvider.isUSMarket ? 'Confirm Delete' : '確認刪除'),
+                              title: Text(locale.tr('確認刪除', 'Confirm Delete')),
                               content: Text(
-                                marketProvider.isUSMarket
-                                    ? 'Remove ${stock.stockId} from watchlist?'
-                                    : '確定要從自選股移除 ${stock.name} (${stock.stockId}) 嗎？',
+                                locale.tr(
+                                  '確定要從自選股移除 ${stock.name} (${stock.stockId}) 嗎？',
+                                  'Remove ${stock.name} (${stock.stockId}) from watchlist?',
+                                ),
                               ),
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.pop(context, false),
-                                  child: Text(marketProvider.isUSMarket ? 'Cancel' : '取消'),
+                                  child: Text(locale.tr('取消', 'Cancel')),
                                 ),
                                 TextButton(
                                   onPressed: () => Navigator.pop(context, true),
                                   child: Text(
-                                    marketProvider.isUSMarket ? 'Delete' : '刪除',
+                                    locale.tr('刪除', 'Delete'),
                                     style: const TextStyle(color: Colors.red),
                                   ),
                                 ),
@@ -230,12 +233,13 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                marketProvider.isUSMarket
-                                    ? '${stock.stockId} removed'
-                                    : '${stock.name} 已移除',
+                                locale.tr(
+                                  '${stock.name} 已移除',
+                                  '${stock.stockId} removed',
+                                ),
                               ),
                               action: SnackBarAction(
-                                label: marketProvider.isUSMarket ? 'Undo' : '復原',
+                                label: locale.tr('復原', 'Undo'),
                                 onPressed: () {
                                   provider.addStock(
                                     stock.stockId,
@@ -258,7 +262,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                               },
                             );
                           },
-                          onDelete: () => _confirmDelete(context, stock.stockId, marketProvider.isUSMarket),
+                          onDelete: () => _confirmDelete(context, stock.stockId, locale),
                         ),
                       );
                     },
@@ -329,22 +333,24 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   void _showAddStockDialog(BuildContext context) {
     final controller = TextEditingController();
     final marketProvider = context.read<MarketProvider>();
-    final isUS = marketProvider.isUSMarket;
+    final locale = context.read<LocaleProvider>();
+    // 範例代碼依市場決定（資料），文案依語系決定
+    final exampleCode = marketProvider.isUSMarket ? 'AAPL' : '2330';
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(isUS ? 'Add to Watchlist' : '新增自選股'),
+        title: Text(locale.tr('新增自選股', 'Add to Watchlist')),
         content: TextField(
           controller: controller,
           decoration: InputDecoration(
-            labelText: isUS ? 'Stock Symbol' : '股票代碼',
-            hintText: isUS ? 'e.g., AAPL' : '例如: 2330',
+            labelText: locale.tr('股票代碼', 'Stock Symbol'),
+            hintText: locale.tr('例如: $exampleCode', 'e.g., $exampleCode'),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(isUS ? 'Cancel' : '取消'),
+            child: Text(locale.tr('取消', 'Cancel')),
           ),
           TextButton(
             onPressed: () async {
@@ -358,42 +364,53 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                   if (context.mounted) {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(isUS ? 'Added to watchlist' : '已新增至自選股')),
+                      SnackBar(
+                        content: Text(locale.tr(
+                          '已新增至自選股',
+                          'Added to watchlist',
+                        )),
+                      ),
                     );
                   }
                 } catch (e) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(isUS ? 'Error: $e' : '錯誤: $e')),
+                      SnackBar(content: Text(locale.tr('錯誤: $e', 'Error: $e'))),
                     );
                   }
                 }
               }
             },
-            child: Text(isUS ? 'Add' : '新增'),
+            child: Text(locale.tr('新增', 'Add')),
           ),
         ],
       ),
     );
   }
 
-  void _confirmDelete(BuildContext context, String stockId, bool isUS) {
+  void _confirmDelete(BuildContext context, String stockId, LocaleProvider locale) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(isUS ? 'Confirm Delete' : '確認刪除'),
-        content: Text(isUS ? 'Remove from watchlist?' : '確定要從自選股移除嗎？'),
+        title: Text(locale.tr('確認刪除', 'Confirm Delete')),
+        content: Text(locale.tr(
+          '確定要從自選股移除嗎？',
+          'Remove from watchlist?',
+        )),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(isUS ? 'Cancel' : '取消'),
+            child: Text(locale.tr('取消', 'Cancel')),
           ),
           TextButton(
             onPressed: () {
               context.read<WatchlistProvider>().removeStock(stockId);
               Navigator.pop(context);
             },
-            child: Text(isUS ? 'Delete' : '刪除', style: const TextStyle(color: Colors.red)),
+            child: Text(
+              locale.tr('刪除', 'Delete'),
+              style: const TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
