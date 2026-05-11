@@ -185,11 +185,11 @@ def get_ai_suggestions(
         elif generate_missing:
             # Only generate new suggestion if explicitly requested
             try:
-                # 配額檢查：超額時 break，回傳已有結果
+                # 配額不足時跳過這支股票即可，繼續處理後面（後面可能還有快取命中的）
                 try:
                     quota.ensure_available()
                 except HTTPException:
-                    break
+                    continue
 
                 # Create service instance based on user's subscription tier
                 suggestion_service = AISuggestionService.for_user(current_user, db)

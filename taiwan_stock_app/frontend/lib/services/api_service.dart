@@ -28,8 +28,11 @@ class ApiService {
   void Function()? onUnauthorized;
   bool _unauthorizedHandled = false;
 
-  /// HTTP 請求逾時時間
+  /// 一般 HTTP 請求逾時時間
   static const Duration _timeout = Duration(seconds: 60);
+
+  /// 長任務（AI 生成、批次掃描等）的逾時，避免後端還在跑就被切斷
+  static const Duration _longTimeout = Duration(seconds: 300);
 
   ApiService({String? baseUrl}) : baseUrl = baseUrl ?? AppConfig.apiBaseUrl;
 
@@ -44,22 +47,22 @@ class ApiService {
           'Authorization': 'Bearer $_authToken',
       };
 
-  // ==================== HTTP 請求封裝（含 30 秒逾時） ====================
+  // ==================== HTTP 請求封裝（預設 60 秒逾時；可指定 [timeout] 覆寫） ====================
 
-  Future<http.Response> _get(Uri url, {Map<String, String>? headers}) =>
-      http.get(url, headers: headers).timeout(_timeout);
+  Future<http.Response> _get(Uri url, {Map<String, String>? headers, Duration? timeout}) =>
+      http.get(url, headers: headers).timeout(timeout ?? _timeout);
 
-  Future<http.Response> _post(Uri url, {Map<String, String>? headers, Object? body}) =>
-      http.post(url, headers: headers, body: body).timeout(_timeout);
+  Future<http.Response> _post(Uri url, {Map<String, String>? headers, Object? body, Duration? timeout}) =>
+      http.post(url, headers: headers, body: body).timeout(timeout ?? _timeout);
 
-  Future<http.Response> _put(Uri url, {Map<String, String>? headers, Object? body}) =>
-      http.put(url, headers: headers, body: body).timeout(_timeout);
+  Future<http.Response> _put(Uri url, {Map<String, String>? headers, Object? body, Duration? timeout}) =>
+      http.put(url, headers: headers, body: body).timeout(timeout ?? _timeout);
 
-  Future<http.Response> _delete(Uri url, {Map<String, String>? headers}) =>
-      http.delete(url, headers: headers).timeout(_timeout);
+  Future<http.Response> _delete(Uri url, {Map<String, String>? headers, Duration? timeout}) =>
+      http.delete(url, headers: headers).timeout(timeout ?? _timeout);
 
-  Future<http.Response> _patch(Uri url, {Map<String, String>? headers, Object? body}) =>
-      http.patch(url, headers: headers, body: body).timeout(_timeout);
+  Future<http.Response> _patch(Uri url, {Map<String, String>? headers, Object? body, Duration? timeout}) =>
+      http.patch(url, headers: headers, body: body).timeout(timeout ?? _timeout);
 
   /// 安全的 JSON 解析，防止伺服器回傳格式錯誤時崩潰
   dynamic _safeJsonDecode(String source) {
@@ -346,12 +349,16 @@ class ApiService {
   // ==================== AI 相關 ====================
 
   /// 獲取 AI 建議
-  /// [generateMissing] 為 true 時會為沒有建議的股票生成新建議（較慢）
+  /// [generateMissing] 為 true 時會為沒有建議的股票生成新建議（較慢，用 longTimeout）
   Future<List<AISuggestion>> getAISuggestions({bool generateMissing = false}) async {
     final uri = Uri.parse('$baseUrl/api/ai/suggestions').replace(
       queryParameters: {'generate_missing': generateMissing.toString()},
     );
-    final response = await _get(uri, headers: _headers);
+    final response = await _get(
+      uri,
+      headers: _headers,
+      timeout: generateMissing ? _longTimeout : null,
+    );
     _checkResponse(response);
     final List<dynamic> data = _safeJsonDecode(response.body);
     return data.map((e) => AISuggestion.fromJson(e)).toList();
@@ -361,6 +368,7 @@ class ApiService {
     final response = await _get(
       Uri.parse('$baseUrl/api/ai/suggestions/$stockId?market=$market&refresh=$refresh'),
       headers: _headers,
+      timeout: _longTimeout,
     );
     _checkResponse(response);
     return AISuggestion.fromJson(_safeJsonDecode(response.body));
