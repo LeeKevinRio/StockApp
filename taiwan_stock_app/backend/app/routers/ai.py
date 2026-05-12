@@ -2,6 +2,7 @@
 AI router - AI 建議與問答（支援台股與美股）
 """
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
@@ -9,6 +10,10 @@ from typing import List, Optional
 from datetime import date, timedelta
 
 from app.rate_limit import limiter
+
+# 自選股 AI 平行生成的同時併發數
+# 不能太高：避免被 Gemini RPM 限制 & 留餘量給其他使用者
+_AI_PARALLEL_WORKERS = 3
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +130,9 @@ def get_ai_suggestions(
 
     results = []
     today = date.today()
+    pending: List[tuple] = []  # 需要呼叫 AI 生成的 (stock_id, stock_name, market)
 
+    # Phase 1: 收集快取命中與待生成清單
     for wl, stock in watchlist:
         # Determine market region from stock data
         market = stock.market_region if stock.market_region else "TW"
@@ -183,82 +190,112 @@ def get_ai_suggestions(
                 ndp["target_date"] = _get_next_trading_date_str(market)
             results.append(AISuggestion(**suggestion_dict))
         elif generate_missing:
-            # Only generate new suggestion if explicitly requested
-            try:
-                # 配額不足時跳過這支股票即可，繼續處理後面（後面可能還有快取命中的）
+            pending.append((stock.stock_id, stock.name, market))
+
+    # Phase 2: 平行呼叫 AI 生成缺漏的股票
+    if pending:
+        # 依剩餘配額裁切（無限額 = 不裁切）
+        if not quota.is_unlimited:
+            available = max(0, quota.remaining)
+            if available < len(pending):
+                logger.info(
+                    f"AI quota limits batch: {len(pending)} pending → {available} will be generated"
+                )
+                pending = pending[:available]
+
+        if pending:
+            suggestion_service = AISuggestionService.for_user(current_user, db)
+
+            def _generate(stock_id: str, stock_name: str, market: str):
+                """在 worker thread 中呼叫 AI；不碰 db session（thread-safety）"""
                 try:
-                    quota.ensure_available()
-                except HTTPException:
+                    data = suggestion_service.generate_suggestion(
+                        stock_id, stock_name, market=market
+                    )
+                    return (stock_id, stock_name, market, data, None)
+                except Exception as exc:
+                    return (stock_id, stock_name, market, None, exc)
+
+            workers = min(_AI_PARALLEL_WORKERS, len(pending))
+            logger.info(
+                f"AI suggestions: user={current_user.id} generating {len(pending)} stocks in parallel (workers={workers})"
+            )
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = [
+                    executor.submit(_generate, sid, sname, mkt)
+                    for sid, sname, mkt in pending
+                ]
+                generated = [f.result() for f in as_completed(futures)]
+
+            # Phase 3: 在主執行緒序列化寫入 DB（session 非 thread-safe）
+            for stock_id, stock_name, market, suggestion_data, gen_error in generated:
+                if gen_error or not suggestion_data:
+                    logger.error(f"Error generating suggestion for {stock_id}: {gen_error}")
                     continue
 
-                # Create service instance based on user's subscription tier
-                suggestion_service = AISuggestionService.for_user(current_user, db)
-                suggestion_data = suggestion_service.generate_suggestion(
-                    stock.stock_id, stock.name, market=market
-                )
-
-                # Check again if report exists (race condition protection)
-                existing = (
-                    db.query(AIReport)
-                    .filter(
-                        AIReport.user_id == current_user.id,
-                        AIReport.stock_id == stock.stock_id,
-                        AIReport.report_date == today,
+                try:
+                    # Check again if report exists (race condition protection)
+                    existing = (
+                        db.query(AIReport)
+                        .filter(
+                            AIReport.user_id == current_user.id,
+                            AIReport.stock_id == stock_id,
+                            AIReport.report_date == today,
+                        )
+                        .first()
                     )
-                    .first()
-                )
 
-                if not existing:
-                    # Save to database（完整欄位，與單股 endpoint 一致）
-                    report = AIReport(
-                        user_id=current_user.id,
-                        stock_id=stock.stock_id,
-                        report_date=today,
-                        suggestion=suggestion_data["suggestion"],
-                        confidence=suggestion_data["confidence"],
-                        current_price=suggestion_data.get("current_price"),
-                        target_price=suggestion_data.get("target_price"),
-                        stop_loss_price=suggestion_data.get("stop_loss_price"),
-                        reasoning=suggestion_data["reasoning"],
-                        key_factors=suggestion_data.get("key_factors", []),
-                        entry_price_min=suggestion_data.get("entry_price_min"),
-                        entry_price_max=suggestion_data.get("entry_price_max"),
-                        take_profit_targets=suggestion_data.get("take_profit_targets"),
-                        risk_level=suggestion_data.get("risk_level"),
-                        time_horizon=suggestion_data.get("time_horizon"),
-                        predicted_change_percent=suggestion_data.get("predicted_change_percent"),
-                        next_day_prediction=suggestion_data.get("next_day_prediction"),
-                    )
-                    db.add(report)
-                    db.commit()
+                    if not existing:
+                        # Save to database（完整欄位，與單股 endpoint 一致）
+                        report = AIReport(
+                            user_id=current_user.id,
+                            stock_id=stock_id,
+                            report_date=today,
+                            suggestion=suggestion_data["suggestion"],
+                            confidence=suggestion_data["confidence"],
+                            current_price=suggestion_data.get("current_price"),
+                            target_price=suggestion_data.get("target_price"),
+                            stop_loss_price=suggestion_data.get("stop_loss_price"),
+                            reasoning=suggestion_data["reasoning"],
+                            key_factors=suggestion_data.get("key_factors", []),
+                            entry_price_min=suggestion_data.get("entry_price_min"),
+                            entry_price_max=suggestion_data.get("entry_price_max"),
+                            take_profit_targets=suggestion_data.get("take_profit_targets"),
+                            risk_level=suggestion_data.get("risk_level"),
+                            time_horizon=suggestion_data.get("time_horizon"),
+                            predicted_change_percent=suggestion_data.get("predicted_change_percent"),
+                            next_day_prediction=suggestion_data.get("next_day_prediction"),
+                        )
+                        db.add(report)
+                        db.commit()
 
-                    # 儲存預測記錄（用於準確度追蹤，與單股 endpoint 一致）
-                    try:
-                        next_day_pred = suggestion_data.get("next_day_prediction")
-                        if next_day_pred:
-                            analysis_scores = suggestion_data.get("analysis_scores", {})
-                            latest_price = analysis_scores.get("latest_price", 0) or 0
-                            ai_provider = suggestion_data.get("ai_provider", "Unknown")
+                        # 儲存預測記錄（用於準確度追蹤，與單股 endpoint 一致）
+                        try:
+                            next_day_pred = suggestion_data.get("next_day_prediction")
+                            if next_day_pred:
+                                analysis_scores = suggestion_data.get("analysis_scores", {})
+                                latest_price = analysis_scores.get("latest_price", 0) or 0
+                                ai_provider = suggestion_data.get("ai_provider", "Unknown")
 
-                            prediction_tracker.save_prediction(
-                                db=db,
-                                stock_id=stock.stock_id,
-                                stock_name=stock.name,
-                                market=market,
-                                prediction_data=next_day_pred,
-                                base_close_price=latest_price,
-                                ai_provider=ai_provider
-                            )
-                            logger.info(f"Saved prediction record for {stock.stock_id}")
-                    except Exception as pred_error:
-                        logger.warning(f"Failed to save prediction record for {stock.stock_id}: {pred_error}")
+                                prediction_tracker.save_prediction(
+                                    db=db,
+                                    stock_id=stock_id,
+                                    stock_name=stock_name,
+                                    market=market,
+                                    prediction_data=next_day_pred,
+                                    base_close_price=latest_price,
+                                    ai_provider=ai_provider
+                                )
+                                logger.info(f"Saved prediction record for {stock_id}")
+                        except Exception as pred_error:
+                            logger.warning(f"Failed to save prediction record for {stock_id}: {pred_error}")
 
-                quota.increment()
-                results.append(AISuggestion(**suggestion_data))
-            except Exception as e:
-                db.rollback()  # Important: rollback on error
-                logger.error(f"Error generating suggestion for {stock.stock_id}: {e}")
-                continue
+                    quota.increment()
+                    results.append(AISuggestion(**suggestion_data))
+                except Exception as e:
+                    db.rollback()  # Important: rollback on error
+                    logger.error(f"Error saving suggestion for {stock_id}: {e}")
+                    continue
 
     return results
 
