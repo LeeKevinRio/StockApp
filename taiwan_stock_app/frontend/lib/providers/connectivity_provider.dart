@@ -9,6 +9,15 @@ class ConnectivityProvider extends ChangeNotifier {
   bool _isOnline = true;
   Timer? _timer;
 
+  /// 連續失敗次數，需累積到門檻才判定離線，避免單次逾時誤報
+  int _consecutiveFailures = 0;
+
+  /// 連續失敗幾次才判定離線（Render 冷啟動 / 偶發慢回應的容錯）
+  static const int _failureThreshold = 3;
+
+  /// 單次檢查逾時時間（後端 /health 會連 DB，冷啟動更久，需放寬）
+  static const Duration _checkTimeout = Duration(seconds: 15);
+
   bool get isOnline => _isOnline;
   bool get isOffline => !_isOnline;
 
@@ -24,9 +33,26 @@ class ConnectivityProvider extends ChangeNotifier {
     try {
       final response = await http
           .get(Uri.parse('${AppConfig.apiBaseUrl}/health'))
-          .timeout(const Duration(seconds: 5));
-      _setOnline(response.statusCode == 200);
+          .timeout(_checkTimeout);
+      if (response.statusCode == 200) {
+        _onSuccess();
+      } else {
+        _onFailure();
+      }
     } catch (_) {
+      _onFailure();
+    }
+  }
+
+  void _onSuccess() {
+    _consecutiveFailures = 0;
+    _setOnline(true);
+  }
+
+  void _onFailure() {
+    _consecutiveFailures++;
+    // 只有連續失敗達門檻才判定離線，避免偶發逾時誤報
+    if (_consecutiveFailures >= _failureThreshold) {
       _setOnline(false);
     }
   }
