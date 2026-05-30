@@ -26,7 +26,7 @@ class FugleFetcher:
     def get_realtime_quote(self, stock_id: str) -> Dict:
         """取得即時報價"""
         url = f"{self.REST_BASE_URL}/intraday/quote/{stock_id}"
-        response = requests.get(url, headers=self.headers)
+        response = requests.get(url, headers=self.headers, timeout=10)
         response.raise_for_status()
         data = response.json()
 

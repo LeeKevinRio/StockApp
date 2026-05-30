@@ -162,6 +162,7 @@ class TWSEFetcher:
         response = requests.get(
             self.DAILY_URL,
             params={"date": date_str, "stockNo": stock_id, "response": "json"},
+            timeout=10,
         )
         response.raise_for_status()
         data = response.json()
@@ -185,7 +186,7 @@ class TWSEFetcher:
         self._rate_limit()
 
         response = requests.get(
-            self.INSTITUTIONAL_URL, params={"date": date_str, "response": "json"}
+            self.INSTITUTIONAL_URL, params={"date": date_str, "response": "json"}, timeout=10
         )
         response.raise_for_status()
         data = response.json()

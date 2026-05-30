@@ -18,7 +18,9 @@ class FinMindFetcher:
     def _request(self, dataset: str, params: dict) -> pd.DataFrame:
         """統一請求方法"""
         params.update({"dataset": dataset, "token": self.token})
-        response = requests.get(self.BASE_URL, params=params)
+        # 必須設 timeout：此方法是所有 FinMind 呼叫的入口，每檔股票會打多次，
+        # 若無 timeout 一旦遠端卡住，worker thread 會無限期阻塞 → AI 預測整個掛住
+        response = requests.get(self.BASE_URL, params=params, timeout=15)
         response.raise_for_status()
         data = response.json()
         if data["status"] != 200:
