@@ -10,7 +10,20 @@ from fastapi.responses import JSONResponse
 
 
 def _key_func(request: Request) -> str:
-    """從 request 取得 client IP 作為 rate limit key"""
+    """
+    取得 rate limit 的識別 key。
+
+    部署在 Render／Railway 等雲端代理後面時，直接連線的來源 IP 會固定是代理 IP，
+    導致所有使用者被視為同一人、限流形同虛設。
+    因此優先採用代理帶上來的 X-Forwarded-For 最前面那個(原始 client IP)，
+    取不到時才退回直接連線 IP。
+    """
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        # 格式可能是 "client, proxy1, proxy2"，取第一個非空 IP
+        client_ip = forwarded.split(",")[0].strip()
+        if client_ip:
+            return client_ip
     return get_remote_address(request)
 
 

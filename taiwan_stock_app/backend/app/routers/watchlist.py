@@ -1,6 +1,7 @@
 """
 Watchlist router - 支援台股(TW)與美股(US)，含分組功能
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -12,6 +13,8 @@ from app.models import User, Watchlist, WatchlistGroup, Stock
 from app.schemas import WatchlistItem, WatchlistAdd
 from app.services import StockDataService
 from app.routers.auth import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 stock_service = StockDataService()
@@ -78,8 +81,19 @@ def get_watchlist(
             tw_stocks.append(stock.stock_id)
 
     # 批量獲取報價
-    tw_prices = stock_service.get_realtime_prices_batch(tw_stocks, market="TW") if tw_stocks else {}
-    us_prices = stock_service.get_realtime_prices_batch(us_stocks, market="US") if us_stocks else {}
+    # 用錯誤隔離包起來：報價來源(外部 API)若整批失敗，仍要回傳自選股清單
+    # （下方迴圈對缺報價的個股已有 current_price=0 的 fallback），避免整頁掛掉
+    def _safe_batch(stock_ids, market):
+        if not stock_ids:
+            return {}
+        try:
+            return stock_service.get_realtime_prices_batch(stock_ids, market=market)
+        except Exception as e:
+            logger.warning(f"批量報價失敗 (market={market}, {len(stock_ids)} 檔): {e}")
+            return {}
+
+    tw_prices = _safe_batch(tw_stocks, "TW")
+    us_prices = _safe_batch(us_stocks, "US")
 
     # 合併報價數據
     all_prices = {**tw_prices, **us_prices}
