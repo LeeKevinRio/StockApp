@@ -43,6 +43,18 @@ class MarketOverview {
     );
   }
 
+  Map<String, dynamic> toJson() => {
+        'index_value': indexValue,
+        'index_change': indexChange,
+        'change_percent': changePercent,
+        'total_volume': totalVolume,
+        'up_count': upCount,
+        'down_count': downCount,
+        'flat_count': flatCount,
+        'index_name': indexName,
+        'update_time': updateTime.toIso8601String(),
+      };
+
   /// 創建台股預設市場概況
   factory MarketOverview.taiwanDefault() {
     return MarketOverview(
@@ -102,6 +114,14 @@ class TopMover {
       market: json['market'] as String? ?? 'TW',
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'stock_id': stockId,
+        'name': name,
+        'price': price,
+        'change_percent': changePercent,
+        'market': market,
+      };
 }
 
 /// 自選股摘要
