@@ -329,6 +329,7 @@ class AISuggestionService:
             "social": social_analysis,
             "macro": macro_analysis,
             "prices_summary": prices.tail(10).to_dict("records") if len(prices) > 0 else [],
+            "_prices_df": prices,  # 完整股價 df，供市場狀態偵測複用，避免重抓
         }
 
     def _collect_tw_stock_data(self, stock_id: str, days: int = 60) -> Dict:
@@ -441,6 +442,7 @@ class AISuggestionService:
             "social": social_analysis,
             "macro": macro_analysis,
             "prices_summary": prices.tail(10).to_dict("records") if len(prices) > 0 else [],
+            "_prices_df": prices,  # 完整股價 df，供市場狀態偵測複用，避免重抓
         }
 
     def _calculate_technical_indicators(self, prices) -> Dict:
@@ -1838,27 +1840,10 @@ class AISuggestionService:
             data['_db'] = db  # 傳遞 db 給 prompt builder 用
 
             # ===== 市場狀態偵測（牛/熊/盤整）=====
-            prices_df = None
-            if market == "TW":
-                try:
-                    end_d = date.today()
-                    start_d = end_d - timedelta(days=60)
-                    prices_df = self.finmind.get_stock_price(
-                        stock_id, start_d.strftime("%Y-%m-%d"), end_d.strftime("%Y-%m-%d")
-                    )
-                    if len(prices_df) > 0:
-                        if 'max' in prices_df.columns:
-                            prices_df['high'] = prices_df['max']
-                        if 'min' in prices_df.columns:
-                            prices_df['low'] = prices_df['min']
-                except Exception:
-                    prices_df = pd.DataFrame()
-            else:
-                try:
-                    price_list = self.us_fetcher.get_stock_price(stock_id, period="60d")
-                    prices_df = pd.DataFrame(price_list) if price_list else pd.DataFrame()
-                except Exception:
-                    prices_df = pd.DataFrame()
+            # 直接複用 collect_stock_data 已抓到的股價 df，避免重複呼叫外部 API
+            prices_df = data.pop('_prices_df', None)
+            if prices_df is None:
+                prices_df = pd.DataFrame()
 
             market_regime = self.detect_market_regime(prices_df) if prices_df is not None and len(prices_df) > 0 else {"regime": "unknown", "trend_strength": 0, "volatility_regime": "normal"}
             data['market_regime'] = market_regime

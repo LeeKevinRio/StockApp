@@ -2,6 +2,7 @@
 AI router - AI 建議與問答（支援台股與美股）
 """
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -11,9 +12,13 @@ from datetime import date, timedelta
 
 from app.rate_limit import limiter
 
-# 自選股 AI 平行生成的同時併發數
+# 自選股 AI 平行生成的同時併發數（可用環境變數 AI_PARALLEL_WORKERS 調整）
 # 不能太高：避免被 Gemini RPM 限制 & 留餘量給其他使用者
-_AI_PARALLEL_WORKERS = 3
+# 預設 4：macro 已改全域共用快取後，每檔變快，併發 4 對 Gemini RPM 仍安全
+try:
+    _AI_PARALLEL_WORKERS = max(1, int(os.getenv("AI_PARALLEL_WORKERS", "4")))
+except ValueError:
+    _AI_PARALLEL_WORKERS = 4
 
 logger = logging.getLogger(__name__)
 

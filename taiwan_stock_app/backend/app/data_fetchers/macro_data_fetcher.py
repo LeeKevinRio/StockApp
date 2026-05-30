@@ -5,6 +5,7 @@
 """
 import yfinance as yf
 import time
+import threading
 import logging
 from typing import Dict, Optional
 from datetime import datetime, timedelta
@@ -25,10 +26,15 @@ class MacroDataFetcher:
         "gold": "GC=F",         # 黃金期貨
     }
 
+    # 宏觀數據是「全市場共用」的，與個股無關。
+    # 改用 class-level 共用快取，讓所有 request／使用者／平行執行緒共享同一份，
+    # 避免每檔股票、每次預測都重抓 VIX/美元指數/期貨（最大的耗時來源）。
+    _shared_cache: Dict = {}
+    _cache_lock = threading.Lock()
+
     def __init__(self):
         self.last_request_time = 0
         self.request_interval = 0.3
-        self._cache = {}
         self._cache_ttl = 1800  # 快取 30 分鐘
 
     def _rate_limit(self):
@@ -43,10 +49,13 @@ class MacroDataFetcher:
         cache_key = f"macro_{symbol}_{period}"
         now = time.time()
 
-        if cache_key in self._cache:
-            cached_data, cached_time = self._cache[cache_key]
-            if now - cached_time < self._cache_ttl:
-                return cached_data
+        # 先讀共用快取（命中即回，跨 request 共享）
+        with self._cache_lock:
+            cached = self._shared_cache.get(cache_key)
+            if cached is not None:
+                cached_data, cached_time = cached
+                if now - cached_time < self._cache_ttl:
+                    return cached_data
 
         self._rate_limit()
 
@@ -75,7 +84,8 @@ class MacroDataFetcher:
                 ),
             }
 
-            self._cache[cache_key] = (result, now)
+            with self._cache_lock:
+                self._shared_cache[cache_key] = (result, now)
             return result
 
         except Exception as e:
@@ -278,6 +288,16 @@ class MacroDataFetcher:
         綜合宏觀評分：結合市場指標 + FRED 經濟數據
         市場指標權重 60%，FRED 經濟指標權重 40%
         """
+        # 整體結果也是全市場共用，直接快取避免每檔股票都重算 + 重打 FRED
+        combined_key = "macro_combined_score"
+        now = time.time()
+        with self._cache_lock:
+            cached = self._shared_cache.get(combined_key)
+            if cached is not None:
+                cached_data, cached_time = cached
+                if now - cached_time < self._cache_ttl:
+                    return cached_data
+
         market_result = self.calculate_macro_score()
         market_score = market_result.get("macro_score", 0)
 
@@ -311,6 +331,9 @@ class MacroDataFetcher:
             "bearish_宏觀面看空" if combined >= -50 else
             "strong_bearish_宏觀面強烈看空"
         )
+
+        with self._cache_lock:
+            self._shared_cache[combined_key] = (result, now)
 
         return result
 
