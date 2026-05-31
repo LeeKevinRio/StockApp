@@ -137,21 +137,29 @@ def get_ai_suggestions(
     today = date.today()
     pending: List[tuple] = []  # 需要呼叫 AI 生成的 (stock_id, stock_name, market)
 
+    # 一次撈出今日所有自選股的既有報告，避免在迴圈內逐檔查 DB(N+1)
+    # 「只看現有建議」這條最常走的路徑，成本幾乎全在這裡，批次查可顯著加速
+    stock_ids = [stock.stock_id for _wl, stock in watchlist]
+    existing_reports_map = {}
+    if stock_ids:
+        for rep in (
+            db.query(AIReport)
+            .filter(
+                AIReport.user_id == current_user.id,
+                AIReport.report_date == today,
+                AIReport.stock_id.in_(stock_ids),
+            )
+            .all()
+        ):
+            existing_reports_map[rep.stock_id] = rep
+
     # Phase 1: 收集快取命中與待生成清單
     for wl, stock in watchlist:
         # Determine market region from stock data
         market = stock.market_region if stock.market_region else "TW"
 
-        # Check if report already exists for today
-        existing_report = (
-            db.query(AIReport)
-            .filter(
-                AIReport.user_id == current_user.id,
-                AIReport.stock_id == stock.stock_id,
-                AIReport.report_date == today,
-            )
-            .first()
-        )
+        # Check if report already exists for today（從批次結果取，不再逐檔查 DB）
+        existing_report = existing_reports_map.get(stock.stock_id)
 
         if existing_report:
             # Calculate bullish probability from existing report
