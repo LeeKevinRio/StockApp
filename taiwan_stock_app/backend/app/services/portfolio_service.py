@@ -268,10 +268,21 @@ class PortfolioService:
             更新後的持倉列表
         """
         positions = self.get_positions(db, portfolio_id, user_id)
+        if not positions:
+            return positions
+
+        # 一次批量取得所有持倉報價(取代逐筆 get_realtime_price 的 N+1 外部呼叫)，含快取
+        # 維持原行為:預設台股市場(原 get_realtime_price 未帶 market 即為 TW)
+        stock_ids = [p.stock_id for p in positions]
+        try:
+            price_map = self.stock_service.get_realtime_prices_batch(stock_ids, market="TW")
+        except Exception as e:
+            logger.error("批量更新持倉價格失敗: %s", e)
+            price_map = {}
 
         for position in positions:
             try:
-                price_data = self.stock_service.get_realtime_price(position.stock_id)
+                price_data = price_map.get(position.stock_id)
                 if price_data:
                     current_price = float(price_data.get('current_price', 0))
                     position.current_price = current_price

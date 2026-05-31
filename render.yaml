@@ -32,5 +32,6 @@ services:
       - key: FRED_API_KEY
         sync: false
       - key: CORS_ORIGINS
-        value: "http://localhost:5000,http://localhost:3000,http://localhost:8080"
+        # 正式前端(GitHub Pages)＋本機開發來源；與 Render 後台實際值保持一致
+        value: "https://leekevinrio.github.io,http://localhost:5000,http://localhost:3000,http://localhost:8080"
     healthCheckPath: /health
