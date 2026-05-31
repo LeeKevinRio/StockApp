@@ -19,6 +19,7 @@ import 'providers/portfolio_provider.dart';
 import 'providers/connectivity_provider.dart';
 import 'providers/broker_provider.dart';
 import 'widgets/common/offline_banner.dart';
+import 'widgets/common/deferred_screen.dart';
 import 'screens/notification_center_screen.dart';
 import 'config/app_theme.dart';
 import 'utils/page_transitions.dart';
@@ -28,12 +29,6 @@ import 'screens/stock_search_screen.dart';
 import 'screens/stock_detail_screen.dart';
 import 'screens/alerts_screen.dart';
 import 'screens/portfolio_screen.dart';
-import 'screens/admin_screen.dart';
-import 'screens/prediction_stats_screen.dart';
-import 'screens/market_heatmap_screen.dart';
-import 'screens/calendar_screen.dart';
-import 'screens/stock_compare_screen.dart';
-import 'screens/trading_diary_screen.dart';
 import 'screens/privacy_policy_screen.dart';
 import 'screens/terms_screen.dart';
 import 'screens/settings_screen.dart';
@@ -42,7 +37,15 @@ import 'screens/about_screen.dart';
 import 'screens/broker_screen.dart';
 import 'screens/broker_link_screen.dart';
 import 'screens/ai_settings_screen.dart';
-import 'screens/backtest_screen.dart';
+// 以下為「重、非主要分頁」的畫面，改用延遲載入(deferred)，
+// 從首次載入的主包分離，加快第一次開啟網頁速度；進入該頁時才下載。
+import 'screens/admin_screen.dart' deferred as admin;
+import 'screens/prediction_stats_screen.dart' deferred as prediction_stats;
+import 'screens/market_heatmap_screen.dart' deferred as market_heatmap;
+import 'screens/calendar_screen.dart' deferred as calendar;
+import 'screens/stock_compare_screen.dart' deferred as stock_compare;
+import 'screens/trading_diary_screen.dart' deferred as trading_diary;
+import 'screens/backtest_screen.dart' deferred as backtest;
 
 /// 全域 NavigatorKey，讓非 Widget 層級（如 ApiService 401 回呼）也能導航
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -162,14 +165,35 @@ class MyApp extends StatelessWidget {
               '/search': (context) => const StockSearchScreen(),
               '/alerts': (context) => const AlertsScreen(),
               '/portfolio': (context) => const PortfolioScreen(),
-              '/admin': (context) => const AdminScreen(),
+              '/admin': (context) => DeferredScreen(
+                    loadLibrary: admin.loadLibrary,
+                    builder: (_) => admin.AdminScreen(),
+                  ),
               '/notifications': (context) => const NotificationCenterScreen(),
-              '/prediction-stats': (context) => const PredictionStatsScreen(),
-              '/market-heatmap': (context) => const MarketHeatmapScreen(),
-              '/calendar': (context) => const CalendarScreen(),
-              '/stock-compare': (context) => const StockCompareScreen(),
-              '/trading-diary': (context) => const TradingDiaryScreen(),
-              '/backtest': (context) => const BacktestScreen(),
+              '/prediction-stats': (context) => DeferredScreen(
+                    loadLibrary: prediction_stats.loadLibrary,
+                    builder: (_) => prediction_stats.PredictionStatsScreen(),
+                  ),
+              '/market-heatmap': (context) => DeferredScreen(
+                    loadLibrary: market_heatmap.loadLibrary,
+                    builder: (_) => market_heatmap.MarketHeatmapScreen(),
+                  ),
+              '/calendar': (context) => DeferredScreen(
+                    loadLibrary: calendar.loadLibrary,
+                    builder: (_) => calendar.CalendarScreen(),
+                  ),
+              '/stock-compare': (context) => DeferredScreen(
+                    loadLibrary: stock_compare.loadLibrary,
+                    builder: (_) => stock_compare.StockCompareScreen(),
+                  ),
+              '/trading-diary': (context) => DeferredScreen(
+                    loadLibrary: trading_diary.loadLibrary,
+                    builder: (_) => trading_diary.TradingDiaryScreen(),
+                  ),
+              '/backtest': (context) => DeferredScreen(
+                    loadLibrary: backtest.loadLibrary,
+                    builder: (_) => backtest.BacktestScreen(),
+                  ),
               '/privacy': (context) => const PrivacyPolicyScreen(),
               '/terms': (context) => const TermsScreen(),
               '/settings': (context) => const SettingsScreen(),
