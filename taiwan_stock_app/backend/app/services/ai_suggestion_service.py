@@ -231,9 +231,16 @@ class AISuggestionService:
                 amplitude_ratio = 1.0
                 adjust_factor = 1.0
 
-            # 若方向準確率極低（<40%），降低信心度
-            if direction_accuracy < 0.4:
-                adjust_factor *= 0.7
+            # 方向準確率回饋：低於 50%（比隨機還差）就分級收斂預測力度，
+            # 避免系統持續做出「有信心但錯誤」的方向押注。
+            # （原本門檻寫死在 <40%，導致 45% 這種「略差於隨機」的情況
+            #   完全不會觸發自我修正，是準確率長期偏低的主因之一）
+            if direction_accuracy < 0.40:
+                adjust_factor *= 0.5    # 嚴重失準：大幅收斂，押注趨近中性
+            elif direction_accuracy < 0.45:
+                adjust_factor *= 0.65
+            elif direction_accuracy < 0.50:
+                adjust_factor *= 0.80
 
             return {
                 "direction_accuracy": round(direction_accuracy, 2),
@@ -2082,10 +2089,13 @@ class AISuggestionService:
                 else:
                     calibrated_prob = round(0.52 + abs_score / 200, 2)  # 0.52~0.62
 
-                # 根據歷史方向準確率修正：若歷史準確率低，降低信心
+                # 根據歷史方向準確率修正：準確率低於 50% 時，信心度不應偏離中性太多
+                # （比隨機還差時若還給高信心，就是在誤導使用者）
                 if accuracy_fb.get('n_records', 0) >= 5:
-                    if hist_dir_accuracy < 0.4:
+                    if hist_dir_accuracy < 0.45:
                         calibrated_prob = min(calibrated_prob, 0.55)
+                    elif hist_dir_accuracy < 0.50:
+                        calibrated_prob = min(calibrated_prob, 0.60)
                     elif hist_dir_accuracy > 0.7:
                         calibrated_prob = min(calibrated_prob + 0.05, 0.85)
 
