@@ -75,6 +75,39 @@ def get_groq_client():
 class AISuggestionService:
     """AI 每日建議服務 - 多面向分析（支援台股與美股）"""
 
+    # ============================================================
+    # 📊 預測面向權重設定（波段操作 2 週~1 月；牛市熊市共用同一組）
+    # ------------------------------------------------------------
+    # 想調整 AI 預測的重心時，只改這裡即可，6 個面向加總須為 1.0。
+    # 美股沒有「籌碼面」資料，系統會自動把 chip 的權重
+    # 按比例分攤給其餘 5 個面向（見 _weights_for_market）。
+    # ============================================================
+    PREDICTION_WEIGHTS_TW = {
+        "news": 0.30,         # 消息面（新聞情緒）
+        "technical": 0.25,    # 技術分析（均線/MACD/RSI/KD/布林）
+        "chip": 0.20,         # 籌碼面（外資/投信/融資券，僅台股）
+        "macro": 0.10,        # 宏觀面（大盤/利率/美股連動）
+        "social": 0.10,       # 社群面（論壇情緒）
+        "fundamental": 0.05,  # 基本面（EPS/本益比/營收成長）
+    }
+
+    @classmethod
+    def _weights_for_market(cls, market: str) -> dict:
+        """取得該市場的面向權重。美股無籌碼面，將 chip 權重按比例分攤至其餘面向後重新歸一化。"""
+        w = dict(cls.PREDICTION_WEIGHTS_TW)
+        if market == "US":
+            w.pop("chip", None)
+            total = sum(w.values())
+            if total > 0:
+                w = {k: v / total for k, v in w.items()}
+        return w
+
+    @classmethod
+    def _compute_weighted_score(cls, dimension_scores: dict, market: str) -> float:
+        """以設定的波段權重計算綜合評分（範圍約 -100 ~ +100）。"""
+        w = cls._weights_for_market(market)
+        return sum(dimension_scores.get(k, 0) * weight for k, weight in w.items())
+
     def __init__(self, subscription_tier: str = 'free', ai_client=None):
         self.finmind = FinMindFetcher(settings.FINMIND_TOKEN)
         self.us_fetcher = USStockFetcher()
@@ -1867,42 +1900,21 @@ class AISuggestionService:
             social_score = data.get('social', {}).get('social_score', 0)
             macro_score = data.get('macro', {}).get('macro_score', 0)
 
-            # ===== 根據市場狀態動態調整權重 =====
             regime = market_regime.get("regime", "unknown")
 
-            # ===== 動態權重系統（新聞和社群權重提升）=====
-            if market == "US":
-                if regime == "bear":
-                    # 熊市：新聞+宏觀主導，社群恐慌指標加重
-                    total_score = (tech_score * 0.20) + (fund_score * 0.15) + (news_score * 0.25) + (social_score * 0.10) + (macro_score * 0.30)
-                elif regime == "sideways":
-                    # 盤整：技術面為主，但新聞/社群突發消息可能打破平衡
-                    total_score = (tech_score * 0.35) + (fund_score * 0.15) + (news_score * 0.18) + (social_score * 0.12) + (macro_score * 0.20)
-                else:
-                    # 牛市/未知：均衡分配，社群和新聞一起提升
-                    total_score = (tech_score * 0.28) + (fund_score * 0.20) + (news_score * 0.18) + (social_score * 0.12) + (macro_score * 0.22)
-            else:
-                if regime == "bear":
-                    # 台股熊市：籌碼面+新聞主導，社群恐慌情緒加重
-                    total_score = (tech_score * 0.15) + (chip_score * 0.25) + (fund_score * 0.08) + (news_score * 0.22) + (social_score * 0.12) + (macro_score * 0.18)
-                elif regime == "sideways":
-                    # 台股盤整：技術面+籌碼為主
-                    total_score = (tech_score * 0.30) + (chip_score * 0.18) + (fund_score * 0.10) + (news_score * 0.17) + (social_score * 0.10) + (macro_score * 0.15)
-                else:
-                    # 台股牛市/未知：新聞+社群提升至 30% 合計
-                    total_score = (tech_score * 0.22) + (chip_score * 0.18) + (fund_score * 0.12) + (news_score * 0.18) + (social_score * 0.12) + (macro_score * 0.18)
-
-            # ===== 隔日預測專用加權（短期因子為主，新聞/社群影響更大）=====
-            if market == "US":
-                if regime == "bear":
-                    prediction_score = (tech_score * 0.25) + (fund_score * 0.05) + (news_score * 0.28) + (social_score * 0.12) + (macro_score * 0.30)
-                else:
-                    prediction_score = (tech_score * 0.30) + (fund_score * 0.10) + (news_score * 0.22) + (social_score * 0.13) + (macro_score * 0.25)
-            else:
-                if regime == "bear":
-                    prediction_score = (tech_score * 0.20) + (chip_score * 0.30) + (news_score * 0.25) + (social_score * 0.10) + (fund_score * 0.05) + (macro_score * 0.10)
-                else:
-                    prediction_score = (tech_score * 0.25) + (chip_score * 0.25) + (news_score * 0.22) + (social_score * 0.10) + (fund_score * 0.05) + (macro_score * 0.13)
+            # ===== 波段面向綜合評分（牛熊共用同一組權重；設定見 PREDICTION_WEIGHTS_TW）=====
+            # 綜合評分（決定 BUY/SELL）與預測評分（決定方向/幅度）共用同一組波段權重，
+            # 避免兩套權重互相打架。要調整重心請改 class 最上方的 PREDICTION_WEIGHTS_TW。
+            dimension_scores = {
+                "technical": tech_score,
+                "chip": chip_score,
+                "fundamental": fund_score,
+                "news": news_score,
+                "social": social_score,
+                "macro": macro_score,
+            }
+            total_score = self._compute_weighted_score(dimension_scores, market)
+            prediction_score = total_score
 
             data['prediction_score'] = round(prediction_score, 1)
             logger.info(f"[{stock_id}] 市場狀態: {regime}, 趨勢強度: {market_regime.get('trend_strength', 0)}, 波動: {market_regime.get('volatility_regime', 'normal')}")
