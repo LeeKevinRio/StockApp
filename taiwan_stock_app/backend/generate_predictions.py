@@ -36,7 +36,8 @@ def generate_all_predictions():
             try:
                 # 生成 AI 建議
                 service = AISuggestionService.for_user(user)
-                suggestion = service.generate_suggestion(stock.stock_id, stock.name, market=market)
+                # 傳入 db 以啟用歷史準確率回饋（自我修正）；此腳本為單執行緒序列，安全
+                suggestion = service.generate_suggestion(stock.stock_id, stock.name, market=market, db=db)
 
                 if suggestion and suggestion.get("next_day_prediction"):
                     # 儲存預測記錄

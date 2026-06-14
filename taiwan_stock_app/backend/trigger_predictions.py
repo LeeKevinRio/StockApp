@@ -69,7 +69,8 @@ def main():
                 print(f"\n[{i}/{len(to_generate)}] {stock.stock_id} {stock.name} ({market})...", flush=True)
 
                 service = AISuggestionService.for_user(user)
-                suggestion = service.generate_suggestion(stock.stock_id, stock.name, market=market)
+                # 傳入 db 以啟用歷史準確率回饋（自我修正）；此腳本為單執行緒序列，安全
+                suggestion = service.generate_suggestion(stock.stock_id, stock.name, market=market, db=db)
 
                 if suggestion and suggestion.get("next_day_prediction"):
                     latest_price = suggestion.get("analysis_scores", {}).get("latest_price")
