@@ -1353,12 +1353,11 @@ class ApiService {
 
       switch (response.statusCode) {
         case 401:
-          // 只在「認證端點」（/api/auth/me）的 401 才觸發強制登出 —
-          // 其他端點的 401 可能只是該功能本身的權限/暫時性問題，
-          // 不該因此把使用者整個踢出 app。
-          final reqPath = response.request?.url.path ?? '';
-          final isAuthEndpoint = reqPath.endsWith('/api/auth/me');
-          if (isAuthEndpoint && !_unauthorizedHandled) {
+          // 任何端點的 401（未授權）都代表 token 已失效/過期 —— 直接清除登入狀態
+          // 並導回登入頁，避免畫面停在「按了也沒用的重試」而卡死（過去只在
+          // /api/auth/me 觸發，導致資料端點先收到 401 時陷入無限重試，只能手動登出）。
+          // 註：功能層級的權限不足回傳的是 403，不會走到這裡，使用者不會被誤踢。
+          if (!_unauthorizedHandled) {
             _unauthorizedHandled = true;
             onUnauthorized?.call();
           }
