@@ -400,6 +400,16 @@ class AISuggestionService:
         def _fetch_technical():
             return "technical", self._calculate_technical_indicators(prices)
 
+        # 20 日均量（張），供籌碼面正規化：淨買賣超佔成交量比例，讓大小型股門檻公平
+        avg_volume_lots = 0.0
+        try:
+            if len(prices) > 0:
+                vol_col = 'Trading_Volume' if 'Trading_Volume' in prices.columns else 'volume'
+                if vol_col in prices.columns:
+                    avg_volume_lots = float(prices[vol_col].tail(20).astype(float).mean()) / 1000
+        except Exception as e:
+            logger.warning(f"計算均量失敗 {stock_id}: {e}")
+
         def _fetch_chip():
             try:
                 institutions = self.finmind.get_institutional_investors(stock_id, start_str, end_str)
@@ -411,7 +421,7 @@ class AISuggestionService:
             except Exception as e:
                 logger.error(f"Error getting margin data for {stock_id}: {e}")
                 margins = pd.DataFrame()
-            return "chip", self._analyze_chip_data(institutions, margins)
+            return "chip", self._analyze_chip_data(institutions, margins, avg_volume_lots)
 
         def _fetch_fundamental():
             return "fundamental", self._analyze_fundamental_data(stock_id, fundamental_start, end_str)
@@ -555,6 +565,25 @@ class AISuggestionService:
                     result["kd_signal"] = "neutral"
                 result["kd_cross"] = "golden_黃金交叉" if k > d else "dead_死亡交叉"
 
+            # ===== 動能 / 量能 / 均線斜率（連續值，提升評分解析度）=====
+            closes = df['close']
+            if len(closes) >= 6 and float(closes.iloc[-6]) != 0:
+                result["momentum_5d"] = round(
+                    (float(closes.iloc[-1]) - float(closes.iloc[-6])) / float(closes.iloc[-6]) * 100, 2)
+            if len(closes) >= 21 and float(closes.iloc[-21]) != 0:
+                result["momentum_20d"] = round(
+                    (float(closes.iloc[-1]) - float(closes.iloc[-21])) / float(closes.iloc[-21]) * 100, 2)
+            vols = df['volume']
+            if len(vols) >= 20:
+                avg_vol20 = float(vols.iloc[-20:].mean())
+                if avg_vol20 > 0:
+                    result["volume_ratio"] = round(float(vols.iloc[-1]) / avg_vol20, 2)
+            if len(closes) >= 25:
+                ma20_now = float(closes.iloc[-20:].mean())
+                ma20_prev = float(closes.iloc[-25:-5].mean())
+                if ma20_prev != 0:
+                    result["ma20_slope_pct"] = round((ma20_now - ma20_prev) / ma20_prev * 100, 2)
+
             # 計算綜合技術面評分 (-100 到 +100)
             tech_score = self._calculate_technical_score(result)
             result["technical_score"] = tech_score
@@ -573,56 +602,85 @@ class AISuggestionService:
             return {"error": str(e)}
 
     def _calculate_technical_score(self, tech: Dict) -> int:
-        """計算技術面綜合評分 (-100 到 +100)"""
-        score = 0
+        """計算技術面綜合評分 (-100 到 +100)
 
-        # 均線 (權重 25%)
+        v2：加入動能（momentum）、量能（volume_ratio）、均線斜率等連續值訊號。
+        原版只有狀態標籤（bullish/bearish 加減固定分），解析度極低且完全沒有
+        動能與成交量——而動能是短期方向預測中實證支持最強的因子。
+        """
+        score = 0.0
+
+        # 均線排列（狀態）
         if tech.get("ma_trend") == "bullish":
-            score += 25
-        elif tech.get("ma_trend") == "bearish":
-            score -= 25
-
-        # MACD (權重 20%)
-        if tech.get("macd_status") == "bullish":
             score += 20
-        elif tech.get("macd_status") == "bearish":
+        elif tech.get("ma_trend") == "bearish":
             score -= 20
 
-        # RSI (權重 20%)
+        # 均線斜率（連續值）：MA20 近 5 日斜率，每 1% 給 8 分，上限 ±10
+        ma20_slope = tech.get("ma20_slope_pct")
+        if ma20_slope is not None:
+            score += max(-10.0, min(10.0, ma20_slope * 8))
+
+        # MACD（狀態）
+        if tech.get("macd_status") == "bullish":
+            score += 12
+        elif tech.get("macd_status") == "bearish":
+            score -= 12
+
+        # 動能（連續值）：5 日漲跌幅每 1% 給 3 分（上限 ±18），20 日每 1% 給 0.8 分（上限 ±8）
+        momentum_5d = tech.get("momentum_5d")
+        if momentum_5d is not None:
+            score += max(-18.0, min(18.0, momentum_5d * 3))
+        momentum_20d = tech.get("momentum_20d")
+        if momentum_20d is not None:
+            score += max(-8.0, min(8.0, momentum_20d * 0.8))
+
+        # 量能確認：放量（量比 >= 1.5）時順著 5 日動能方向加強訊號
+        volume_ratio = tech.get("volume_ratio")
+        if volume_ratio is not None and momentum_5d is not None and abs(momentum_5d) >= 1.0:
+            if volume_ratio >= 1.5:
+                score += 8 if momentum_5d > 0 else -8
+
+        # RSI 反向訊號（均值回歸，與動能對沖故降低比重）
         rsi_signal = tech.get("rsi_signal", "")
         if "severely_overbought" in rsi_signal:
-            score -= 20
+            score -= 15
         elif "overbought" in rsi_signal:
-            score -= 10
+            score -= 7
         elif "severely_oversold" in rsi_signal:
-            score += 20
+            score += 15
         elif "oversold" in rsi_signal:
-            score += 10
+            score += 7
 
-        # KD (權重 20%)
+        # KD
         kd_signal = tech.get("kd_signal", "")
         if "overbought" in kd_signal:
-            score -= 15
+            score -= 10
         elif "oversold" in kd_signal:
-            score += 15
+            score += 10
 
         kd_cross = tech.get("kd_cross", "")
         if "golden" in kd_cross:
-            score += 5
+            score += 4
         elif "dead" in kd_cross:
-            score -= 5
+            score -= 4
 
-        # 布林通道 (權重 15%)
+        # 布林通道
         bb_pos = tech.get("bb_position", "")
         if "above_upper" in bb_pos:
-            score -= 15
+            score -= 8
         elif "below_lower" in bb_pos:
-            score += 15
+            score += 8
 
-        return max(-100, min(100, score))
+        return int(max(-100, min(100, round(score))))
 
-    def _analyze_chip_data(self, institutions, margins) -> Dict:
-        """分析籌碼面數據"""
+    def _analyze_chip_data(self, institutions, margins, avg_volume_lots: float = 0.0) -> Dict:
+        """分析籌碼面數據
+
+        Args:
+            avg_volume_lots: 20 日平均成交量（張），> 0 時評分改用「淨買賣超佔成交量比例」
+                             正規化，避免絕對張數門檻對大小型股不公平
+        """
         result = {"data_available": False}
 
         try:
@@ -630,6 +688,8 @@ class AISuggestionService:
                 return result
 
             result["data_available"] = True
+            if avg_volume_lots > 0:
+                result["avg_volume_lots"] = round(avg_volume_lots, 1)
 
             # FinMind 回傳格式: date, stock_id, buy, name, sell
             # name 欄位值: Foreign_Investor, Investment_Trust, Dealer_self, Dealer_Hedging
@@ -721,43 +781,63 @@ class AISuggestionService:
         return result
 
     def _calculate_chip_score(self, chip: Dict) -> int:
-        """計算籌碼面評分"""
-        score = 0
+        """計算籌碼面評分
 
-        # 外資 (權重 50%)
+        v2：有均量資料時改用「5 日淨買賣超佔 5 日總成交量的比例」正規化評分。
+        原版用絕對張數門檻（±5000/±1000 張），對台積電這種日成交數萬張的股票
+        幾乎永遠觸發滿分、對日成交數百張的中小型股永遠只有 ±15，完全不公平。
+        無均量資料時退回原有絕對門檻邏輯。
+        """
+        score = 0.0
+        avg_vol_lots = float(chip.get("avg_volume_lots", 0) or 0)
         foreign_5d = chip.get("foreign_net_5d", 0)
-        if foreign_5d > 5000:
-            score += 50
-        elif foreign_5d > 1000:
-            score += 30
-        elif foreign_5d > 0:
-            score += 15
-        elif foreign_5d < -5000:
-            score -= 50
-        elif foreign_5d < -1000:
-            score -= 30
-        elif foreign_5d < 0:
-            score -= 15
-
-        # 投信 (權重 30%)
         trust_5d = chip.get("trust_net_5d", 0)
-        if trust_5d > 1000:
-            score += 30
-        elif trust_5d > 0:
-            score += 15
-        elif trust_5d < -1000:
-            score -= 30
-        elif trust_5d < 0:
-            score -= 15
-
-        # 融資融券 (權重 20%) - 融資增加通常是散戶進場，需謹慎
         margin_change = chip.get("margin_change", 0)
-        if margin_change > 1000:
-            score -= 10  # 融資大增，散戶過度樂觀
-        elif margin_change < -1000:
-            score += 10  # 融資減少，籌碼沉澱
 
-        return max(-100, min(100, score))
+        if avg_vol_lots > 0:
+            total_vol_5d = avg_vol_lots * 5  # 近 5 日估計總成交量（張）
+
+            # 外資（滿分 ±50）：淨買超佔 5 日成交量 6% 以上視為極強，連續線性計分
+            foreign_ratio = foreign_5d / total_vol_5d
+            score += max(-50.0, min(50.0, foreign_ratio / 0.06 * 50))
+
+            # 投信（滿分 ±30）：投信量體小，佔比 3% 即極強
+            trust_ratio = trust_5d / total_vol_5d
+            score += max(-30.0, min(30.0, trust_ratio / 0.03 * 30))
+
+            # 融資（滿分 ∓10，反向指標）：融資增佔比 5% 即極端
+            margin_ratio = margin_change / total_vol_5d
+            score -= max(-10.0, min(10.0, margin_ratio / 0.05 * 10))
+        else:
+            # ===== fallback：無均量資料時用原有絕對張數門檻 =====
+            if foreign_5d > 5000:
+                score += 50
+            elif foreign_5d > 1000:
+                score += 30
+            elif foreign_5d > 0:
+                score += 15
+            elif foreign_5d < -5000:
+                score -= 50
+            elif foreign_5d < -1000:
+                score -= 30
+            elif foreign_5d < 0:
+                score -= 15
+
+            if trust_5d > 1000:
+                score += 30
+            elif trust_5d > 0:
+                score += 15
+            elif trust_5d < -1000:
+                score -= 30
+            elif trust_5d < 0:
+                score -= 15
+
+            if margin_change > 1000:
+                score -= 10  # 融資大增，散戶過度樂觀
+            elif margin_change < -1000:
+                score += 10  # 融資減少，籌碼沉澱
+
+        return int(max(-100, min(100, round(score))))
 
     def _analyze_fundamental_data(self, stock_id: str, start_date: str, end_date: str) -> Dict:
         """分析基本面數據"""
@@ -1364,6 +1444,7 @@ class AISuggestionService:
             positive_count = 0
             negative_count = 0
             neutral_count = 0
+            score_sum = 0.0  # 累計情緒強度（保留連續值，不只數則數）
             news_summaries = []
 
             for news in unique_news[:15]:
@@ -1378,6 +1459,7 @@ class AISuggestionService:
                     )
                     score = analysis['score']
 
+                score_sum += score
                 if score > 0.15:
                     sentiment = "positive"
                     positive_count += 1
@@ -1402,9 +1484,16 @@ class AISuggestionService:
             result["recent_news"] = news_summaries
 
             # ===== 5. 計算情緒評分 =====
+            # v2：一半看「共識」（正負則數比例）、一半看「強度」（連續情緒分數平均），
+            # 原版只數則數，一則 0.16 和一則 0.95 的利多被視為等值，強度資訊全丟失。
             total = positive_count + negative_count + neutral_count
             if total > 0:
-                sentiment_score = ((positive_count - negative_count) / total) * 100
+                consensus = (positive_count - negative_count) / total   # -1 ~ 1
+                intensity = score_sum / total                            # 約 -1 ~ 1
+                sentiment_score = (consensus * 50) + (intensity * 50)
+                # 小樣本衰減：新聞少於 5 則時按比例折扣，避免 1-2 則新聞造成極端分數
+                if total < 5:
+                    sentiment_score *= total / 5
                 result["sentiment_score"] = round(sentiment_score, 1)
                 result["sentiment_signal"] = (
                     "very_positive_消息面強烈利多" if sentiment_score >= 60 else
@@ -1527,12 +1616,28 @@ class AISuggestionService:
                 neu = total - pos - neg
                 avg = sum(scores) / len(scores) if scores else 0
 
+                # v2：用進階分析器的 confidence 加權（無 confidence 的貼文給預設 0.5），
+                # 高信心訊號影響力大於模糊貼文
+                weights = [
+                    max(float(p.get('enhanced_sentiment', {}).get('confidence', 0.5) or 0.5), 0.1)
+                    for p in all_posts
+                ]
+                weighted_avg = (
+                    sum(s * w for s, w in zip(scores, weights)) / sum(weights)
+                    if sum(weights) > 0 else avg
+                )
+
+                social_score = weighted_avg * 100
+                # 小樣本衰減：貼文少於 5 篇時按比例折扣，1-2 篇貼文不該產生極端分數
+                if total < 5:
+                    social_score *= total / 5
+
                 result['total_mentions'] = total
                 result['positive'] = pos
                 result['negative'] = neg
                 result['neutral'] = neu
                 result['avg_score'] = round(avg, 3)
-                result['social_score'] = round(avg * 100, 1)
+                result['social_score'] = round(social_score, 1)
 
                 # 平台分佈統計
                 platforms_seen = set()
@@ -1656,19 +1761,20 @@ class AISuggestionService:
             avg_vol = data.get('avg_daily_volatility', 1.0) or 1.0
             latest_price = data.get('latest_price', 0) or 0
 
-        # 交易建議用綜合分數
-        if market == "TW":
-            combined = tech_score * 0.30 + chip_score * 0.20 + fund_score * 0.15 + news_score * 0.10 + social_score * 0.10 + macro_score * 0.15
-        else:
-            combined = tech_score * 0.35 + fund_score * 0.25 + news_score * 0.12 + social_score * 0.08 + macro_score * 0.20
+        # 與正式路徑共用同一組波段權重（PREDICTION_WEIGHTS_TW），
+        # 原版 mock 有自己的兩套權重，與正式預測方向可能互相矛盾
+        dimension_scores = {
+            "technical": tech_score,
+            "chip": chip_score,
+            "fundamental": fund_score,
+            "news": news_score,
+            "social": social_score,
+            "macro": macro_score,
+        }
+        pred_score = self._compute_weighted_score(dimension_scores, market)
+        combined = pred_score
 
         suggestion = "BUY" if combined >= 0 else "SELL"
-
-        # 隔日預測用短期分數（獨立於交易建議）
-        if market == "TW":
-            pred_score = tech_score * 0.35 + chip_score * 0.35 + news_score * 0.15 + social_score * 0.05 + fund_score * 0.05 + macro_score * 0.05
-        else:
-            pred_score = tech_score * 0.40 + fund_score * 0.15 + news_score * 0.15 + social_score * 0.05 + macro_score * 0.25
 
         # 根據 prediction_score 和 avg_daily_volatility 計算預測幅度
         abs_pred = abs(pred_score)
@@ -1679,7 +1785,15 @@ class AISuggestionService:
         else:
             multiplier = 0.5
 
-        predicted_change = round(avg_vol * multiplier * (1 if pred_score >= 0 else -1), 2)
+        # 方向：訊號近零（六面向皆中性/無資料）時，改用 5 日動能決定方向，
+        # 原版 pred_score=0 一律押 UP，是冷門股的系統性方向偏誤來源
+        if abs_pred < 1.0:
+            mom_5d = float((data or {}).get('price_change_5d', 0) or 0)
+            direction_sign = 1 if mom_5d >= 0 else -1
+        else:
+            direction_sign = 1 if pred_score > 0 else -1
+
+        predicted_change = round(avg_vol * multiplier * direction_sign, 2)
         next_day_direction = "UP" if predicted_change >= 0 else "DOWN"
 
         # 信心度根據指標一致性計算
