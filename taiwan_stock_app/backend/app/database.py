@@ -102,6 +102,16 @@ def _run_migrations():
                         ))
                         migration_count += 1
 
+            # 遷移 3: prediction_records 表新增 analysis_scores 欄位（各面向分數快照，供歸因分析）
+            if 'prediction_records' in table_names:
+                columns = [c['name'] for c in inspector.get_columns('prediction_records')]
+                if 'analysis_scores' not in columns:
+                    logger.info("Migration: Adding analysis_scores column to prediction_records table")
+                    conn.execute(text(
+                        "ALTER TABLE prediction_records ADD COLUMN analysis_scores TEXT"
+                    ))
+                    migration_count += 1
+
         logger.info("Database migrations completed (%d changes applied)", migration_count)
     except Exception as e:
         logger.error("Database migration failed (rolled back): %s", e)

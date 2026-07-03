@@ -86,7 +86,8 @@ def main():
                         market=market,
                         prediction_data=suggestion["next_day_prediction"],
                         base_close_price=float(latest_price),
-                        ai_provider=suggestion.get("ai_provider", "Unknown")
+                        ai_provider=suggestion.get("ai_provider", "Unknown"),
+                        analysis_scores=suggestion.get("analysis_scores")
                     )
                     success += 1
                     provider = suggestion.get("ai_provider", "?")

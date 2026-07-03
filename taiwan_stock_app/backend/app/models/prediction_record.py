@@ -1,7 +1,7 @@
 """
 Prediction Record Model - 追蹤 AI 預測準確度
 """
-from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, Boolean, Text, Index
+from sqlalchemy import Column, Integer, String, Date, DateTime, Numeric, Boolean, Text, Index, JSON
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -50,6 +50,10 @@ class PredictionRecord(Base):
 
     # AI 提供者
     ai_provider = Column(String(20))  # Gemini, Groq, Mock
+
+    # 預測當下的各面向分數快照（technical/chip/fundamental/news/social/macro/total_weighted...）
+    # 用於事後歸因分析：哪個面向的訊號真正有預測力、哪個在扯後腿
+    analysis_scores = Column(JSON)
 
     # 時間戳
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -297,7 +297,8 @@ def get_ai_suggestions(
                                     market=market,
                                     prediction_data=next_day_pred,
                                     base_close_price=latest_price,
-                                    ai_provider=ai_provider
+                                    ai_provider=ai_provider,
+                                    analysis_scores=analysis_scores
                                 )
                                 logger.info(f"Saved prediction record for {stock_id}")
                         except Exception as pred_error:
@@ -473,7 +474,8 @@ def get_stock_suggestion(
                     market=market,
                     prediction_data=next_day_pred,
                     base_close_price=latest_price,
-                    ai_provider=ai_provider
+                    ai_provider=ai_provider,
+                    analysis_scores=analysis_scores
                 )
                 logger.info(f"Saved prediction record for {stock_id}")
         except Exception as pred_error:

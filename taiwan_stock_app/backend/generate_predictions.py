@@ -52,7 +52,8 @@ def generate_all_predictions():
                         market=market,
                         prediction_data=suggestion["next_day_prediction"],
                         base_close_price=latest_price,
-                        ai_provider=ai_provider
+                        ai_provider=ai_provider,
+                        analysis_scores=suggestion.get("analysis_scores")
                     )
 
                     pred = suggestion["next_day_prediction"]

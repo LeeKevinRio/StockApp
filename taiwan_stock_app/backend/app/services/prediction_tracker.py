@@ -120,7 +120,8 @@ class PredictionTracker:
         market: str,
         prediction_data: Dict,
         base_close_price: float,
-        ai_provider: str = "Unknown"
+        ai_provider: str = "Unknown",
+        analysis_scores: Dict = None
     ) -> PredictionRecord:
         """
         儲存 AI 預測記錄
@@ -133,6 +134,7 @@ class PredictionTracker:
             prediction_data: next_day_prediction 數據
             base_close_price: 預測時的收盤價
             ai_provider: AI 提供者 (Gemini/Groq/Mock)
+            analysis_scores: 預測當下各面向分數快照（供事後歸因分析）
         """
         # 防呆：自動修正 market 標記錯誤
         detected = self._detect_market(stock_id, market)
@@ -160,6 +162,8 @@ class PredictionTracker:
             existing.prediction_reasoning = prediction_data.get("reasoning")
             existing.base_close_price = base_close_price
             existing.ai_provider = ai_provider
+            if analysis_scores is not None:
+                existing.analysis_scores = analysis_scores
             # 清除舊的 actual 結果，讓它重新計算
             existing.actual_close_price = None
             existing.actual_change_percent = None
@@ -184,7 +188,8 @@ class PredictionTracker:
             predicted_price_high=prediction_data.get("price_range_high"),
             prediction_reasoning=prediction_data.get("reasoning"),
             base_close_price=base_close_price,
-            ai_provider=ai_provider
+            ai_provider=ai_provider,
+            analysis_scores=analysis_scores
         )
         db.add(record)
         db.commit()
