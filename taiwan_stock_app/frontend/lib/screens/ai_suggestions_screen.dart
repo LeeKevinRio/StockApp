@@ -657,6 +657,18 @@ class SuggestionCard extends StatelessWidget {
               ),
             ),
           ],
+          // 免責聲明（金融類 App Store 審查要求：預測顯示處須有明確揭露）
+          const SizedBox(height: 8),
+          Text(
+            locale.tr(
+              'AI 預測僅供參考，不構成投資建議，過往準確率不代表未來表現。',
+              'AI predictions are for reference only and do not constitute investment advice.',
+            ),
+            style: TextStyle(
+              fontSize: 10,
+              color: Theme.of(context).hintColor,
+            ),
+          ),
         ],
       ),
     );
